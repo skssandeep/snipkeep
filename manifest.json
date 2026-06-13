@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "ClipNote",
+  "version": "1.0.0",
+  "description": "Select text on any page and save it instantly to your Google Docs notes.",
+  "permissions": ["identity", "storage", "activeTab"],
+  "host_permissions": ["https://docs.googleapis.com/*"],
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "exclude_matches": ["https://docs.google.com/*"],
+      "js": ["src/content/index.tsx"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_title": "ClipNote"
+  },
+  "oauth2": {
+    "client_id": "923106050597-7ovnc2ci217jb5hqeca6sl2el56h0rtm.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/documents"]
+  }
+}
