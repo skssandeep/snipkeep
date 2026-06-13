@@ -187,7 +187,6 @@ export function Toolbar({ destinations, defaultDestId, onSave, onDismiss }: Prop
               ▾
             </button>
           )}
-          <button className="btn-close" onClick={onDismiss} title="Dismiss">✕</button>
         </div>
 
         {showDropdown && (
