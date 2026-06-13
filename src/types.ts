@@ -12,6 +12,10 @@ export interface SaveNoteResponse {
   error?: string
 }
 
+export interface TriggerSaveMessage {
+  type: 'TRIGGER_SAVE'
+}
+
 export interface ExtensionStorage {
   docId: string
   isSignedIn: boolean
