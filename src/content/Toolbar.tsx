@@ -3,114 +3,149 @@ import type { Destination } from '../types'
 
 const STYLES = `
   @keyframes clipnote-in {
-    from { opacity: 0; transform: translateX(-50%) translateY(4px) scale(0.97); }
-    to   { opacity: 1; transform: translateX(-50%) translateY(0px) scale(1); }
+    from { opacity: 0; transform: translateX(-50%) translateY(4px) scale(0.96); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
   }
+  @keyframes menu-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(-4px) scale(0.97); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  }
+
   .wrap {
     transform: translateX(-50%);
     pointer-events: auto;
-    animation: clipnote-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: clipnote-in 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     position: relative;
   }
+
   .toolbar {
     display: inline-flex;
-    align-items: center;
-    background: #1a1a1a;
-    border: 1px solid #2e2e2e;
+    align-items: stretch;
+    height: 36px;
     border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+    overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 13px;
     white-space: nowrap;
     user-select: none;
-    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.28), 0 1px 3px rgba(0,0,0,0.18);
   }
-  .btn-save {
-    background: #c8f135;
-    color: #000;
-    border: none;
-    padding: 7px 14px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-    transition: opacity 0.1s;
-    height: 100%;
+
+  /* Dark surface — recedes from any page, lime accent carries the action */
+  .toolbar.idle {
+    background: #1c1c1c;
+    border: 1px solid #2e2e2e;
   }
-  .btn-save:hover { opacity: 0.85; }
-  .btn-save:disabled { opacity: 0.4; cursor: default; }
-  .btn-chevron {
-    background: #a8cc20;
-    color: #000;
-    border: none;
-    border-left: 1px solid rgba(0,0,0,0.15);
-    padding: 7px 8px;
-    font-size: 10px;
-    cursor: pointer;
-    font-family: inherit;
-    transition: opacity 0.1s;
-    height: 100%;
-    display: flex;
+
+  .toolbar.feedback {
+    background: #1c1c1c;
+    border: 1px solid #2e2e2e;
+    padding: 0 14px;
+    gap: 8px;
     align-items: center;
   }
-  .btn-chevron:hover { opacity: 0.85; }
+
+  /* Save button: lime accent label, transparent bg so the dark shell shows */
+  .btn-save {
+    background: transparent;
+    color: #c8f135;
+    border: none;
+    padding: 0 15px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.12s;
+    height: 100%;
+  }
+  .btn-save:hover { background: rgba(200,241,53,0.08); }
+
+  /* 3-dot menu trigger */
+  .btn-menu {
+    background: transparent;
+    color: #555;
+    border: none;
+    border-left: 1px solid #2e2e2e;
+    padding: 0 11px;
+    font-size: 16px;
+    line-height: 1;
+    letter-spacing: 1px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.12s, color 0.12s;
+    display: flex;
+    align-items: center;
+    height: 100%;
+  }
+  .btn-menu:hover { background: rgba(255,255,255,0.05); color: #888; }
+
+  /* ── Feedback states ── */
+  .status {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .status.saving { color: #555; }
+  .status.saved  { color: #c8f135; }
+  .status.error  { color: #ff6b6b; font-size: 12px; }
+
   .btn-close {
     background: none;
     border: none;
-    color: #555;
+    color: #444;
     cursor: pointer;
-    padding: 7px 10px;
-    font-size: 14px;
+    padding: 0 2px;
+    font-size: 12px;
     line-height: 1;
     font-family: inherit;
     transition: color 0.1s;
   }
-  .btn-close:hover { color: #999; }
-  .status {
-    padding: 7px 14px;
-    font-size: 13px;
-    font-weight: 500;
-  }
-  .status.saving { color: #888; }
-  .status.saved  { color: #c8f135; }
-  .status.error  { color: #ff6b6b; font-size: 12px; }
+  .btn-close:hover { color: #666; }
+
+  /* ── Destination menu ── */
   .dropdown {
     position: absolute;
     top: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
-    background: #1a1a1a;
+    background: #1c1c1c;
     border: 1px solid #2e2e2e;
-    border-radius: 8px;
+    border-radius: 9px;
     padding: 4px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.25);
     min-width: 180px;
     z-index: 1;
+    animation: menu-in 0.14s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
   .dropdown-item {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
-    border-radius: 5px;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 12px;
-    color: #ccc;
+    font-size: 13px;
+    color: #aaa;
     border: none;
     background: none;
     font-family: inherit;
     width: 100%;
     text-align: left;
-    transition: background 0.1s;
+    transition: background 0.1s, color 0.1s;
   }
-  .dropdown-item:hover { background: #252525; color: #fff; }
-  .dropdown-item .check { color: #c8f135; width: 14px; flex-shrink: 0; }
-  .dropdown-item .dest-name { flex: 1; }
+  .dropdown-item:hover { background: #242424; color: #f0f0f0; }
+  .dropdown-item .check { color: #c8f135; width: 14px; flex-shrink: 0; font-size: 11px; }
+  .dropdown-item .dest-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
   .dropdown-item .dest-type {
     font-size: 10px;
-    color: #555;
+    color: #3e3e3e;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
   }
 `
 
@@ -157,7 +192,7 @@ export function Toolbar({ destinations, defaultDestId, onSave, onDismiss }: Prop
       <>
         <style>{STYLES}</style>
         <div className="wrap">
-          <div className="toolbar">
+          <div className="toolbar feedback">
             {state === 'saving' && <span className="status saving">Saving…</span>}
             {state === 'saved'  && <span className="status saved">✓ Saved</span>}
             {state === 'error'  && (
@@ -176,15 +211,15 @@ export function Toolbar({ destinations, defaultDestId, onSave, onDismiss }: Prop
     <>
       <style>{STYLES}</style>
       <div className="wrap">
-        <div className="toolbar">
+        <div className="toolbar idle">
           <button className="btn-save" onClick={() => handleSave()}>{label}</button>
           {destinations.length > 1 && (
             <button
-              className="btn-chevron"
+              className="btn-menu"
               onClick={() => setShowDropdown(v => !v)}
               title="Choose destination"
             >
-              ▾
+              ···
             </button>
           )}
         </div>

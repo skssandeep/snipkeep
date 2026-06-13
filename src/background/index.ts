@@ -5,6 +5,7 @@ import type {
   SaveNoteMessage,
   SaveNoteResponse,
   TriggerSaveMessage,
+  ToggleDrawerMessage,
 } from '../types'
 
 const DOCS_API = 'https://docs.googleapis.com/v1/documents'
@@ -254,6 +255,13 @@ chrome.runtime.onMessage.addListener(
     return true
   }
 )
+
+// Extension icon click → toggle the right-side drawer
+chrome.action.onClicked.addListener((tab) => {
+  if (!tab.id) return
+  const msg: ToggleDrawerMessage = { type: 'TOGGLE_DRAWER' }
+  chrome.tabs.sendMessage(tab.id, msg)
+})
 
 // Keyboard shortcut: Cmd+Shift+S
 chrome.commands.onCommand.addListener((command) => {

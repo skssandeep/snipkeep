@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Toolbar } from './Toolbar'
+import { Drawer } from './Drawer'
 import type {
   Destination,
   DocDestination,
@@ -8,9 +9,11 @@ import type {
   SaveNoteMessage,
   SaveNoteResponse,
   TriggerSaveMessage,
+  ToggleDrawerMessage,
 } from '../types'
 
 const HOST_ID = 'clipnote-host'
+const DRAWER_HOST_ID = 'clipnote-drawer-host'
 const TOAST_ID = 'clipnote-toast'
 const DEBOUNCE_MS = 250
 const TOOLBAR_HEIGHT = 44
@@ -18,6 +21,8 @@ const GAP = 8
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let activeRoot: ReactDOM.Root | null = null
+let drawerRoot: ReactDOM.Root | null = null
+const drawerCloseRef: React.MutableRefObject<(() => void) | null> = { current: null }
 let activeHost: HTMLElement | null = null
 
 // ── Destinations ──────────────────────────────────────────────────────────────
@@ -27,10 +32,13 @@ async function loadDestinations(): Promise<{ destinations: Destination[]; defaul
 
   let docs: DocDestination[] = (result.docs as DocDestination[]) ?? []
   if (docs.length === 0 && result.docId) {
-    docs = [{ id: result.docId as string, name: 'My Notes' }]
+    docs = [{ id: result.docId as string, name: 'My Notes', active: true }]
   }
 
-  const destinations: Destination[] = docs.map(d => ({ id: d.id, name: d.name, type: 'gdoc' }))
+  // Only surface docs the user has toggled on for this session
+  const destinations: Destination[] = docs
+    .filter(d => d.active !== false)
+    .map(d => ({ id: d.id, name: d.name, type: 'gdoc' }))
 
   const notionConfig = result.notionConfig as NotionConfig | undefined
   if (notionConfig?.token && notionConfig?.pageId) {
@@ -171,6 +179,43 @@ function onMouseDown(e: MouseEvent) {
   const host = document.getElementById(HOST_ID)
   if (host && !e.composedPath().includes(host)) removeToolbar()
 }
+
+// ── Drawer ────────────────────────────────────────────────────────────────────
+
+function closeDrawer() {
+  drawerCloseRef.current = null
+  if (drawerRoot) { drawerRoot.unmount(); drawerRoot = null }
+  const host = document.getElementById(DRAWER_HOST_ID)
+  if (host) host.remove()
+}
+
+function openDrawer() {
+  const host = document.createElement('div')
+  host.id = DRAWER_HOST_ID
+  document.body.appendChild(host)
+
+  const shadow = host.attachShadow({ mode: 'open' })
+  const container = document.createElement('div')
+  shadow.appendChild(container)
+
+  const root = ReactDOM.createRoot(container)
+  root.render(<Drawer onClose={closeDrawer} closeRef={drawerCloseRef} />)
+  drawerRoot = root
+}
+
+// ── Message listeners ─────────────────────────────────────────────────────────
+
+chrome.runtime.onMessage.addListener((message: ToggleDrawerMessage | TriggerSaveMessage) => {
+  if (message.type === 'TOGGLE_DRAWER') {
+    if (document.getElementById(DRAWER_HOST_ID)) {
+      // Drawer is open — trigger animated slide-out via the ref the component exposed
+      drawerCloseRef.current ? drawerCloseRef.current() : closeDrawer()
+    } else {
+      openDrawer()
+    }
+    return
+  }
+})
 
 // Keyboard shortcut — save directly with toast feedback
 chrome.runtime.onMessage.addListener((message: TriggerSaveMessage) => {

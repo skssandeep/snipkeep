@@ -1,6 +1,7 @@
 export interface DocDestination {
-  id: string    // Google Doc ID
-  name: string  // user-given label e.g. "Study Notes"
+  id: string
+  name: string
+  active: boolean  // false = stored but hidden from toolbar
 }
 
 export interface NotionConfig {
@@ -41,4 +42,8 @@ export interface SaveNoteResponse {
 
 export interface TriggerSaveMessage {
   type: 'TRIGGER_SAVE'
+}
+
+export interface ToggleDrawerMessage {
+  type: 'TOGGLE_DRAWER'
 }
