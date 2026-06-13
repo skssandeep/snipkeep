@@ -156,6 +156,18 @@ function showToast(message: string, type: 'success' | 'error') {
 
 // ── Event listeners ───────────────────────────────────────────────────────────
 
+// Single \n = visual line wrap (large heading, narrow container) → join with space.
+// Double \n = true paragraph break → keep as \n so each paragraph becomes its own bullet.
+function normalizeSelectionText(raw: string): string {
+  return raw
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{2,}/g, '\x00')  // protect paragraph breaks
+    .replace(/\n/g, ' ')          // collapse visual wraps into a space
+    .replace(/\x00/g, '\n')       // restore paragraph breaks
+    .replace(/ {2,}/g, ' ')       // clean up any double spaces
+    .trim()
+}
+
 function onMouseUp(e: MouseEvent) {
   // Ignore clicks that originated inside the toolbar — prevents the dropdown
   // from being wiped when the user clicks the ▾ chevron or a dropdown item.
@@ -165,7 +177,7 @@ function onMouseUp(e: MouseEvent) {
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(async () => {
     const selection = window.getSelection()
-    const text = selection?.toString().trim()
+    const text = normalizeSelectionText(selection?.toString() ?? '')
     if (!text || !selection || selection.rangeCount === 0) return
 
     const rect = selection.getRangeAt(0).getBoundingClientRect()
@@ -222,7 +234,7 @@ chrome.runtime.onMessage.addListener((message: TriggerSaveMessage) => {
   if (message.type !== 'TRIGGER_SAVE') return
 
   const selection = window.getSelection()
-  const text = selection?.toString().trim()
+  const text = normalizeSelectionText(selection?.toString() ?? '')
   if (!text) { showToast('No text selected', 'error'); return }
 
   loadDestinations().then(({ destinations, defaultDestId }) => {

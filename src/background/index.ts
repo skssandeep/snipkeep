@@ -10,8 +10,8 @@ import type {
 
 const DOCS_API = 'https://docs.googleapis.com/v1/documents'
 const NOTION_API = 'https://api.notion.com/v1'
-const LINK_CHAR = '[source]'
-const LINK_COLOR = { red: 0.29, green: 0.56, blue: 0.89 }
+const PILL_FG   = { red: 0.20, green: 0.46, blue: 0.80 }
+const PILL_BG   = { red: 0.88, green: 0.93, blue: 1.00 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -92,11 +92,17 @@ async function appendToGoogleDoc(
   const requests: object[] = []
 
   if (isNewArticle) {
-    const headingLine = `${pageTitle} ${LINK_CHAR}\n`
-    const insertText = `${headingLine}\n${text}\n\n`
+    const domain = new URL(pageUrl).hostname.replace(/^www\./, '')
+    // Structure: heading, pill on its own line, blank gap, then bulleted text
+    const headingLine = `${pageTitle}\n`
+    const pillLine    = ` ${domain} \n`  // spaces give visual padding inside the bg highlight
+    const insertText  = `${headingLine}${pillLine}\n${text}\n\n`
+
     const headingEnd = insertionPoint + headingLine.length
-    const linkStart = insertionPoint + pageTitle.length + 1
-    const linkEnd = linkStart + LINK_CHAR.length
+    const pillStart  = headingEnd
+    const pillEnd    = pillStart + pillLine.length - 1  // exclude trailing \n
+    const textStart  = insertionPoint + headingLine.length + pillLine.length + 1  // after the blank \n
+    const textEnd    = textStart + text.length + 1  // include the paragraph-ending \n for bullet range
 
     requests.push(
       { insertText: { endOfSegmentLocation: { segmentId: '' }, text: insertText } },
@@ -109,21 +115,39 @@ async function appendToGoogleDoc(
       },
       {
         updateTextStyle: {
-          range: { startIndex: linkStart, endIndex: linkEnd },
+          range: { startIndex: pillStart, endIndex: pillEnd },
           textStyle: {
             link: { url: pageUrl },
-            foregroundColor: { color: { rgbColor: LINK_COLOR } },
+            foregroundColor: { color: { rgbColor: PILL_FG } },
+            backgroundColor: { color: { rgbColor: PILL_BG } },
             fontSize: { magnitude: 9, unit: 'PT' },
+            bold: false,
             underline: false,
           },
-          fields: 'link,foregroundColor,fontSize,underline',
+          fields: 'link,foregroundColor,backgroundColor,fontSize,bold,underline',
+        },
+      },
+      {
+        createParagraphBullets: {
+          range: { startIndex: textStart, endIndex: textEnd },
+          bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
         },
       }
     )
   } else {
-    requests.push({
-      insertText: { endOfSegmentLocation: { segmentId: '' }, text: `${text}\n\n` },
-    })
+    // Continuing the same article — just append another bullet
+    const insertText = `${text}\n\n`
+    const textEnd    = insertionPoint + text.length + 1
+
+    requests.push(
+      { insertText: { endOfSegmentLocation: { segmentId: '' }, text: insertText } },
+      {
+        createParagraphBullets: {
+          range: { startIndex: insertionPoint, endIndex: textEnd },
+          bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+        },
+      }
+    )
   }
 
   const batchRes = await fetch(`${DOCS_API}/${docId}:batchUpdate`, {
