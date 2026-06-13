@@ -1,7 +1,7 @@
 import type { SaveNoteMessage, SaveNoteResponse, TriggerSaveMessage } from '../types'
 
 const DOCS_API = 'https://docs.googleapis.com/v1/documents'
-const LINK_CHAR = '↗'
+const LINK_CHAR = '[source]'
 const LINK_COLOR = { red: 0.29, green: 0.56, blue: 0.89 }
 
 function getAuthToken(): Promise<string> {
@@ -90,9 +90,10 @@ async function appendToDoc(
           textStyle: {
             link: { url: pageUrl },
             foregroundColor: { color: { rgbColor: LINK_COLOR } },
+            fontSize: { magnitude: 9, unit: 'PT' },
             underline: false,
           },
-          fields: 'link,foregroundColor,underline',
+          fields: 'link,foregroundColor,fontSize,underline',
         },
       }
     )
