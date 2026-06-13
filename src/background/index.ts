@@ -4,10 +4,6 @@ const DOCS_API = 'https://docs.googleapis.com/v1/documents'
 const LINK_CHAR = '↗'
 const LINK_COLOR = { red: 0.29, green: 0.56, blue: 0.89 }
 
-// In-memory: tracks the last saved URL to group clips under article headings.
-// Resets when the service worker restarts (browser session boundary — acceptable).
-let lastSavedUrl = ''
-
 function getAuthToken(): Promise<string> {
   return new Promise((resolve, reject) => {
     chrome.identity.getAuthToken({ interactive: true }, (token) => {
@@ -30,6 +26,13 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
   }
 }
 
+// chrome.storage.session persists across service worker restarts within a browser session.
+// In-memory variables reset whenever Chrome kills the background worker — session storage doesn't.
+async function getLastSavedUrl(): Promise<string> {
+  const result = await chrome.storage.session.get(['lastSavedUrl'])
+  return (result.lastSavedUrl as string) ?? ''
+}
+
 async function appendToDoc(
   docId: string,
   token: string,
@@ -37,7 +40,10 @@ async function appendToDoc(
   pageTitle: string,
   pageUrl: string
 ) {
-  // GET current doc to find the body end index for precise insertion
+  const lastSavedUrl = await getLastSavedUrl()
+  const isNewArticle = pageUrl !== lastSavedUrl
+
+  // GET current doc to find the body end index
   const docRes = await fetch(`${DOCS_API}/${docId}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
@@ -49,26 +55,26 @@ async function appendToDoc(
   const bodyContent = doc.body.content
   const endIndex: number = bodyContent[bodyContent.length - 1].endIndex
 
-  // insertText with endOfSegmentLocation inserts just before the final \n (at endIndex - 1)
+  // insertText with endOfSegmentLocation inserts just before the document's final \n
   const insertionPoint = endIndex - 1
-  const isNewArticle = pageUrl !== lastSavedUrl
   const requests: object[] = []
 
   if (isNewArticle) {
-    // New source page: prepend a Heading 2 so clips are grouped visually in the doc
-    const headingText = `${pageTitle}\n`
-    const notePrefix = `${text}\n— ${pageTitle} `
-    const fullText = headingText + notePrefix + LINK_CHAR + '\n\n'
+    // New source: add a Heading 2 with the page title (↗ is a link on the heading).
+    // Format: "Page Title ↗\n\nClip text\n\n"
+    // The heading appears once per source — subsequent clips skip it.
+    const headingLine = `${pageTitle} ${LINK_CHAR}\n`
+    const insertText = `${headingLine}\n${text}\n\n`
 
-    const headingEnd = insertionPoint + headingText.length
-    const linkStart = insertionPoint + headingText.length + notePrefix.length
+    const headingEnd = insertionPoint + headingLine.length
+    const linkStart = insertionPoint + pageTitle.length + 1 // after "pageTitle "
     const linkEnd = linkStart + LINK_CHAR.length
 
     requests.push(
       {
         insertText: {
           endOfSegmentLocation: { segmentId: '' },
-          text: fullText,
+          text: insertText,
         },
       },
       {
@@ -91,32 +97,13 @@ async function appendToDoc(
       }
     )
   } else {
-    // Same page: just append the clip under the existing heading
-    const notePrefix = `${text}\n— ${pageTitle} `
-    const fullText = notePrefix + LINK_CHAR + '\n\n'
-
-    const linkStart = insertionPoint + notePrefix.length
-    const linkEnd = linkStart + LINK_CHAR.length
-
-    requests.push(
-      {
-        insertText: {
-          endOfSegmentLocation: { segmentId: '' },
-          text: fullText,
-        },
+    // Same source: just append the clip — the heading above already attributes it.
+    requests.push({
+      insertText: {
+        endOfSegmentLocation: { segmentId: '' },
+        text: `${text}\n\n`,
       },
-      {
-        updateTextStyle: {
-          range: { startIndex: linkStart, endIndex: linkEnd },
-          textStyle: {
-            link: { url: pageUrl },
-            foregroundColor: { color: { rgbColor: LINK_COLOR } },
-            underline: false,
-          },
-          fields: 'link,foregroundColor,underline',
-        },
-      }
-    )
+    })
   }
 
   const batchRes = await fetch(`${DOCS_API}/${docId}:batchUpdate`, {
@@ -133,7 +120,7 @@ async function appendToDoc(
     throw new Error(`Docs API batchUpdate ${batchRes.status}: ${body}`)
   }
 
-  lastSavedUrl = pageUrl
+  await chrome.storage.session.set({ lastSavedUrl: pageUrl })
 }
 
 async function handleSave(payload: { text: string; url: string; title: string }) {
