@@ -1,7 +1,14 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Toolbar } from './Toolbar'
-import type { SaveNoteMessage, SaveNoteResponse, TriggerSaveMessage } from '../types'
+import type {
+  Destination,
+  DocDestination,
+  NotionConfig,
+  SaveNoteMessage,
+  SaveNoteResponse,
+  TriggerSaveMessage,
+} from '../types'
 
 const HOST_ID = 'clipnote-host'
 const TOAST_ID = 'clipnote-toast'
@@ -13,28 +20,49 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let activeRoot: ReactDOM.Root | null = null
 let activeHost: HTMLElement | null = null
 
-// ── Toolbar ──────────────────────────────────────────────────────────────────
+// ── Destinations ──────────────────────────────────────────────────────────────
 
-function removeToolbar() {
-  if (activeRoot) {
-    activeRoot.unmount()
-    activeRoot = null
+async function loadDestinations(): Promise<{ destinations: Destination[]; defaultDestId: string }> {
+  const result = await chrome.storage.sync.get(['docs', 'docId', 'notionConfig', 'defaultDestId'])
+
+  let docs: DocDestination[] = (result.docs as DocDestination[]) ?? []
+  if (docs.length === 0 && result.docId) {
+    docs = [{ id: result.docId as string, name: 'My Notes' }]
   }
-  if (activeHost) {
-    activeHost.remove()
-    activeHost = null
+
+  const destinations: Destination[] = docs.map(d => ({ id: d.id, name: d.name, type: 'gdoc' }))
+
+  const notionConfig = result.notionConfig as NotionConfig | undefined
+  if (notionConfig?.token && notionConfig?.pageId) {
+    destinations.push({
+      id: 'notion',
+      name: notionConfig.pageName ?? 'Notion',
+      type: 'notion',
+    })
   }
+
+  const defaultDestId = (result.defaultDestId as string) ?? destinations[0]?.id ?? ''
+  return { destinations, defaultDestId }
 }
 
-function showToolbar(rect: DOMRect, text: string) {
+// ── Toolbar ───────────────────────────────────────────────────────────────────
+
+function removeToolbar() {
+  if (activeRoot) { activeRoot.unmount(); activeRoot = null }
+  if (activeHost) { activeHost.remove(); activeHost = null }
+}
+
+async function showToolbar(rect: DOMRect, text: string) {
   removeToolbar()
+
+  const { destinations, defaultDestId } = await loadDestinations()
+  if (destinations.length === 0) return
 
   const scrollX = window.scrollX
   const scrollY = window.scrollY
 
   let top = rect.top + scrollY - TOOLBAR_HEIGHT - GAP
   if (top < scrollY + 8) top = rect.bottom + scrollY + GAP
-
   const left = rect.left + scrollX + rect.width / 2
 
   const host = document.createElement('div')
@@ -49,7 +77,6 @@ function showToolbar(rect: DOMRect, text: string) {
     zIndex: '2147483647',
     pointerEvents: 'none',
   })
-
   document.body.appendChild(host)
 
   const shadow = host.attachShadow({ mode: 'open' })
@@ -59,13 +86,17 @@ function showToolbar(rect: DOMRect, text: string) {
   const root = ReactDOM.createRoot(container)
   root.render(
     <Toolbar
-      onSave={async () => {
+      destinations={destinations}
+      defaultDestId={defaultDestId}
+      onSave={async (destId, destType) => {
         const msg: SaveNoteMessage = {
           type: 'SAVE_NOTE',
-          payload: { text, url: window.location.href, title: document.title },
+          payload: { text, url: window.location.href, title: document.title, destinationId: destId, destinationType: destType },
         }
         const res: SaveNoteResponse = await chrome.runtime.sendMessage(msg)
         if (!res.success) throw new Error(res.error ?? 'Save failed')
+        // Persist chosen destination as the new default
+        await chrome.storage.sync.set({ defaultDestId: destId })
       }}
       onDismiss={removeToolbar}
     />
@@ -75,32 +106,19 @@ function showToolbar(rect: DOMRect, text: string) {
   activeHost = host
 }
 
-// ── Toast (keyboard shortcut feedback) ───────────────────────────────────────
+// ── Toast ─────────────────────────────────────────────────────────────────────
 
 const TOAST_STYLES = `
-  @keyframes cn-toast-in {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes cn-toast-out {
-    from { opacity: 1; }
-    to   { opacity: 0; }
-  }
+  @keyframes cn-toast-in  { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes cn-toast-out { from { opacity: 1; } to { opacity: 0; } }
   .toast {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    background: #1a1a1a;
-    border: 1px solid #2e2e2e;
-    border-radius: 8px;
-    padding: 10px 16px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 13px;
-    font-weight: 500;
+    position: fixed; bottom: 24px; right: 24px;
+    background: #1a1a1a; border: 1px solid #2e2e2e; border-radius: 8px;
+    padding: 10px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px; font-weight: 500;
     box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     animation: cn-toast-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     pointer-events: none;
-    z-index: 2147483647;
   }
   .toast.success { color: #c8f135; }
   .toast.error   { color: #ff6b6b; }
@@ -113,26 +131,12 @@ function showToast(message: string, type: 'success' | 'error') {
 
   const host = document.createElement('div')
   host.id = TOAST_ID
-  Object.assign(host.style, {
-    position: 'fixed',
-    bottom: '0',
-    right: '0',
-    width: '0',
-    height: '0',
-    overflow: 'visible',
-    zIndex: '2147483647',
-    pointerEvents: 'none',
-  })
-
+  Object.assign(host.style, { position: 'fixed', bottom: '0', right: '0', width: '0', height: '0', overflow: 'visible', zIndex: '2147483647', pointerEvents: 'none' })
   document.body.appendChild(host)
 
   const shadow = host.attachShadow({ mode: 'open' })
-  shadow.innerHTML = `
-    <style>${TOAST_STYLES}</style>
-    <div class="toast ${type}">${message}</div>
-  `
+  shadow.innerHTML = `<style>${TOAST_STYLES}</style><div class="toast ${type}">${message}</div>`
 
-  // Fade out then remove
   setTimeout(() => {
     const toast = shadow.querySelector('.toast')
     if (toast) {
@@ -146,17 +150,15 @@ function showToast(message: string, type: 'success' | 'error') {
 
 function onMouseUp() {
   if (debounceTimer) clearTimeout(debounceTimer)
-
-  debounceTimer = setTimeout(() => {
+  debounceTimer = setTimeout(async () => {
     const selection = window.getSelection()
     const text = selection?.toString().trim()
-
     if (!text || !selection || selection.rangeCount === 0) return
 
     const rect = selection.getRangeAt(0).getBoundingClientRect()
     if (rect.width === 0 && rect.height === 0) return
 
-    showToolbar(rect, text)
+    await showToolbar(rect, text)
   }, DEBOUNCE_MS)
 }
 
@@ -165,31 +167,31 @@ function onMouseDown(e: MouseEvent) {
   if (host && !e.composedPath().includes(host)) removeToolbar()
 }
 
-// Keyboard shortcut triggered by background service worker
+// Keyboard shortcut — save directly with toast feedback
 chrome.runtime.onMessage.addListener((message: TriggerSaveMessage) => {
   if (message.type !== 'TRIGGER_SAVE') return
 
   const selection = window.getSelection()
   const text = selection?.toString().trim()
+  if (!text) { showToast('No text selected', 'error'); return }
 
-  if (!text) {
-    showToast('No text selected', 'error')
-    return
-  }
+  loadDestinations().then(({ destinations, defaultDestId }) => {
+    const dest = destinations.find(d => d.id === defaultDestId) ?? destinations[0]
+    if (!dest) { showToast('No destination set', 'error'); return }
 
-  // Save immediately and show a toast — no toolbar interaction needed
-  const msg: SaveNoteMessage = {
-    type: 'SAVE_NOTE',
-    payload: { text, url: window.location.href, title: document.title },
-  }
-
-  chrome.runtime.sendMessage(msg, (res: SaveNoteResponse) => {
-    if (res?.success) {
-      showToast('✓ Saved to Notes', 'success')
-      removeToolbar()
-    } else {
-      showToast(res?.error ?? 'Save failed', 'error')
+    const msg: SaveNoteMessage = {
+      type: 'SAVE_NOTE',
+      payload: { text, url: window.location.href, title: document.title, destinationId: dest.id, destinationType: dest.type },
     }
+
+    chrome.runtime.sendMessage(msg, (res: SaveNoteResponse) => {
+      if (res?.success) {
+        showToast(`✓ Saved to ${dest.name}`, 'success')
+        removeToolbar()
+      } else {
+        showToast(res?.error ?? 'Save failed', 'error')
+      }
+    })
   })
 })
 
