@@ -148,7 +148,12 @@ function showToast(message: string, type: 'success' | 'error') {
 
 // ── Event listeners ───────────────────────────────────────────────────────────
 
-function onMouseUp() {
+function onMouseUp(e: MouseEvent) {
+  // Ignore clicks that originated inside the toolbar — prevents the dropdown
+  // from being wiped when the user clicks the ▾ chevron or a dropdown item.
+  const host = document.getElementById(HOST_ID)
+  if (host && e.composedPath().includes(host)) return
+
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(async () => {
     const selection = window.getSelection()
