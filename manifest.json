@@ -3,7 +3,7 @@
   "name": "ClipNote",
   "version": "1.0.0",
   "description": "Select text on any page and save it instantly to your Google Docs notes.",
-  "permissions": ["identity", "storage", "activeTab"],
+  "permissions": ["identity", "identity.email", "storage", "activeTab"],
   "host_permissions": ["https://docs.googleapis.com/*", "https://api.notion.com/*"],
   "background": {
     "service_worker": "src/background/index.ts",

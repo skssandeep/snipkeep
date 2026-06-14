@@ -13,10 +13,42 @@ function timeAgo(ts: number): string {
   return `${Math.floor(h / 24)}d ago`
 }
 
+// ── Gate Screen ───────────────────────────────────────────────────────────────
+// Shown on first run (not signed in). Replaced by the full UI after auth.
+
+function GateScreen({ onSignIn }: { onSignIn: () => Promise<void> }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleClick() {
+    setLoading(true)
+    setError('')
+    try {
+      await onSignIn()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sign-in failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="gate-screen">
+      <div className="gate-logo">Clip<span>Note</span></div>
+      <p className="gate-tagline">Save what you read,<br />exactly where you write.</p>
+      <button className="btn-primary full-width" onClick={handleClick} disabled={loading}>
+        {loading ? 'Connecting…' : 'Connect with Google'}
+      </button>
+      {error && <p className="gate-error">{error}</p>}
+      <p className="gate-note">Uses your existing Chrome profile — no new account needed</p>
+    </div>
+  )
+}
+
 // ── Settings Tab ──────────────────────────────────────────────────────────────
+// Auth has been removed from here — it lives in the drawer header now.
 
 function Settings() {
-  const [isSignedIn, setIsSignedIn] = useState(false)
   const [docs, setDocs] = useState<DocDestination[]>([])
   const [newDocId, setNewDocId] = useState('')
   const [newDocName, setNewDocName] = useState('')
@@ -27,17 +59,13 @@ function Settings() {
   const [notionPageName, setNotionPageName] = useState('')
   const [flash, setFlash] = useState('')
 
-  // Track whether the user manually typed a name so we don't overwrite it
   const nameTouchedRef = useRef(false)
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    chrome.storage.sync.get(['isSignedIn', 'docs', 'docId', 'notionConfig'], (result) => {
-      if (result.isSignedIn) setIsSignedIn(true)
-
+    chrome.storage.sync.get(['docs', 'docId', 'notionConfig'], (result) => {
       let d: DocDestination[] = (result.docs as DocDestination[]) ?? []
       if (d.length === 0 && result.docId) d = [{ id: result.docId as string, name: 'My Notes', active: true }]
-      // Backfill active flag for docs saved before this field existed
       d = d.map(doc => ({ ...doc, active: doc.active ?? true }))
       setDocs(d)
 
@@ -48,7 +76,6 @@ function Settings() {
         setNotionPageName(nc.pageName)
       }
 
-      // Silently re-sync doc names with actual Google Doc titles on every popup open
       if (d.length > 0) syncDocNames(d)
     })
   }, [])
@@ -80,7 +107,6 @@ function Settings() {
 
     const hasChanges = synced.some((doc, i) => doc.name !== currentDocs[i].name)
     if (!hasChanges) return
-
     setDocs(synced)
     chrome.storage.sync.set({ docs: synced })
   }
@@ -88,30 +114,6 @@ function Settings() {
   function showFlash(msg: string) {
     setFlash(msg)
     setTimeout(() => setFlash(''), 3000)
-  }
-
-  function handleSignIn() {
-    chrome.identity.getAuthToken({ interactive: true }, (token) => {
-      if (chrome.runtime.lastError || !token) {
-        showFlash(chrome.runtime.lastError?.message ?? 'Sign-in failed')
-        return
-      }
-      chrome.storage.sync.set({ isSignedIn: true })
-      setIsSignedIn(true)
-      showFlash('Signed in.')
-    })
-  }
-
-  function handleSignOut() {
-    chrome.identity.getAuthToken({ interactive: false }, (token) => {
-      const clear = () => {
-        chrome.storage.sync.set({ isSignedIn: false })
-        setIsSignedIn(false)
-        showFlash('Signed out.')
-      }
-      if (!token) { clear(); return }
-      chrome.identity.removeCachedAuthToken({ token }, clear)
-    })
   }
 
   function parseDocId(input: string): string {
@@ -143,11 +145,9 @@ function Settings() {
     if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current)
 
     const id = parseDocId(value.trim())
-    // Google Doc IDs are 44 chars — skip short/empty strings
     if (id.length < 20) return
 
     fetchTimerRef.current = setTimeout(async () => {
-      // Don't overwrite a name the user deliberately typed
       if (nameTouchedRef.current) return
       setIsFetchingTitle(true)
       const title = await fetchDocTitle(id)
@@ -168,8 +168,6 @@ function Settings() {
     const id = parseDocId(newDocId.trim())
     const name = newDocName.trim() || 'My Notes'
 
-    console.log('[ClipNote] handleAddDoc — id:', id, 'name:', name, 'existing:', docs.map(d => d.id))
-
     if (!id) { showFlash('Could not parse a Doc ID from that URL.'); return }
     if (docs.find(d => d.id === id)) { showFlash('Already in your list.'); return }
 
@@ -183,8 +181,6 @@ function Settings() {
 
     chrome.storage.sync.set({ docs: updated }, () => {
       if (chrome.runtime.lastError) {
-        console.error('[ClipNote] Storage write failed:', chrome.runtime.lastError.message)
-        // Revert to previous state so the UI reflects what's actually persisted
         setDocs(docs)
         showFlash(`Save failed: ${chrome.runtime.lastError.message}`)
       }
@@ -223,22 +219,16 @@ function Settings() {
     showFlash('Notion disconnected.')
   }
 
+  // Suppress unused variable warnings for Notion (hidden at MVP)
+  void handleSaveNotion
+  void handleDisconnectNotion
+  void notionToken
+  void notionPageId
+  void notionPageName
+
   return (
     <div className="tab-content">
-      {/* Auth */}
-      <div className="section">
-        <div className="section-label">Google Account</div>
-        {isSignedIn ? (
-          <div className="account-row">
-            <span className="account-status">Signed in</span>
-            <button className="btn-ghost small" onClick={handleSignOut}>Sign out</button>
-          </div>
-        ) : (
-          <button className="btn-primary full-width" onClick={handleSignIn}>Sign in with Google</button>
-        )}
-      </div>
-
-      {/* Google Docs */}
+      {/* Google Docs — now at the top; auth is in the drawer header */}
       <div className="section">
         <div className="section-label">Google Docs</div>
         {docs.length > 0 && (
@@ -262,7 +252,6 @@ function Settings() {
 
         {flash && <div className="flash">{flash}</div>}
 
-        {/* URL field — name appears below only after a URL is pasted */}
         <div className="input-group">
           <div className="field">
             <span className="field-label">Google Doc URL</span>
@@ -275,7 +264,6 @@ function Settings() {
             />
           </div>
 
-          {/* Name row: only visible after URL is entered */}
           {newDocId.trim() && (
             <div className="field name-preview-field">
               <span className="field-label">
@@ -363,9 +351,49 @@ function History() {
 }
 
 // ── Root ──────────────────────────────────────────────────────────────────────
+// Auth state lives here so the gate screen and the main UI are siblings.
+// The drawer header reads userEmail from chrome.storage independently.
 
 export function Popup() {
   const [tab, setTab] = useState<Tab>('settings')
+  const [isSignedIn, setIsSignedIn] = useState(false)
+
+  useEffect(() => {
+    chrome.storage.sync.get(['isSignedIn'], (result) => {
+      if (result.isSignedIn) setIsSignedIn(true)
+    })
+
+    const handler = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if ('isSignedIn' in changes) setIsSignedIn(!!changes.isSignedIn.newValue)
+    }
+    chrome.storage.onChanged.addListener(handler)
+    return () => chrome.storage.onChanged.removeListener(handler)
+  }, [])
+
+  async function handleSignIn(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      chrome.identity.getAuthToken({ interactive: true }, (token) => {
+        if (chrome.runtime.lastError || !token) {
+          reject(new Error(chrome.runtime.lastError?.message ?? 'Sign-in failed'))
+          return
+        }
+
+        // Get the Chrome profile email to display in the avatar chip
+        chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }, (info) => {
+          chrome.storage.sync.set({
+            isSignedIn: true,
+            userEmail: info.email ?? '',
+          })
+          setIsSignedIn(true)
+          resolve()
+        })
+      })
+    })
+  }
+
+  if (!isSignedIn) {
+    return <GateScreen onSignIn={handleSignIn} />
+  }
 
   return (
     <div className="popup">

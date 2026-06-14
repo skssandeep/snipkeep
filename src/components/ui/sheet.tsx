@@ -4,8 +4,7 @@ import { XIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
-// Injected into the Shadow DOM alongside POPUP_CSS so these styles are isolated.
-// No Tailwind — we use our CSS variable system directly.
+// Injected into the Shadow DOM after POPUP_CSS, so all --variables are already defined on :host.
 export const SHEET_CSS = `
   @keyframes cn-sheet-overlay-in  { from { opacity: 0 } to { opacity: 1 } }
   @keyframes cn-sheet-overlay-out { from { opacity: 1 } to { opacity: 0 } }
@@ -27,16 +26,19 @@ export const SHEET_CSS = `
     z-index: 2147483647;
     display: flex;
     flex-direction: column;
-    background: var(--bg, #0f0f0f);
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.5;
     box-shadow: -8px 0 32px rgba(0,0,0,0.45), -1px 0 0 rgba(255,255,255,0.05);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
   .cn-sheet-content[data-side="right"] {
     inset-block: 0;
     right: 0;
     height: 100dvh;
     width: 360px;
-    border-left: 1px solid rgba(255,255,255,0.06);
+    border-left: 1px solid var(--border);
   }
   .cn-sheet-content[data-side="right"][data-state="open"] {
     animation: cn-sheet-slide-in-right 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -50,8 +52,8 @@ export const SHEET_CSS = `
     align-items: center;
     padding: 0 12px 0 16px;
     height: 48px;
-    background: #242424;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
 
@@ -61,40 +63,43 @@ export const SHEET_CSS = `
     flex-direction: column;
     gap: 8px;
     padding: 16px;
-    background: rgba(255,255,255,0.02);
-    border-top: 1px solid rgba(255,255,255,0.06);
+    background: var(--accent-dim);
+    border-top: 1px solid var(--border);
   }
 
   .cn-sheet-title {
     flex: 1;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
-    color: #fff;
-    letter-spacing: -0.3px;
+    color: var(--text);
+    letter-spacing: -0.4px;
+    font-family: var(--font);
   }
-  .cn-sheet-title span { color: #c8f135; }
+  .cn-sheet-title span { color: var(--accent); }
 
   .cn-sheet-description {
     font-size: 12px;
-    color: #888;
+    color: var(--text-3);
+    font-family: var(--font);
   }
 
   .cn-sheet-close-btn {
     background: none;
     border: none;
-    color: #999;
+    color: var(--text-3);
     cursor: pointer;
     width: 32px;
     height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    border-radius: var(--radius);
     flex-shrink: 0;
+    font-family: var(--font);
     transition: background 0.12s, color 0.12s;
   }
-  .cn-sheet-close-btn:hover { background: rgba(255,255,255,0.07); color: #ccc; }
-  .cn-sheet-close-btn:focus-visible { outline: 2px solid #c8f135; outline-offset: 2px; }
+  .cn-sheet-close-btn:hover { background: rgba(255,255,255,0.07); color: var(--text-2); }
+  .cn-sheet-close-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 `
 
 // ─── Primitives ───────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 :root {
   --bg: #0f0f0f;
-  --surface: #181818;
+  --surface: #242424;  /* elevated surface — drawer header, nav bars */
   --card: #1e1e1e;
   --border: #2c2c2c;
   --border-active: #444;
@@ -393,4 +393,44 @@ a { color: inherit; text-decoration: none; }
   height: 1px;
   background: var(--border);
   margin: 0 -16px;
+}
+
+/* ── Gate screen (first-run / signed-out state) ── */
+.gate-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 480px;
+  padding: 48px 32px;
+  gap: 16px;
+  text-align: center;
+}
+
+.gate-logo {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.6px;
+  margin-bottom: 4px;
+}
+.gate-logo span { color: var(--accent); }
+
+.gate-tagline {
+  font-size: 14px;
+  color: var(--text-2);
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+
+.gate-note {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.6;
+  max-width: 220px;
+}
+
+.gate-error {
+  font-size: 12px;
+  color: var(--danger);
 }
