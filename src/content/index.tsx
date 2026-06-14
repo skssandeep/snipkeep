@@ -211,7 +211,8 @@ function openDrawer() {
   shadow.appendChild(container)
 
   const root = ReactDOM.createRoot(container)
-  root.render(<Drawer onClose={closeDrawer} closeRef={drawerCloseRef} />)
+  // Pass container so SheetPortal renders inside the shadow DOM, not document.body
+  root.render(<Drawer container={container} onClose={closeDrawer} closeRef={drawerCloseRef} />)
   drawerRoot = root
 }
 
