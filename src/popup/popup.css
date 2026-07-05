@@ -1,17 +1,35 @@
 :root {
-  --bg: #0f0f0f;
-  --surface: #242424;  /* elevated surface — drawer header, nav bars */
-  --card: #1e1e1e;
-  --border: #2c2c2c;
-  --border-active: #444;
-  --accent: #c8f135;
-  --accent-dim: rgba(200, 241, 53, 0.08);
-  --text: #efefef;
-  --text-2: #b0b0b0;   /* 7.2:1 on card, 8.4:1 on bg — clear secondary */
-  --text-3: #888;      /* 4.67:1 on card, 5.45:1 on bg — WCAG AA minimum */
-  --danger: #ff6b6b;
-  --radius: 9px;
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* ── Base surfaces: one violet-tinted near-black family. Every step shares the
+        same hue (~264°) as the accent and the cards; elevation reads through
+        LIGHTNESS alone, so a lifted card never looks like a different material. ── */
+  --bg: #0E0C14;          /* panel base — darkest */
+  --surface: #16131F;     /* elevated — drawer header */
+  --card: #232030;        /* list items, inputs — clear step above bg */
+  --card-2: #2E2A3E;      /* hover / nested */
+  --card-edge: rgba(255, 255, 255, 0.05);  /* hairline so cards read as objects */
+  --border: #2A2635;      /* hairlines */
+  --border-active: #3D3860;
+
+  /* ── Accent: electric violet — the one color in the system.
+        Desaturated + lightened for dark surfaces: saturated violet "vibrates"
+        against near-black; this hue reads calmer and lifts every dark-UI
+        contrast (7.6:1 on --surface, was 5.5:1). Hover always lightens. ── */
+  --accent: #A99CFF;
+  --accent-hover: #BCB2FF;
+  --accent-dim: rgba(169, 156, 255, 0.10);
+  --accent-ink: #15121C;  /* text on an accent fill — 7.9:1 */
+  --toggle-on: #6F61BE;   /* muted violet — "on" without out-shouting the doc name */
+
+  /* ── Text: warm-neutral ramp, all WCAG AA on --card ── */
+  --text: #F2F1F5;        /* primary — 14:1 on card */
+  --text-2: #A8A4B5;      /* secondary — 6.5:1 on card */
+  --text-3: #948FA1;      /* tertiary — 5.1:1 on card, 6.1:1 on bg (WCAG AA) */
+  --danger: #FF6B6B;
+
+  --radius: 10px;         /* buttons, inputs */
+  --radius-sm: 7px;       /* cards, small controls */
+
+  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: 'SF Mono', ui-monospace, 'Fira Mono', monospace;
 }
 
@@ -23,10 +41,38 @@ body {
   font-family: var(--font);
   font-size: 13px;
   line-height: 1.5;
-  width: 320px;
+  width: 340px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a { color: inherit; text-decoration: none; }
+
+/* ── Keyboard focus — one consistent ring across every interactive element ── */
+.tab:focus-visible,
+.btn-primary:focus-visible,
+.btn-ghost:focus-visible,
+.btn-toggle:focus-visible,
+.btn-remove:focus-visible,
+.btn-add-trigger:focus-visible,
+.history-item:focus-visible,
+.hist-action:focus-visible,
+.cite-opt:focus-visible,
+.privacy-back:focus-visible,
+.privacy-open-docs:focus-visible,
+.privacy-trust-link:focus-visible,
+.trust-open-doc:focus-visible,
+.trust-dismiss:focus-visible,
+.doc-note-input:focus-visible,
+.doc-note-save:focus-visible,
+.someday-filter:focus-visible,
+.triage-btn-keep:focus-visible,
+.triage-btn-someday:focus-visible,
+.triage-skip:focus-visible,
+.name-preview:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 .popup { display: flex; flex-direction: column; }
 
@@ -34,57 +80,69 @@ a { color: inherit; text-decoration: none; }
 .header {
   display: flex;
   align-items: center;
-  padding: 14px 16px 12px;
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  padding: 16px 20px 14px;
 }
 
 .logo {
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: -0.4px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.5px;
 }
 .logo span { color: var(--accent); }
 
 /* ── Tabs ── */
 .tabs {
   display: flex;
-  padding: 0 16px;
+  gap: 2px;
+  padding: 0 18px;
   border-bottom: 1px solid var(--border);
 }
 
 .tab {
+  position: relative;
   background: none;
   border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-2);
+  color: var(--text-3);
   font-family: var(--font);
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 500;
-  padding: 10px 12px 9px;
+  padding: 9px 10px 11px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-  margin-bottom: -1px;
+  transition: color 0.15s;
+  letter-spacing: -0.1px;
 }
-.tab:hover { color: var(--text); }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab::after {
+  content: '';
+  position: absolute;
+  left: 10px; right: 10px; bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.tab:hover { color: var(--text-2); }
+.tab.active { color: var(--text); font-weight: 600; }
+.tab.active::after { background: var(--accent); }
 
 /* ── Tab content ── */
 .tab-content {
-  padding: 16px;
+  padding: 18px 20px 22px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 22px;
 }
 
 /* ── Section ── */
-.section { display: flex; flex-direction: column; gap: 10px; }
+.section { display: flex; flex-direction: column; gap: 11px; }
 
 .section-label {
   font-size: 11px;
-  font-weight: 600;
-  color: var(--text-2);
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 /* ── Account row ── */
@@ -93,34 +151,38 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: space-between;
   background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
 }
 .account-status { font-size: 13px; color: var(--text); font-weight: 500; }
 
-/* ── Doc list ── */
-.doc-list { display: flex; flex-direction: column; gap: 6px; }
+/* ── Doc list — borderless cards, depth from bg lift alone ── */
+.doc-list { display: flex; flex-direction: column; gap: 7px; }
 
 .doc-item {
   display: flex;
   align-items: center;
   background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 9px 10px 9px 12px;
-  gap: 8px;
-  transition: border-color 0.15s;
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-sm);
+  padding: 11px 12px 11px 14px;
+  gap: 10px;
+  box-shadow: inset 0 0 0 0 var(--accent);
+  transition: background 0.15s, box-shadow 0.15s;
 }
-.doc-item:hover { border-color: #363636; }
+/* Hover feedback comes from the accent bar + brighter edge — NOT a lighter fill,
+   so the grey meta text never loses contrast against a lightened surface. */
+.doc-item:hover {
+  border-color: var(--border-active);
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}
 
 .doc-info { flex: 1; min-width: 0; }
-.doc-name { font-size: 13px; font-weight: 500; color: var(--text); }
-.doc-id {
-  font-size: 11px;
+.doc-name { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
+.doc-meta {
+  font-size: 13px;
   color: var(--text-3);
-  font-family: var(--mono);
-  margin-top: 2px;
+  margin-top: 3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -137,74 +199,73 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
+  border-radius: 6px;
   transition: background 0.1s, color 0.1s;
   flex-shrink: 0;
 }
-.btn-remove:hover { background: rgba(255,107,107,0.1); color: var(--danger); }
+.btn-remove:hover { background: rgba(255,107,107,0.12); color: var(--danger); }
 
-/* ── Active toggle switch ── */
+/* ── Active toggle switch — scaled down so it reads as secondary ── */
 .btn-toggle {
   position: relative;
-  width: 30px;
-  height: 17px;
-  border-radius: 9px;
+  width: 26px;
+  height: 16px;
+  border-radius: 8px;
   border: none;
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.2s;
-  margin-right: 6px;
 }
 .btn-toggle::after {
   content: '';
   position: absolute;
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: #fff;
   top: 2px;
   transition: left 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
-.btn-toggle.on  { background: var(--accent); }
-.btn-toggle.off { background: #333; }
-.btn-toggle.on::after  { left: 15px; }
+.btn-toggle.on  { background: var(--toggle-on); }
+.btn-toggle.off { background: var(--border-active); }
+/* Brighten to full accent only on interaction, so the doc name leads at rest */
+.doc-item:hover .btn-toggle.on,
+.btn-toggle.on:hover { background: var(--accent); }
+.btn-toggle.on::after  { left: 12px; }
 .btn-toggle.off::after { left: 2px; }
 
-/* Inactive doc dims — it's in the library but not in the toolbar */
-.doc-item.inactive {
-  opacity: 0.55;
-}
-.doc-item.inactive:hover {
-  opacity: 0.8;
-  border-color: #363636;
-}
+/* Inactive doc dims — in the library but not in the toolbar */
+.doc-item.inactive { opacity: 0.5; }
+.doc-item.inactive:hover { opacity: 0.85; border-color: var(--border-active); }
 
-/* ── Grouped input card (Stripe/Linear pattern) ──
-   Name + URL share one card with an internal divider.
-   The boundary signals "these belong together" without a label saying so. */
+/* ── Grouped input card — name + URL share one card with an internal divider ── */
 .input-group {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--card);
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.input-group:focus-within { border-color: var(--border-active); }
+.input-group:focus-within {
+  border-color: var(--border-active);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
 
 .field {
   display: flex;
   flex-direction: column;
-  padding: 9px 12px 8px;
+  padding: 10px 14px 9px;
 }
 .field + .field { border-top: 1px solid var(--border); }
 
 .field-label {
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   color: var(--text-3);
   text-transform: uppercase;
-  margin-bottom: 3px;
+  margin-bottom: 4px;
   pointer-events: none;
 }
 
@@ -220,21 +281,19 @@ a { color: inherit; text-decoration: none; }
 }
 .field-input::placeholder { color: var(--text-3); }
 
-/* URL field: monospace only when the user is typing an ID-like string */
+/* URL field: monospace only when typing an ID-like string */
 .field-input.mono { font-family: var(--mono); font-size: 12px; }
 
 .field-fetching {
   font-size: 9px;
-  font-weight: 400;
+  font-weight: 500;
   color: var(--accent);
   text-transform: none;
   letter-spacing: 0;
-  opacity: 0.7;
-  margin-left: 4px;
+  margin-left: 5px;
 }
 
 /* ── Name preview row ── */
-/* Read-only by default; edit icon reveals on hover; click to edit inline */
 .name-preview-field { background: rgba(255,255,255,0.02); }
 
 .name-preview {
@@ -244,13 +303,7 @@ a { color: inherit; text-decoration: none; }
   cursor: text;
   min-height: 20px;
 }
-
-.name-preview-text {
-  font-size: 13px;
-  color: var(--text);
-  flex: 1;
-}
-
+.name-preview-text { font-size: 13px; color: var(--text); flex: 1; }
 .name-preview-edit {
   font-size: 12px;
   color: var(--text-3);
@@ -259,11 +312,9 @@ a { color: inherit; text-decoration: none; }
   flex-shrink: 0;
   padding-left: 6px;
 }
-
 .name-preview:hover .name-preview-edit { opacity: 1; }
-.name-preview:hover .name-preview-text { color: var(--text); }
 
-/* ── Standalone input (kept for Notion token field) ── */
+/* ── Standalone input (Notion token field) ── */
 .input {
   width: 100%;
   background: var(--card);
@@ -272,11 +323,11 @@ a { color: inherit; text-decoration: none; }
   color: var(--text);
   font-family: var(--font);
   font-size: 13px;
-  padding: 9px 12px;
+  padding: 10px 14px;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.input:focus { border-color: var(--border-active); }
+.input:focus { border-color: var(--border-active); box-shadow: 0 0 0 3px var(--accent-dim); }
 .input::placeholder { color: var(--text-3); }
 .input.mono-input { font-family: var(--mono); font-size: 12px; }
 
@@ -290,45 +341,92 @@ a { color: inherit; text-decoration: none; }
 /* ── Buttons ── */
 .btn-primary {
   background: var(--accent);
-  color: #000;
+  color: var(--accent-ink);
   border: none;
   border-radius: var(--radius);
-  padding: 8px 14px;
-  font-size: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
   font-weight: 600;
   font-family: var(--font);
+  letter-spacing: -0.1px;
   cursor: pointer;
-  transition: opacity 0.1s;
-  white-space: nowrap;
+  transition: background 0.12s;
 }
-.btn-primary:hover { opacity: 0.88; }
-.btn-primary:disabled { opacity: 0.25; cursor: default; }
-.btn-primary.full-width { width: 100%; padding: 9px 14px; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled {
+  background: var(--card-2);
+  color: var(--text-3);
+  cursor: default;
+}
+.btn-primary.full-width { width: 100%; }
 
 .btn-ghost {
   background: none;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-2);
-  padding: 6px 12px;
+  padding: 7px 13px;
   font-size: 12px;
+  font-weight: 500;
   font-family: var(--font);
   cursor: pointer;
-  transition: color 0.1s, border-color 0.1s;
-  white-space: nowrap;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
 }
-.btn-ghost:hover { color: var(--text); border-color: #444; }
-.btn-ghost.small { padding: 4px 10px; font-size: 11px; }
-.btn-ghost.danger:hover { color: var(--danger); border-color: var(--danger); }
+.btn-ghost:hover { color: var(--text); border-color: var(--border-active); background: var(--card); }
+.btn-ghost.small { padding: 5px 11px; font-size: 11px; }
+.btn-ghost.danger:hover { color: var(--danger); border-color: var(--danger); background: rgba(255,107,107,0.06); }
+
+/* ── Add-document trigger — dashed "add a slot" affordance, quiet by default ── */
+.btn-add-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  background: var(--card);
+  border: 1px dashed var(--border-active);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  padding: 12px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.btn-add-trigger:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--card-2);
+}
+.btn-add-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ── Add-document form — revealed on demand ── */
+@keyframes cn-add-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: cn-add-reveal 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.add-actions { display: flex; gap: 8px; }
+.add-submit { flex: 1; }
 
 /* ── Flash ── */
 .flash {
   font-size: 12px;
   color: var(--accent);
-  padding: 9px 12px;
+  padding: 10px 14px;
   background: var(--accent-dim);
-  border: 1px solid rgba(200, 241, 53, 0.15);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
 }
 
 /* ── Row ── */
@@ -336,43 +434,183 @@ a { color: inherit; text-decoration: none; }
 .muted { color: var(--text-2); font-size: 13px; }
 
 /* ── History ── */
-.history-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
+.history-header { display: flex; align-items: center; justify-content: space-between; }
+.history-header-actions { display: flex; align-items: center; gap: 8px; }
+.history-list { display: flex; flex-direction: column; gap: 7px; }
 
-.history-list { display: flex; flex-direction: column; gap: 6px; }
+.someday-filter {
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--card-edge);
+  border-radius: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.someday-filter:hover { color: var(--text); border-color: var(--border-active); }
+.someday-filter.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(169, 156, 255, 0.12);
+}
 
 .history-item {
   display: block;
   background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  transition: border-color 0.15s;
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  box-shadow: inset 0 0 0 0 var(--accent);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.history-item:hover {
+  border-color: var(--border-active);
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}
+
+/* Two per-clip actions, revealed on hover / keyboard focus (kept in layout via
+   opacity, so cards don't jump). Source = open + highlight; Doc = open the Doc. */
+.history-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.history-item:hover .history-actions,
+.history-item:focus-within .history-actions {
+  opacity: 1;
+}
+.hist-action {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  color: var(--text-2);
+  background: var(--card-edge);
+  border: 1px solid var(--card-edge);
+  border-radius: 6px;
+  padding: 4px 9px;
   cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.history-item:hover { border-color: #363636; }
-
-.history-text {
-  font-size: 12px;
+.hist-action:hover {
   color: var(--text);
-  line-height: 1.55;
-  margin-bottom: 7px;
+  border-color: var(--border-active);
+}
+.hist-action.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(169, 156, 255, 0.12);
 }
 
-.history-meta {
+/* "Cite as" style selector (once per History tab, persisted) */
+.cite-style {
   display: flex;
   align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.cite-label {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-right: 2px;
+}
+.cite-opt {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--card-edge);
+  border-radius: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.cite-opt:hover { color: var(--text); border-color: var(--border-active); }
+.cite-opt.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(139, 124, 248, 0.12);
 }
 
-.history-source { font-size: 10px; color: var(--text-2); font-weight: 500; }
-.history-dot    { font-size: 10px; color: var(--text-3); }
-.history-dest   { font-size: 10px; color: #4a8fd4; }
-.history-time   { font-size: 10px; color: var(--text-3); }
+/* Archive search */
+.history-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
+  margin-bottom: 12px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.12s;
+}
+.history-search::placeholder { color: var(--text-3); }
+.history-search:focus { border-color: var(--border-active); }
+
+.history-empty-search,
+.history-more { margin-top: 8px; font-size: 11px; }
+
+/* Resurfaced spotlight */
+.resurface-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.2px;
+  margin-bottom: 6px;
+}
+.history-item.resurfaced {
+  border-color: rgba(139, 124, 248, 0.45);
+  background: rgba(139, 124, 248, 0.07);
+  margin-bottom: 14px;
+}
+
+.history-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.55;
+  margin-bottom: 8px;
+}
+
+/* Margin note on a card ("your take"); #tags render as clickable filter chips.
+   pre-line so a resurfaced note's appended "\n(date) ..." lines actually break,
+   instead of collapsing into one run like normal HTML whitespace would. */
+.history-note {
+  font-size: 12px;
+  font-style: italic;
+  color: #a99cff;
+  line-height: 1.5;
+  margin-bottom: 8px;
+  white-space: pre-line;
+}
+.note-tag {
+  font-family: inherit;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.note-tag:hover { text-decoration: underline; }
+
+.history-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.history-source { font-size: 11px; color: var(--text-2); font-weight: 600; }
+.history-dot    { font-size: 11px; color: var(--text-3); }
+.history-dest   { font-size: 11px; color: var(--accent); font-weight: 500; }
+.history-time   { font-size: 11px; color: var(--text-3); }
 
 /* ── Empty state ── */
 .empty-state {
@@ -380,20 +618,16 @@ a { color: inherit; text-decoration: none; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 16px;
-  gap: 8px;
+  padding: 56px 20px;
+  gap: 10px;
   text-align: center;
 }
-.empty-icon { font-size: 28px; opacity: 0.25; }
-.empty-text { font-size: 13px; font-weight: 500; color: #555; }
-.empty-sub  { font-size: 11px; color: var(--text-3); }
+.empty-icon { font-size: 30px; opacity: 0.3; }
+.empty-text { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.empty-sub  { font-size: 11px; color: var(--text-3); line-height: 1.5; max-width: 220px; }
 
 /* ── Notion section divider ── */
-.section-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 0 -16px;
-}
+.section-divider { height: 1px; background: var(--border); margin: 0 -20px; }
 
 /* ── Gate screen (first-run / signed-out state) ── */
 .gate-screen {
@@ -402,35 +636,258 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: center;
   min-height: 480px;
-  padding: 48px 32px;
+  padding: 48px 36px;
   gap: 16px;
   text-align: center;
 }
-
 .gate-logo {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 800;
   color: var(--text);
-  letter-spacing: -0.6px;
+  letter-spacing: -0.8px;
   margin-bottom: 4px;
 }
 .gate-logo span { color: var(--accent); }
-
 .gate-tagline {
   font-size: 14px;
   color: var(--text-2);
   line-height: 1.6;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
-
 .gate-note {
   font-size: 11px;
   color: var(--text-3);
   line-height: 1.6;
-  max-width: 220px;
+  max-width: 230px;
+}
+.gate-error { font-size: 12px; color: var(--danger); }
+
+/* ── Privacy Ledger ── */
+.privacy-back {
+  align-self: flex-start;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.privacy-back:hover { color: var(--text); }
+
+.privacy-lede {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.6;
 }
 
-.gate-error {
-  font-size: 12px;
-  color: var(--danger);
+.privacy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
+.privacy-item {
+  display: flex;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+}
+.privacy-icon {
+  flex-shrink: 0;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 1px;
+}
+.privacy-item.ok .privacy-icon { background: rgba(111, 97, 190, 0.18); color: var(--accent); }
+.privacy-item.no .privacy-icon { background: rgba(255, 107, 107, 0.14); color: var(--danger); }
+.privacy-item-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.privacy-item-body {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+
+.privacy-closing {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-2);
+  line-height: 1.6;
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+}
+
+.privacy-open-docs {
+  align-self: flex-start;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+  transition: color 0.12s;
+}
+.privacy-open-docs:hover { color: var(--accent-hover); }
+
+.privacy-trust-link {
+  align-self: flex-start;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.privacy-trust-link:hover { color: var(--accent); }
+
+/* ── Trust Card ── */
+.trust-card { align-items: flex-start; text-align: left; }
+.trust-badge {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 19px;
+}
+.trust-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.4;
+}
+.trust-body {
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.trust-open-doc {
+  align-self: stretch;
+  text-align: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s;
+}
+.trust-open-doc:hover { background: var(--accent-hover); }
+.trust-dismiss {
+  align-self: center;
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.trust-dismiss:hover { color: var(--text-2); }
+
+/* ── "Add a note" write-back — any clip with a Doc bookmark, not just Resurfaced ── */
+.doc-note-box {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--card-edge);
+}
+.doc-note-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  resize: vertical;
+  background: var(--bg);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12.5px;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color 0.12s;
+}
+.doc-note-input:focus { border-color: var(--border-active); }
+.doc-note-input::placeholder { color: var(--text-3); }
+.doc-note-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 7px;
+}
+.doc-note-status { font-size: 11px; color: var(--text-3); }
+.doc-note-save {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.doc-note-save:hover { background: var(--accent-hover); }
+
+/* ── Soft Triage — calm on purpose: dashed border, no accent color, nothing
+   here is urgent and ignoring it costs literally nothing. ── */
+.triage-card {
+  background: var(--card);
+  border: 1px dashed var(--border-active);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  margin-bottom: 14px;
+}
+.triage-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  letter-spacing: 0.2px;
+  margin-bottom: 6px;
+}
+.triage-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.triage-btn-keep,
+.triage-btn-someday {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--card-edge);
+  border-radius: 6px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.triage-btn-keep:hover { color: var(--text); border-color: var(--border-active); }
+.triage-btn-someday:hover { color: var(--accent); border-color: var(--accent); }
+.triage-skip {
+  font-family: var(--font);
+  font-size: 11.5px;
+  color: var(--text-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-left: auto;
+  transition: color 0.12s;
+}
+.triage-skip:hover { color: var(--text-2); }

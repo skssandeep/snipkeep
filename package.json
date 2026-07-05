@@ -1,11 +1,11 @@
 {
-  "name": "clipnote",
+  "name": "snipkeep",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "vite build --watch",
     "build": "vite build",
-    "zip": "cd dist && zip -r ../clipnote.zip ."
+    "zip": "cd dist && zip -r ../snipkeep.zip ."
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.16",

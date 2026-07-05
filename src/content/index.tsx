@@ -2,19 +2,25 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Toolbar } from './Toolbar'
 import { Drawer } from './Drawer'
+import { ensureFontLoaded } from '../lib/fonts'
 import type {
   Destination,
   DocDestination,
   NotionConfig,
+  LinkSpan,
   SaveNoteMessage,
   SaveNoteResponse,
+  SaveImageMessage,
+  SaveImageResponse,
+  CaptureImageMessage,
   TriggerSaveMessage,
   ToggleDrawerMessage,
+  ToolbarApi,
 } from '../types'
 
-const HOST_ID = 'clipnote-host'
-const DRAWER_HOST_ID = 'clipnote-drawer-host'
-const TOAST_ID = 'clipnote-toast'
+const HOST_ID = 'snipkeep-host'
+const DRAWER_HOST_ID = 'snipkeep-drawer-host'
+const TOAST_ID = 'snipkeep-toast'
 const DEBOUNCE_MS = 250
 const TOOLBAR_HEIGHT = 44
 const GAP = 8
@@ -23,7 +29,24 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let activeRoot: ReactDOM.Root | null = null
 let drawerRoot: ReactDOM.Root | null = null
 const drawerCloseRef: React.MutableRefObject<(() => void) | null> = { current: null }
+// Set by the mounted Toolbar so page-level key presses can drive it (Enter/←/→).
+const toolbarApiRef: React.MutableRefObject<ToolbarApi | null> = { current: null }
 let activeHost: HTMLElement | null = null
+
+// The innermost element a key event actually targets — reaches through shadow
+// roots (a plain `e.target` is retargeted to the shadow host from a document listener).
+function deepTarget(e: Event): Element | null {
+  const path = e.composedPath()
+  return (path[0] as Element) ?? null
+}
+
+// True when keystrokes belong to the element (typing) and must not be hijacked.
+function isEditableTarget(node: Element | null): boolean {
+  if (!node || !(node instanceof HTMLElement)) return false
+  const tag = node.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  return node.isContentEditable
+}
 
 // ── Destinations ──────────────────────────────────────────────────────────────
 
@@ -58,9 +81,10 @@ async function loadDestinations(): Promise<{ destinations: Destination[]; defaul
 function removeToolbar() {
   if (activeRoot) { activeRoot.unmount(); activeRoot = null }
   if (activeHost) { activeHost.remove(); activeHost = null }
+  toolbarApiRef.current = null
 }
 
-async function showToolbar(rect: DOMRect, text: string) {
+async function showToolbar(rect: DOMRect, text: string, links: LinkSpan[]) {
   removeToolbar()
 
   const { destinations, defaultDestId } = await loadDestinations()
@@ -96,10 +120,11 @@ async function showToolbar(rect: DOMRect, text: string) {
     <Toolbar
       destinations={destinations}
       defaultDestId={defaultDestId}
-      onSave={async (destId, destType) => {
+      apiRef={toolbarApiRef}
+      onSave={async (destId, destType, note) => {
         const msg: SaveNoteMessage = {
           type: 'SAVE_NOTE',
-          payload: { text, url: window.location.href, title: document.title, destinationId: destId, destinationType: destType },
+          payload: { text, url: window.location.href, title: document.title, destinationId: destId, destinationType: destType, note, links },
         }
         const res: SaveNoteResponse = await chrome.runtime.sendMessage(msg)
         if (!res.success) throw new Error(res.error ?? 'Save failed')
@@ -121,15 +146,15 @@ const TOAST_STYLES = `
   @keyframes cn-toast-out { from { opacity: 1; } to { opacity: 0; } }
   .toast {
     position: fixed; bottom: 24px; right: 24px;
-    background: #1a1a1a; border: 1px solid #2e2e2e; border-radius: 8px;
-    padding: 10px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 13px; font-weight: 500;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    background: #1C1A24; border: 1px solid #2A2635; border-radius: 10px;
+    padding: 11px 16px; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px; font-weight: 600; letter-spacing: -0.1px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
     animation: cn-toast-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     pointer-events: none;
   }
-  .toast.success { color: #c8f135; }
-  .toast.error   { color: #ff6b6b; }
+  .toast.success { color: #A99CFF; }
+  .toast.error   { color: #FF8A8A; }
   .toast.fade-out { animation: cn-toast-out 0.2s ease forwards; }
 `
 
@@ -168,6 +193,31 @@ function normalizeSelectionText(raw: string): string {
     .trim()
 }
 
+// Find each hyperlink inside the selection and locate its text within the already
+// normalized clip, recording {start, end, url}. Low-risk by design: it doesn't
+// rebuild the clip text, it just searches for each anchor's text inside it.
+function extractLinkSpans(range: Range, normalizedText: string): LinkSpan[] {
+  const frag = range.cloneContents()
+  const anchors = Array.from(frag.querySelectorAll('a[href]')) as HTMLAnchorElement[]
+  const spans: LinkSpan[] = []
+  let searchFrom = 0
+
+  for (const a of anchors) {
+    const url = a.href  // resolves to absolute against the page's base URI
+    if (!/^https?:\/\//i.test(url)) continue
+    const linkText = normalizeSelectionText(a.textContent ?? '')
+    if (!linkText) continue
+
+    let idx = normalizedText.indexOf(linkText, searchFrom)
+    if (idx === -1) idx = normalizedText.indexOf(linkText)  // fall back to a fresh scan
+    if (idx === -1) continue
+
+    spans.push({ start: idx, end: idx + linkText.length, url })
+    searchFrom = idx + linkText.length
+  }
+  return spans
+}
+
 function onMouseUp(e: MouseEvent) {
   // Ignore clicks that originated inside the toolbar — prevents the dropdown
   // from being wiped when the user clicks the ▾ chevron or a dropdown item.
@@ -180,10 +230,11 @@ function onMouseUp(e: MouseEvent) {
     const text = normalizeSelectionText(selection?.toString() ?? '')
     if (!text || !selection || selection.rangeCount === 0) return
 
-    const rect = selection.getRangeAt(0).getBoundingClientRect()
+    const range = selection.getRangeAt(0)
+    const rect = range.getBoundingClientRect()
     if (rect.width === 0 && rect.height === 0) return
 
-    await showToolbar(rect, text)
+    await showToolbar(rect, text, extractLinkSpans(range, text))
   }, DEBOUNCE_MS)
 }
 
@@ -216,6 +267,19 @@ function openDrawer() {
   drawerRoot = root
 }
 
+// ── Init guard ──────────────────────────────────────────────────────────────
+// The content script can arrive two ways: auto-injected by the manifest (pages
+// loaded after install) or injected on demand by the background (pre-existing
+// tabs). If both ever land in the same page, re-registering listeners would make
+// the drawer open-then-close. Run the setup at most once per page.
+const w = window as unknown as { __snipkeepLoaded?: boolean }
+if (!w.__snipkeepLoaded) {
+  w.__snipkeepLoaded = true
+  init()
+}
+
+function init() {
+
 // ── Message listeners ─────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((message: ToggleDrawerMessage | TriggerSaveMessage) => {
@@ -238,13 +302,17 @@ chrome.runtime.onMessage.addListener((message: TriggerSaveMessage) => {
   const text = normalizeSelectionText(selection?.toString() ?? '')
   if (!text) { showToast('No text selected', 'error'); return }
 
+  const links = selection && selection.rangeCount > 0
+    ? extractLinkSpans(selection.getRangeAt(0), text)
+    : []
+
   loadDestinations().then(({ destinations, defaultDestId }) => {
     const dest = destinations.find(d => d.id === defaultDestId) ?? destinations[0]
     if (!dest) { showToast('No destination set', 'error'); return }
 
     const msg: SaveNoteMessage = {
       type: 'SAVE_NOTE',
-      payload: { text, url: window.location.href, title: document.title, destinationId: dest.id, destinationType: dest.type },
+      payload: { text, url: window.location.href, title: document.title, destinationId: dest.id, destinationType: dest.type, links },
     }
 
     chrome.runtime.sendMessage(msg, (res: SaveNoteResponse) => {
@@ -258,5 +326,68 @@ chrome.runtime.onMessage.addListener((message: TriggerSaveMessage) => {
   })
 })
 
+// Right-click "Save image to SnipKeep" — the background routes the click here so
+// we can read the image's natural size and page title before saving.
+chrome.runtime.onMessage.addListener((message: CaptureImageMessage) => {
+  if (message.type !== 'CAPTURE_IMAGE') return
+
+  const src = message.srcUrl
+  if (/^(data|blob):/i.test(src)) {
+    showToast("Can't save this image (not a public URL)", 'error')
+    return
+  }
+
+  const img = Array.from(document.images).find(im => im.currentSrc === src || im.src === src)
+  const width = img?.naturalWidth || undefined
+  const height = img?.naturalHeight || undefined
+
+  loadDestinations().then(({ destinations, defaultDestId }) => {
+    const dest = destinations.find(d => d.id === defaultDestId) ?? destinations[0]
+    if (!dest) { showToast('No destination set', 'error'); return }
+
+    const msg: SaveImageMessage = {
+      type: 'SAVE_IMAGE',
+      payload: {
+        imageUrl: src, width, height,
+        url: window.location.href, title: document.title,
+        destinationId: dest.id, destinationType: dest.type,
+      },
+    }
+
+    chrome.runtime.sendMessage(msg, (res: SaveImageResponse) => {
+      if (res?.success) showToast(`✓ Image saved to ${dest.name}`, 'success')
+      else showToast(res?.error ?? 'Save failed', 'error')
+    })
+  })
+})
+
+// Register the bundled font once at startup so the toolbar, toast and drawer
+// all render in Plus Jakarta Sans regardless of which appears first.
+ensureFontLoaded()
+
 document.addEventListener('mouseup', onMouseUp)
 document.addEventListener('mousedown', onMouseDown)
+// Capture phase so we can act before the page's own key handlers/scrolling.
+document.addEventListener('keydown', onGlobalKeyDown, true)
+
+}
+
+// Page-level keyboard control of the floating toolbar. Only active while the
+// toolbar is showing; never touches keys typed into inputs/editors or events
+// that originate inside the toolbar (its own note field handles those).
+function onGlobalKeyDown(e: KeyboardEvent) {
+  const host = document.getElementById(HOST_ID)
+  if (!host || !toolbarApiRef.current) return
+  if (e.composedPath().includes(host)) return        // focus/typing inside the toolbar
+  if (isEditableTarget(deepTarget(e))) return         // typing in a page field
+  if (e.metaKey || e.ctrlKey || e.altKey) return
+  if (e.key === 'Enter' && e.repeat) return           // ignore key-repeat while held
+
+  if (e.key !== 'Enter' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Escape') return
+
+  const consumed = toolbarApiRef.current.handleNavKey(e.key)
+  if (consumed) {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+}

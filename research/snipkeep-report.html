@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SnipKeep — Competitive &amp; Behavioral Research Report</title>
+<style>
+  @page { size: A4; margin: 22mm 18mm 22mm 18mm; }
+
+  :root {
+    --ink: #1c1a24;
+    --ink-2: #4a4560;
+    --ink-3: #726d85;
+    --accent: #6E5DD6;
+    --accent-soft: #F1EEFC;
+    --line: #E4E0F2;
+    --paper: #ffffff;
+    --warn: #B5461F;
+    --good: #2E7D5B;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Georgia, "Charter", "Times New Roman", serif;
+    font-size: 11.3pt;
+    line-height: 1.48;
+  }
+  .sans { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+
+  /* ── Cover ───────────────────────────────────────────────── */
+  .cover {
+    height: 253mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    page-break-after: always;
+  }
+  .cover-top { padding-top: 18mm; }
+  .cover-kicker {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 2.5px;
+    font-size: 9.5pt;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 14mm;
+  }
+  .cover h1 {
+    font-size: 34pt;
+    line-height: 1.12;
+    margin: 0 0 8mm 0;
+    color: var(--ink);
+    max-width: 150mm;
+  }
+  .cover .sub {
+    font-size: 14pt;
+    color: var(--ink-2);
+    max-width: 140mm;
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .cover-meta {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 9.5pt;
+    color: var(--ink-3);
+    border-top: 1px solid var(--line);
+    padding-top: 5mm;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* ── Structure ───────────────────────────────────────────── */
+  section { page-break-before: always; }
+  section:first-of-type { page-break-before: avoid; }
+  h2 {
+    font-size: 20pt;
+    color: var(--ink);
+    margin: 0 0 2mm 0;
+    padding-bottom: 2mm;
+    border-bottom: 2.5px solid var(--accent);
+  }
+  .h2-num {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 11pt;
+    letter-spacing: 1px;
+    display: block;
+    margin-bottom: 1mm;
+  }
+  h3 {
+    font-size: 13.5pt;
+    color: var(--ink);
+    margin: 8mm 0 2mm 0;
+  }
+  h4 {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 10.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--accent);
+    margin: 5mm 0 2mm 0;
+  }
+  p { margin: 0 0 3mm 0; }
+  ul, ol { margin: 0 0 3mm 0; padding-left: 5mm; }
+  li { margin-bottom: 1mm; }
+  strong { color: var(--ink); }
+  .lede {
+    font-size: 12.5pt;
+    color: var(--ink-2);
+    line-height: 1.55;
+    margin-bottom: 4mm;
+  }
+
+  /* ── Callouts ────────────────────────────────────────────── */
+  .stat-row {
+    display: flex;
+    gap: 4mm;
+    margin: 3mm 0 4mm 0;
+    page-break-inside: avoid;
+  }
+  .stat-card {
+    flex: 1;
+    background: var(--accent-soft);
+    border-radius: 3mm;
+    padding: 3mm 3.5mm;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .stat-num {
+    font-size: 19pt;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 1.5mm;
+  }
+  .stat-label {
+    font-size: 8.6pt;
+    color: var(--ink-2);
+    line-height: 1.35;
+  }
+
+  .callout {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 2mm 2mm 0;
+    padding: 3.5mm 5mm;
+    margin: 3mm 0 4mm 0;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 10.3pt;
+    color: var(--ink-2);
+    page-break-inside: avoid;
+  }
+  .callout b { color: var(--ink); }
+
+  /* ── Tables ──────────────────────────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4mm 0 6mm 0;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 9pt;
+  }
+  th {
+    text-align: left;
+    background: var(--ink);
+    color: white;
+    padding: 2.5mm 3mm;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+  td {
+    padding: 2.5mm 3mm;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  tr { page-break-inside: avoid; }
+  tr:nth-child(even) td { background: #FAF9FD; }
+  .tag {
+    display: inline-block;
+    font-size: 7.6pt;
+    font-weight: 700;
+    padding: 0.6mm 2mm;
+    border-radius: 3mm;
+    letter-spacing: 0.3px;
+  }
+  .tag-bad   { background: #FBE7E1; color: var(--warn); }
+  .tag-good  { background: #E1F0E8; color: var(--good); }
+  .tag-mid   { background: #F1EEFC; color: var(--accent); }
+
+  /* ── Feature cards ───────────────────────────────────────── */
+  .feature {
+    border: 1px solid var(--line);
+    border-radius: 3mm;
+    padding: 5mm 6mm;
+    margin: 0 0 5mm 0;
+    page-break-inside: avoid;
+  }
+  .feature-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 2mm;
+    flex-wrap: wrap;
+    gap: 2mm;
+  }
+  .feature-num {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--accent);
+    font-weight: 800;
+    font-size: 9pt;
+    margin-right: 2mm;
+  }
+  .feature-name { font-size: 13pt; color: var(--ink); }
+  .feature-badges { display: flex; gap: 1.5mm; font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .badge {
+    font-size: 7.6pt;
+    font-weight: 700;
+    padding: 0.8mm 2.2mm;
+    border-radius: 2.5mm;
+    white-space: nowrap;
+  }
+  .badge-effort-low  { background: #E1F0E8; color: var(--good); }
+  .badge-effort-med  { background: #FCF0DC; color: #93610B; }
+  .badge-effort-high { background: #FBE7E1; color: var(--warn); }
+  .badge-backend     { background: #E7E9FB; color: #3E4AA8; }
+  .feature-oneliner { font-size: 10.6pt; color: var(--ink-2); margin-bottom: 3mm; font-style: italic; }
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3mm 6mm;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 9.3pt;
+    color: var(--ink-2);
+  }
+  .feature-grid .label { color: var(--accent); font-weight: 700; font-size: 8.2pt; text-transform: uppercase; letter-spacing: 0.4px; display: block; margin-bottom: 0.8mm; }
+
+  /* ── Priority matrix ─────────────────────────────────────── */
+  .roadmap { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .roadmap-row {
+    display: flex;
+    align-items: center;
+    gap: 3mm;
+    padding: 2.3mm 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 9.6pt;
+  }
+  .roadmap-rank {
+    width: 6mm; height: 6mm;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-weight: 800;
+    font-size: 8.5pt;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .roadmap-name { flex: 1; font-weight: 700; color: var(--ink); }
+  .roadmap-why { flex: 2; color: var(--ink-2); font-size: 8.8pt; }
+
+  /* ── Footer / sources ───────────────────────────────────── */
+  .sources { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 8.3pt; color: var(--ink-3); line-height: 1.7; }
+  .sources a { color: var(--ink-2); }
+  footer.pagefoot {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 8pt; color: var(--ink-3);
+    margin-top: 8mm; padding-top: 3mm; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════ COVER ══════════════════════════ -->
+<div class="cover">
+  <div class="cover-top">
+    <div class="cover-kicker">Competitive &amp; Behavioral Research</div>
+    <h1>Why people abandon what they save — and what SnipKeep should build instead</h1>
+    <div class="sub">A study of every major web-clipping competitor, the psychology behind why saved knowledge goes unread, and eleven unclaimed features mapped to specific behavioral mechanisms.</div>
+  </div>
+  <div class="cover-meta">
+    <span>SnipKeep — Product Research Report</span>
+    <span>July 2026</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════ 1. EXECUTIVE SUMMARY ══════════════════════════ -->
+<section>
+<span class="h2-num">01</span>
+<h2>Executive Summary</h2>
+
+<p class="lede">The read-later category lost its two largest players in eighteen months — not to a better competitor, but to their own business model. That is the central fact this report keeps returning to: <strong>the problem in this category was never "how do we capture text faster."</strong> It was always what happens to the capturing, and to the user's trust, afterward.</p>
+
+<div class="stat-row">
+  <div class="stat-card"><div class="stat-num">2.0B+</div><div class="stat-label">articles saved in Pocket, deleted permanently when Mozilla shut it down in July 2025</div></div>
+  <div class="stat-card"><div class="stat-num">67%</div><div class="stat-label">of saved articles and notes are never revisited, across PKM tools generally</div></div>
+  <div class="stat-card"><div class="stat-num">14 days</div><div class="stat-label">notice Omnivore users got before their entire archive was deleted after an acquihire</div></div>
+</div>
+
+<p>Four findings drive the rest of this report:</p>
+<ol>
+  <li><strong>Every remaining competitor stores your archive in a database they control.</strong> When the company dies, pivots, or gets acquihired, the archive dies with it. This happened twice in eighteen months, at real scale (Pocket: 20M users; Omnivore: an entire self-hosted-only afterlife). SnipKeep's architecture — writing straight into a Google Doc the user already owns — is structurally immune to this failure mode, and almost no one is saying so out loud.</li>
+  <li><strong>The category's actual enemy is a cognitive bias, not a missing feature.</strong> Psychologists call it the "collector's fallacy": your brain logs the act of saving as equivalent to learning, releasing a real dopamine response, regardless of whether you ever open the thing again. Every competitor's roadmap (faster capture, AI summaries, more integrations) makes saving even easier — which, left unchecked, can make the fallacy worse, not better.</li>
+  <li><strong>Reliability is quietly collapsing across the incumbents.</strong> Notion Web Clipper's most-recent-100-review rating is 2.73/5; Evernote Web Clipper's is 2.44/5. Silent save failures and login loops are now the most common complaint in the category — a low bar SnipKeep can clear by being boring and correct.</li>
+  <li><strong>Nobody has built the "variable reward" half of the habit loop.</strong> Using Nir Eyal's Hook Model as a diagnostic: SnipKeep already nails Trigger (fear of losing a good quote) and Action (best-in-class low-friction capture). What's missing industry-wide, including in SnipKeep today, is a reason to come back — reward and reinforced investment — without turning into a nagging app.</li>
+</ol>
+
+<div class="callout"><b>What follows:</b> a full competitor breakdown (§2), the psychological research underpinning why saved content goes unread (§3), the case for making SnipKeep's Doc-native architecture a headline feature rather than an implementation detail (§4), eleven specific features no competitor currently ships — each tied to a named psychological mechanism and a feasibility note (§5), and a prioritized build order (§6).</div>
+</section>
+
+<!-- ══════════════════════════ 2. COMPETITIVE LANDSCAPE ══════════════════════════ -->
+<section>
+<span class="h2-num">02</span>
+<h2>The Competitive Landscape</h2>
+
+<p class="lede">Ten products were reviewed in depth: two that no longer exist, five general-purpose incumbents, two niche/education players, and one behavioral-mechanic outlier that is philosophically closest to where this report recommends SnipKeep go.</p>
+
+<h3>2.1 — The graveyard: what happens when the archive isn't yours</h3>
+<p><strong>Pocket</strong> (Mozilla) shut down on July 18, 2025, displacing over 20 million registered users who had collectively saved more than 2 billion articles and videos. Users had until October 8, 2025 to export their data; export was disabled November 12; everything remaining was queued for permanent deletion. Mozilla's stated reason: people don't save-and-read the way they used to, so the standalone product no longer justified its cost.</p>
+<p><strong>Omnivore</strong> was acquihired by ElevenLabs on November 1, 2024. The acquisition was for the two co-founders, not the product — ElevenLabs wanted them building text-to-speech, not a reading app. The service shut down two weeks later, on November 15, with user data deletion beginning immediately. The entire gap between "the app works fine" and "your data no longer exists" was fourteen days.</p>
+<div class="callout">Both companies are proof of the same structural fact: <b>a proprietary-database read-later product is only as durable as its parent company's interest in keeping it.</b> Users had no recourse, no self-export runway that mattered, and — in Omnivore's case — literally two weeks' notice.</div>
+
+<h3>2.2 — The incumbents competing today</h3>
+<table>
+  <tr><th>Product</th><th>Core mechanic</th><th>What users love</th><th>What breaks trust</th></tr>
+  <tr>
+    <td><b>Readwise Reader</b></td>
+    <td>Spaced-repetition resurfacing of highlights; daily review email; deep Kindle/Notion/Obsidian sync</td>
+    <td>Genuinely makes old highlights resurface "at the right time"; best-in-class export ecosystem</td>
+    <td>$95.88/yr — expensive for casual users; "daily review habit is more appealing in theory than practice"; scanned PDFs barely supported</td>
+  </tr>
+  <tr>
+    <td><b>Raindrop.io</b></td>
+    <td>Cross-platform bookmark manager; generous free tier; new AI assistant ("Stella")</td>
+    <td>Most polished UI in the category (4.5/5); free tier covers unlimited bookmarks + highlights</td>
+    <td>Weak restore/import behavior; limited AI-tagging control; became the default post-Pocket migration target almost by elimination</td>
+  </tr>
+  <tr>
+    <td><b>Glasp</b></td>
+    <td>Web + YouTube + PDF highlighter with AI summaries and a social "who else highlighted this" layer</td>
+    <td>1M+ active users; free; social discovery of what others highlight</td>
+    <td>Login/signup hangs, YouTube player conflicts, unreliable AI summaries, daily AI-feature caps</td>
+  </tr>
+  <tr>
+    <td><b>Notion Web Clipper</b></td>
+    <td>Save any page straight into a Notion database</td>
+    <td>Native Notion integration for teams already living in Notion</td>
+    <td>2.73/5 on the last 100 Chrome reviews; silent save failures; no default-database memory; no Safari updates since 2021</td>
+  </tr>
+  <tr>
+    <td><b>Evernote Web Clipper</b></td>
+    <td>Legacy all-purpose clipper</td>
+    <td>Still the most feature-complete clipper on paper</td>
+    <td>2.44/5 on the last 100 Chrome reviews; "always offline" bugs; repeated login prompts; notes vanish on mobile sync</td>
+  </tr>
+  <tr>
+    <td><b>Weava</b></td>
+    <td>Folder-based highlighting for research teams; export to Word/Excel/CSV</td>
+    <td>Group annotation and shared folders for classes/labs</td>
+    <td>No YouTube highlighting; collaboration is all-or-nothing (dead weight for solo users)</td>
+  </tr>
+  <tr>
+    <td><b>Liner</b></td>
+    <td>AI copilot highlighter with a heavy social layer (reactions, follows, comments)</td>
+    <td>Most socially rich highlighter; video-timestamp highlights</td>
+    <td>The social layer is mandatory, not optional — a dealbreaker for users who just want a private archive</td>
+  </tr>
+  <tr>
+    <td><b>Matter</b></td>
+    <td>Reading-first read-later app; follows favorite writers; recommendation algorithm</td>
+    <td>Cleanest reading experience in the category; 37% cheaper than Readwise ($60/yr)</td>
+    <td>No spaced-repetition review layer — once read, content still isn't resurfaced later</td>
+  </tr>
+  <tr>
+    <td><b>Burn 451</b></td>
+    <td>Every saved link gets a 24-hour countdown: read it, vault it, or it burns</td>
+    <td>The only product that treats "saving without reading" as the actual bug, not a feature to optimize around</td>
+    <td>The deletion mechanic is a hard, shame-adjacent forcing function — current UX research is moving away from this kind of pressure</td>
+  </tr>
+</table>
+
+<h3>2.3 — Five patterns every competitor shares</h3>
+<ol>
+  <li><b>Reliability rot.</b> The two most-installed legacy clippers (Notion, Evernote) both show serious recent-review score collapses — silent failures and login loops, not missing features, are today's most common complaint.</li>
+  <li><b>Vendor lock-in as an unstated risk.</b> Every product above (Burn 451 included) stores your archive in its own database. Only self-hosting (Wallabag) escapes this, at the cost of real technical setup.</li>
+  <li><b>Capture ≠ comprehension, and nobody addresses it directly.</b> Every roadmap direction — faster capture, more AI summarization — optimizes the exact step research says is already too easy relative to follow-through.</li>
+  <li><b>Pricing assumes a habit most users don't have.</b> Readwise's value math requires "5+ highlights a week, revisited weekly." Most casual users clip far less often than that and churn once they notice the annual charge.</li>
+  <li><b>Social features are all-or-nothing.</b> Liner and Glasp both bolt on a full social layer (profiles, follows, reactions). Nobody offers a light, optional, anonymous social signal for users who want proof-of-value without becoming a social network.</li>
+</ol>
+</section>
+
+<!-- ══════════════════════════ 3. PSYCHOLOGY ══════════════════════════ -->
+<section>
+<span class="h2-num">03</span>
+<h2>The Psychology: Why Saved Knowledge Goes Unread</h2>
+
+<p class="lede">This is the section that should reframe the roadmap. The category's problem is not technical. It is a small set of well-documented cognitive and behavioral mechanisms, repeating across millions of users.</p>
+
+<h3>3.1 — The Collector's Fallacy</h3>
+<p>The collector's fallacy is the mistaken belief that <i>amassing</i> information is the same as <i>learning</i> it. Your brain cannot reliably tell the difference between saving something and actually using it — the small click of "save" releases a real dopamine response, logged internally as progress, as learning, as productive use of attention. The list keeps growing while the knowledge underneath it doesn't. This is precisely why <b>67% of saved articles and notes are never revisited</b> across personal-knowledge-management tools broadly.</p>
+<p>The uncomfortable implication for this whole category: <b>making capture faster and more automatic (which every roadmap does) can make the fallacy worse</b>, because it lowers the cost of the exact behavior that's already substituting for real engagement.</p>
+
+<h3>3.2 — The Intention-Action Gap</h3>
+<p>Separately, behavioral science describes the intention-action gap: the well-documented discrepancy between what people plan to do and what they actually do. Good intentions explain less than a third of actual behavior — motivation is a starting point, not close to sufficient. The COM-B model breaks the missing piece into <b>Capability</b>, <b>Opportunity</b>, and <b>Motivation</b>; saving an article satisfies the <i>intention</i> completely while requiring none of the <i>follow-through effort</i> that reading demands. It feels like finishing the task while actually just deferring it indefinitely.</p>
+
+<h3>3.3 — Two levers that already work: Zeigarnik and spaced repetition</h3>
+<p>The Zeigarnik effect is the finding that people remember <i>unfinished</i> tasks far better than completed ones — an open loop nags at memory in a way a closed one doesn't. Spaced repetition is the separate, well-replicated finding that reviewing material at deliberately increasing intervals improves long-term retention dramatically over one-shot review. Readwise Reader's entire value proposition is built on exactly these two mechanisms, and it's the single most-praised thing about it ("makes highlights resurface at the right time"). No other clipper in the category attempts this at all.</p>
+
+<h3>3.4 — The Hook Model, applied to SnipKeep today</h3>
+<p>Nir Eyal's Hook Model describes habit formation as a loop: <b>Trigger → Action → Variable Reward → Investment</b>, repeating until the trigger becomes internal (an uncomfortable feeling the user unconsciously seeks to resolve) rather than external (a notification). Mapping SnipKeep's current state onto it is clarifying:</p>
+<div class="feature-grid" style="margin-bottom: 6mm;">
+  <div><span class="label">Trigger — strong</span>The fear of losing a good quote mid-read is already a real, internal trigger for SnipKeep's target user.</div>
+  <div><span class="label">Action — strong</span>Select text, one click or Enter to save. Best-in-class low friction; the keyboard-first toolbar removes the last bit of drag.</div>
+  <div><span class="label">Variable reward — weak</span>Right now, saving produces a toast and nothing else. There is no reason to come back to the archive except to add more to it.</div>
+  <div><span class="label">Investment — present, underused</span>Margin notes, tags, and citations already exist as investment mechanisms, but nothing currently prompts or rewards using them.</div>
+</div>
+<p>This is the single clearest diagnosis in this report: <b>SnipKeep has already solved the hard half of the loop (trigger + action) and is missing the half every successful habit product depends on (reward + investment).</b> Section 5 is built to close that gap directly.</p>
+
+<h3>3.5 — FOMO, tab hoarding, and the illusion of control</h3>
+<p>Tab hoarding — keeping large numbers of tabs or saved items open indefinitely — reflects anxiety about missing potentially valuable information, closely tied to information overload and decision fatigue. Saved items create an <i>illusion of control</i> ("it's organized, so it's handled") without actually reducing the underlying anxiety, and abundance itself produces decision paralysis: too many saved items to prioritize means none get prioritized.</p>
+
+<h3>3.6 — Commitment devices, and why shame-based ones are falling out of favor</h3>
+<p>Commitment devices — pre-committing to a consequence to force follow-through — are a proven behavior-change lever (Beeminder and stickK charge real money on failure; Burn 451 deletes the link). But 2026 UX research on habit design is explicitly moving <i>away</i> from streak-pressure and shame-based mechanics, reframing commitment around energy, recovery, and low-threat behavior design — "not a flawless streak, but a system that protects capacity and keeps inviting you back." This matters directly for how SnipKeep should NOT build its own version of triage.</p>
+
+<h3>3.7 — The macro backdrop: this problem is getting worse, not better</h3>
+<div class="stat-row">
+  <div class="stat-card"><div class="stat-num">80%</div><div class="stat-label">of workers report information overload, up from 60% in 2020</div></div>
+  <div class="stat-card"><div class="stat-num">275/day</div><div class="stat-label">average interruptions for a knowledge worker — about one every two minutes</div></div>
+  <div class="stat-card"><div class="stat-num">$1T</div><div class="stat-label">estimated annual global productivity cost of information overload</div></div>
+</div>
+<p>It takes roughly 23 minutes to fully regain deep focus after an interruption, and 75% of employees say they miss critical information because of overload. This is the backdrop SnipKeep sits in: the anxiety driving over-saving isn't irrational, it's a reasonable response to a genuinely overwhelming information environment — which means the right fix is not "save less," it's "make what you already saved worth having."</p>
+
+<h3>3.8 — Trust is actively eroding across the whole extension category</h3>
+<p><b>67% of AI-powered Chrome extensions collect user data; 41% harvest personally identifiable information.</b> Clipboard-stealing malware disguised as VPN extensions has been documented polling the clipboard every 500ms and exfiltrating it. A single investigation found 287 extensions with 37.4 million combined installs actively leaking data to third parties. Users are not wrong to be wary of installing "yet another extension that touches everything I copy" — and almost no competitor addresses this fear directly.</p>
+</section>
+
+<!-- ══════════════════════════ 4. STRUCTURAL ADVANTAGE ══════════════════════════ -->
+<section>
+<span class="h2-num">04</span>
+<h2>SnipKeep's Structural Advantage — Say It Out Loud</h2>
+
+<p class="lede">SnipKeep already has the single most defensible answer to §2 and §3.8 in this entire category, and it is currently invisible to users because it's an implementation detail rather than a feature.</p>
+
+<div class="callout"><b>The claim, stated plainly:</b> SnipKeep writes every clip directly into a Google Doc the user already owns. There is no SnipKeep database. There is no SnipKeep server that ever sees clip content — the browser talks to Google's Docs API using the user's own OAuth token, full stop. If SnipKeep disappeared tomorrow, every clip, note, and citation a user ever saved would still open normally in Google Docs, exactly as it looks today.</div>
+
+<p>Compare this against §2.1: Pocket's 20 million users lost 2 billion articles with roughly ten weeks of shrinking export windows. Omnivore's users got fourteen days. Every remaining competitor in §2.2 — Readwise, Raindrop, Glasp, Notion Clipper, Evernote Clipper, Weava, Liner, Matter, even Burn 451 — stores your archive in a database <i>they</i> control. This is not a minor technical footnote; it is the exact failure mode that has already destroyed two products at massive scale in eighteen months, and it is the exact fear that §3.8's data shows users increasingly hold about extensions in general.</p>
+
+<p><b>No competitor can copy this without rearchitecting their entire product</b> — their business model depends on owning the data (for search, for AI features, for lock-in). SnipKeep's version of "lock-in" is healthier: the more someone invests in notes and tags, the more valuable <i>their own Doc</i> becomes, not SnipKeep's database. That is a genuinely rare shape for a product's incentives to take, and it deserves to be marketed as confidently as any AI feature would be.</p>
+</section>
+
+<!-- ══════════════════════════ 5. FEATURES ══════════════════════════ -->
+<section>
+<span class="h2-num">05</span>
+<h2>Eleven Features No Competitor Currently Ships</h2>
+<p class="lede">Each feature below is named, mapped to one of the mechanisms from §3, checked against the whole competitor set in §2 to confirm no one currently ships it, and tagged with effort and whether it needs backend infrastructure SnipKeep doesn't have today.</p>
+
+<div class="feature">
+  <div class="feature-head">
+    <div><span class="feature-num">01</span><span class="feature-name">The "Your Archive Outlives Us" Trust Card</span></div>
+    <div class="feature-badges"><span class="badge badge-effort-low">Low effort</span></div>
+  </div>
+  <div class="feature-oneliner">A one-time, honest onboarding moment (and a permanent settings entry) that shows the user their Doc-native architecture is real — with a button that opens their actual Google Doc right now.</div>
+  <div class="feature-grid">
+    <div><span class="label">Mechanism</span>Loss-aversion relief. Directly answers the exact fear Pocket and Omnivore's deaths created (§2.1, §4).</div>
+    <div><span class="label">Why unclaimed</span>Competitors' honest answer to "what happens if you shut down" is bad for them — they can't lead with this.</div>
+  </div>
+</div>
+
+<div class="feature">
+  <div class="feature-head">
+    <div><span class="feature-num">02</span><span class="feature-name">Privacy Ledger</span></div>
+    <div class="feature-badges"><span class="badge badge-effort-low">Low effort</span></div>
+  </div>
+  <div class="feature-oneliner">A literal, visible panel in the drawer: "What leaves your device — Google Docs API (your account): yes. SnipKeep servers: none exist."</div>
+  <div class="feature-grid">
+    <div><span class="label">Mechanism</span>Directly counters §3.8's 67%-of-extensions-harvest-data climate by converting an invisible architecture fact into provable, differentiating trust UI.</div>
+    <div><span class="label">Why unclaimed</span>Most competitors' honest privacy ledger would look bad (they do have servers, do see content); SnipKeep's would look great because it's true.</div>
+  </div>
+</div>
+
+<div class="feature">
+  <div class="feature-head">
+    <div><span class="feature-num">03</span><span class="feature-name">Link-Rot Insurance</span></div>
+    <div class="feature-badges"><span class="badge badge-effort-low">Low effort</span></div>
+  </div>
+  <div class="feature-oneliner">At save time, silently request a Wayback Machine snapshot of the page (a free public API) and store its URL alongside the live one, so "↗ Source" still works even if the original page changes or disappears years later.</div>
+  <div class="feature-grid">
+    <div><span class="label">Mechanism</span>Extends the Doc-native trust story (§4) to the one place it's currently weak: SnipKeep doesn't keep its own copy of the page, so a dead link is a dead link today.</div>
+    <div><span class="label">Why unclaimed</span>Competitors solve this by hoarding their own copy of every page — which then dies with them (§2.1). Nobody pairs "don't hoard the content" with "still guarantee the link works."</div>
+  </div>
+</div>
+
+<div class="feature">
+  <div class="feature-head">
+    <div><span class="feature-num">04</span><span class="feature-name">Gentle Reflection Nudge</span></div>
+    <div class="feature-badges"><span class="badge badge-effort-med">Medium effort</span></div>
+  </div>
+  <div class="feature-oneliner">After several note-less clips in a row from the same source, a soft, dismissable one-liner: "12 clips from this site, no notes yet — what's the throughline?" Never blocking, never repeated if dismissed.</div>
+  <div class="feature-grid">
+    <div><span class="label">Mechanism</span>Targets the Collector's Fallacy (§3.1) directly, at the exact moment it's happening — without shame, honoring §3.6's finding that punitive mechanics are losing favor.</div>
+    <div><span class="label">Why unclaimed</span>Competitors' business model rewards more saving, not more reflection; a nudge toward "stop and think" cuts against their engagement metrics.</div>
+  </div>
+</div>
+
+<div class="feature">
+  <div class="feature-head">
+    <div><span class="feature-num">05</span><span class="feature-name">Soft Triage, Not Shame Triage</span></div>
+    <div class="feature-badges"><span class="badge badge-effort-low">Low effort</span></div>
+  </div>
+  <div class="feature-oneliner">An optional "Someday" tag plus an occasional, skippable check-in — "still relevant?" — on old untouched clips. Explicitly not Burn 451's countdown-to-deletion; nothing is ever destroyed without the user choosing it.</div>
+  <div class="feature-grid">
+    <div><span class="label">Mechanism</span>Keeps Burn 451's useful insight (§2.2 — saving-without-reading is the actual bug) while rejecting the shame/deletion mechanic §3.6's research flags as outdated.</div>
+    <div><span class="label">Why unclaimed</span>The only competitor with a triage mechanic (Burn 451) built the harsh version; nobody's built the calm one yet.</div>
+  </div>
+</div>
+
+<div class="feature">
+  <div class="feature-head">
+    <div><span class="feature-num">06</span><span class="feature-name">Deadline-Aware Citations</span></div>
+    <div class="feature-badges"><span class="badge badge-effort-med">Medium effort</span></div>
+  </div>
+  <div class="feature-oneliner">A Doc destination can optionally carry a due date (e.g., a paper deadline). The drawer then surfaces: "3 days left on [Doc] — 9 clips still uncited."</div>
+  <div class="feature-grid">
+    <div><span class="label">Mechanism</span>Ties the already-shipped auto-citation feature to a real, concrete deadline instead of an abstract virtue — loss-aversion plus genuine urgency, aimed squarely at the student segment identified in the citation-pain-point research.</div>
+    <div><span class="label">Why unclaimed</span>Citation tools (Zotero, MyBib) and clipping tools are built by different companies; nobody has merged "the clip," "the citation," and "your actual deadline" into one surface.</div>
+  </div>
+</div>
+
+<div class="feature">
+  <div class="feature-head">
+    <div><span class="feature-num">07</span><span class="feature-name">Assignment / Project Mode</span></div>
+    <div class="feature-badges"><span class="badge badge-effort-med">Medium effort</span></div>
+  </div>
+  <div class="feature-oneliner">Generalizes #06: a Doc destination can be typed as a bounded "Project" (name + optional deadline), scoping citation reminders, resurfacing, and the weekly digest to just that project — and letting a project be marked <i>done</i>.</div>
+  <div class="feature-grid">
+    <div><span class="label">Mechanism</span>Every competitor's archive is an infinite, undifferentiated inbox — which §3.5 shows drives decision paralysis. A project that can be finished lets the Zeigarnik loop actually close, not just reopen indefinitely.</div>
+    <div><span class="label">Why unclaimed</span>Read-later tools model the world as "everything I might read," never as "this bounded thing I'm working on right now."</div>
+  </div>
+</div>
+
+<div class="feature">
+  <div class="feature-head">
+    <div><span class="feature-num">08</span><span class="feature-name">Living Resurface (write back into the Doc)</span></div>
+    <div class="feature-badges"><span class="badge badge-effort-med">Medium effort</span></div>
+  </div>
+  <div class="feature-oneliner">When a Resurfaced clip appears, let the user add a freshly dated margin note right at that clip's original bookmark inside the Google Doc — so the Doc becomes a dialogue with your past self, not a separate review queue.</div>
+  <div class="feature-grid">
+    <div><span class="label">Mechanism</span>Combines Zeigarnik closure with the Investment stage of the Hook Model (§3.4) — and is the natural completion of the "jump to the exact clip inside the Doc" capability already deferred in SnipKeep's own roadmap.</div>
+    <div><span class="label">Why unclaimed</span>Readwise resurfaces into its own separate review UI/email; nobody resurfaces back into the user's living document at the exact spot the thought first appeared.</div>
+  </div>
+</div>
+
+<div class="feature">
+  <div class="feature-head">
+    <div><span class="feature-num">09</span><span class="feature-name">Weekly Synthesis Digest</span></div>
+    <div class="feature-badges"><span class="badge badge-effort-med">Medium effort</span></div>
+  </div>
+  <div class="feature-oneliner">An opt-in, once-a-week in-drawer view clustering that week's clips by tag or source, ending with one open-ended prompt rather than a summary. A backend-dependent emailed version is a natural v2, not required for v1.</div>
+  <div class="feature-grid">
+    <div><span class="label">Mechanism</span>Zeigarnik (an open loop, deliberately left unresolved) plus a variable reward (you don't know what will resurface) — the missing "reward" stage from §3.4's diagnosis.</div>
+    <div><span class="label">Why unclaimed</span>Readwise's daily email is a review queue, not a synthesis; nobody clusters by topic to surface a throughline across a week's disconnected clips.</div>
+  </div>
+</div>
+
+<div class="feature">
+  <div class="feature-head">
+    <div><span class="feature-num">10</span><span class="feature-name">Topic Auto-Clustering</span></div>
+    <div class="feature-badges"><span class="badge badge-effort-high">Higher effort</span></div>
+  </div>
+  <div class="feature-oneliner">Group archive clips that share tags, domain, or keyword overlap into loose clusters in the History view. Ship the clustering with zero AI first; an optional one-line AI synthesis per cluster is a clearly separable v2.</div>
+  <div class="feature-grid">
+    <div><span class="label">Mechanism</span>A deliberate middle path between "just a pile" (today) and Obsidian/Roam's heavy bidirectional-linking graph — which is itself a well-known productivity trap (§3.1's "Second Brain Delusion").</div>
+    <div><span class="label">Why unclaimed</span>Lightweight clippers don't attempt synthesis at all; heavyweight PKM tools demand manual linking effort that recreates the collector's fallacy one level up.</div>
+  </div>
+</div>
+
+<div class="feature">
+  <div class="feature-head">
+    <div><span class="feature-num">11</span><span class="feature-name">Anonymous Aggregate Highlight Signal</span></div>
+    <div class="feature-badges"><span class="badge badge-effort-high">Higher effort</span><span class="badge badge-backend">Needs backend</span></div>
+  </div>
+  <div class="feature-oneliner">An optional, no-account, no-profile signal — "14 people also highlighted this passage" — aggregated anonymously. Explicitly not Liner or Glasp's heavy social layer (no follows, no comments, no visible identity).</div>
+  <div class="feature-grid">
+    <div><span class="label">Mechanism</span>Social proof (§3, Kindle's popular-highlights precedent) without the all-or-nothing social commitment §2.3's pattern #5 identifies as a gap.</div>
+    <div><span class="label">Why unclaimed</span>Requires real backend infrastructure and a serious privacy review given §3.8's climate — sequence this last, and only with an explicit, narrow, audited data-collection design.</div>
+  </div>
+</div>
+</section>
+
+<!-- ══════════════════════════ 6. ROADMAP ══════════════════════════ -->
+<section>
+<span class="h2-num">06</span>
+<h2>Recommended Build Order</h2>
+<p class="lede">Ordered by impact-per-effort, with the two zero-risk trust features first (they cost almost nothing and directly address the #1 latent fear from §2.1 and §3.8), then the anti-collector's-fallacy mechanics, then the deeper reward-loop features, then the one idea that needs new infrastructure last.</p>
+
+<div class="roadmap">
+  <div class="roadmap-row"><div class="roadmap-rank">1</div><div class="roadmap-name">Privacy Ledger</div><div class="roadmap-why">Almost free to build — it's describing what's already true. Highest trust-per-effort of anything in this report.</div></div>
+  <div class="roadmap-row"><div class="roadmap-rank">2</div><div class="roadmap-name">Trust Card</div><div class="roadmap-why">Same rationale; pairs naturally with #1 as one onboarding + settings moment.</div></div>
+  <div class="roadmap-row"><div class="roadmap-rank">3</div><div class="roadmap-name">Link-Rot Insurance</div><div class="roadmap-why">One free public API call at save time; closes the one real gap in the Doc-native trust story.</div></div>
+  <div class="roadmap-row"><div class="roadmap-rank">4</div><div class="roadmap-name">Soft Triage</div><div class="roadmap-why">Low build cost; gets the Burn 451 insight without its shame mechanic before anyone else does.</div></div>
+  <div class="roadmap-row"><div class="roadmap-rank">5</div><div class="roadmap-name">Gentle Reflection Nudge</div><div class="roadmap-why">Directly treats the Collector's Fallacy; needs care on tuning frequency so it never feels naggy.</div></div>
+  <div class="roadmap-row"><div class="roadmap-rank">6</div><div class="roadmap-name">Deadline-Aware Citations</div><div class="roadmap-why">Sharp, high-value niche (students); builds on the citation feature already shipped.</div></div>
+  <div class="roadmap-row"><div class="roadmap-rank">7</div><div class="roadmap-name">Assignment / Project Mode</div><div class="roadmap-why">Generalizes #6; solves the "infinite inbox" decision-paralysis problem structurally.</div></div>
+  <div class="roadmap-row"><div class="roadmap-rank">8</div><div class="roadmap-name">Living Resurface</div><div class="roadmap-why">Completes the deferred "jump to exact clip in the Doc" work; closes the Hook Model's reward gap.</div></div>
+  <div class="roadmap-row"><div class="roadmap-rank">9</div><div class="roadmap-name">Weekly Synthesis Digest</div><div class="roadmap-why">The clearest new habit loop; ship the in-drawer version before any backend-dependent email version.</div></div>
+  <div class="roadmap-row"><div class="roadmap-rank">10</div><div class="roadmap-name">Topic Auto-Clustering</div><div class="roadmap-why">Ship the zero-AI tag/domain clustering first; treat AI synthesis lines as a distinct, optional v2.</div></div>
+  <div class="roadmap-row"><div class="roadmap-rank">11</div><div class="roadmap-name">Anonymous Highlight Signal</div><div class="roadmap-why">Needs real backend + a security/privacy review before it should ship at all. Last on purpose.</div></div>
+</div>
+</section>
+
+<!-- ══════════════════════════ 7. RISKS ══════════════════════════ -->
+<section>
+<span class="h2-num">07</span>
+<h2>Risks and Honest Caveats</h2>
+
+<h4>Feature creep is the real threat, not competition</h4>
+<p>SnipKeep's edge today is that it is fast and nearly invisible. Every idea in §5 should default to <i>off</i> or <i>zero extra clicks</i> for a user who wants none of it — the moment SnipKeep starts to feel like "another app to manage," it has recreated the exact problem this report diagnoses in the rest of the category.</p>
+
+<h4>Investment must never become lock-in</h4>
+<p>The Hook Model's "Investment" stage is usually how products increase switching cost. SnipKeep's version must stay the opposite: notes, tags, and citations should keep living inside the user's own Doc (or local device storage), never in a SnipKeep-only database the user can't take with them. This is the whole thesis of §4 — breaking it anywhere undoes the report's central argument.</p>
+
+<h4>Feature #11 carries real privacy risk</h4>
+<p>Given §3.8's documented climate — 67% of AI extensions harvesting data, real clipboard-stealing malware in the news — any aggregate social signal needs to be opt-in, genuinely anonymized, never touch clip content off-device without explicit disclosure, and go through a security review before shipping. This is the one idea in this report that should not be rushed.</p>
+
+<h4>Avoid punitive mechanics anywhere in the roadmap</h4>
+<p>§3.6 is unambiguous: streak pressure and shame-based deletion are moving out of favor in current UX research, even though they demonstrably work short-term (Burn 451, Beeminder). Every triage or nudge feature above is written to be dismissable, non-punitive, and silent if ignored — that constraint should hold for anything built later, too.</p>
+</section>
+
+<!-- ══════════════════════════ SOURCES ══════════════════════════ -->
+<section>
+<span class="h2-num">§</span>
+<h2>Sources</h2>
+<div class="sources">
+<p><b>Competitors &amp; market</b><br>
+Glasp Chrome Web Store reviews &amp; Trustpilot · Readwise Reader reviews (Little Almanack, Speed Reading Lounge, Readless) · Notion Web Clipper reviews (Chrome Web Store, Marlvel) · Evernote Web Clipper reviews (Chrome Web Store, Marlvel, Maker Deck) · Omnivore shutdown coverage (Daniel Prindii, Molodtsov.me, Gleamr) · Raindrop.io reviews (Dockshare, G2, TechHarry) · Weava vs. Liner comparison (Glasp blog, SaaSHub) · Matter app coverage (MacStories, Readless) · Burn 451 (burn451.cloud) · Pocket shutdown coverage (TechCrunch, Arivu, Medium/Marius Bongarts)</p>
+<p><b>Psychology &amp; behavioral research</b><br>
+The Collector's Fallacy (goodluckman.substack.com) · The Second Brain Delusion (turbulencegains.com) · Intention-Action Gap (The Decision Lab, Behavioral Scientist) · Hook Model (Nir Eyal, via Amplitude, Mindtools, UXPin) · Zeigarnik Effect (Learning Loop, StudyFetch) · Spaced repetition research (NCBI/PMC, Lecture Scribe) · Tab hoarding &amp; digital hoarding psychology · Commitment devices (HabitForge, Learning Loop, Tability) · Information overload statistics (SpeakWise, WorldMetrics, ZipDo) · Social annotation research (Frontiers in Education, ScienceDirect) · Browser extension privacy research (CyberInsider, Incogni, The Hacker News, Panda Security)</p>
+</div>
+<footer class="pagefoot"><span>SnipKeep — Competitive &amp; Behavioral Research Report</span><span>July 2026</span></footer>
+</section>
+
+</body>
+</html>

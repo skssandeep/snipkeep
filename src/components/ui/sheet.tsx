@@ -15,8 +15,7 @@ export const SHEET_CSS = `
     position: fixed;
     inset: 0;
     z-index: 2147483646;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.25);
   }
   .cn-sheet-overlay[data-state="open"]   { animation: cn-sheet-overlay-in  0.2s ease forwards; }
   .cn-sheet-overlay[data-state="closed"] { animation: cn-sheet-overlay-out 0.2s ease forwards; }
@@ -31,29 +30,31 @@ export const SHEET_CSS = `
     font-family: var(--font);
     font-size: 13px;
     line-height: 1.5;
-    box-shadow: -8px 0 32px rgba(0,0,0,0.45), -1px 0 0 rgba(255,255,255,0.05);
+    box-shadow: -20px 0 60px rgba(0,0,0,0.6);
+    border-radius: 16px 0 0 16px;
+    overflow: hidden;
+    outline: none;
   }
   .cn-sheet-content[data-side="right"] {
     inset-block: 0;
     right: 0;
     height: 100dvh;
-    width: 360px;
-    border-left: 1px solid var(--border);
+    width: 380px;
   }
   .cn-sheet-content[data-side="right"][data-state="open"] {
-    animation: cn-sheet-slide-in-right 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation: cn-sheet-slide-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
   .cn-sheet-content[data-side="right"][data-state="closed"] {
-    animation: cn-sheet-slide-out-right 0.2s cubic-bezier(0.4, 0, 1, 1) forwards;
+    animation: cn-sheet-slide-out-right 0.22s cubic-bezier(0.4, 0, 1, 1) forwards;
   }
 
+  /* Header is seamless — same bg as body, no divider line */
   .cn-sheet-header {
     display: flex;
     align-items: center;
-    padding: 0 12px 0 16px;
-    height: 48px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
+    padding: 0 14px 0 20px;
+    height: 58px;
+    background: transparent;
     flex-shrink: 0;
   }
 
@@ -63,19 +64,20 @@ export const SHEET_CSS = `
     flex-direction: column;
     gap: 8px;
     padding: 16px;
-    background: var(--accent-dim);
     border-top: 1px solid var(--border);
   }
 
   .cn-sheet-title {
     flex: 1;
-    font-size: 15px;
-    font-weight: 700;
+    display: flex;
+    align-items: center;
+    font-size: 18px;
+    font-weight: 800;
     color: var(--text);
-    letter-spacing: -0.4px;
+    letter-spacing: -0.5px;
     font-family: var(--font);
   }
-  .cn-sheet-title span { color: var(--accent); }
+  .cn-sheet-title .cn-accent { color: var(--accent); }
 
   .cn-sheet-description {
     font-size: 12px;
@@ -93,7 +95,7 @@ export const SHEET_CSS = `
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--radius);
+    border-radius: 8px;
     flex-shrink: 0;
     font-family: var(--font);
     transition: background 0.12s, color 0.12s;
@@ -134,16 +136,6 @@ function SheetPortal({
   )
 }
 
-function SheetOverlay({ className, ...props }: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
-  return (
-    <SheetPrimitive.Overlay
-      data-slot="sheet-overlay"
-      className={cn('cn-sheet-overlay', className)}
-      {...props}
-    />
-  )
-}
-
 function SheetContent({
   className,
   children,
@@ -158,7 +150,6 @@ function SheetContent({
 }) {
   return (
     <SheetPortal container={container}>
-      <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
         data-side={side}

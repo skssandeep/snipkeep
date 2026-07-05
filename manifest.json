@@ -1,10 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "ClipNote",
+  "name": "SnipKeep",
   "version": "1.0.0",
   "description": "Select text on any page and save it instantly to your Google Docs notes.",
-  "permissions": ["identity", "identity.email", "storage", "activeTab"],
-  "host_permissions": ["https://docs.googleapis.com/*", "https://api.notion.com/*"],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp3iTOEuycvJTBX3VmwXVmGrF0PRKXx2thAbvjjbLBxBIjLjtWdcYkDlRURhxZRWWCoqoUaKk3OV6CIcsdDWLRPEKH1uzBHdQYNu3lDkKVNuShiXmbClrGxq3zBzuGz5Z4euI6NNUxTipnXpK6yig6yKUaCEsuYPnnOzlGUf786kYuHMAeaMkTT0yGVtJmkK7NSkuVbwMo5AxwtABY/RutdOS12nmCMPM0YJl8qHWC6YqsH2zi/S39b+sFN0hxr3ofRG2vgtChgmBXMvrqSv51BOwl4frCMCFFwmDfPiGHeEgwkiJjV+PXbIisDZNqseW/4gRKJcrNHrZKltLm42UTQIDAQAB",
+  "permissions": ["identity", "identity.email", "storage", "activeTab", "scripting", "notifications", "contextMenus", "clipboardWrite"],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "host_permissions": ["https://docs.googleapis.com/*", "https://api.notion.com/*", "https://web.archive.org/*"],
   "background": {
     "service_worker": "src/background/index.ts",
     "type": "module"
@@ -18,8 +24,19 @@
     }
   ],
   "action": {
-    "default_title": "ClipNote"
+    "default_title": "SnipKeep",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["fonts/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "commands": {
     "save-selection": {
       "suggested_key": {
