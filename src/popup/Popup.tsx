@@ -1,5 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Plus } from 'lucide-react'
+import {
+  MdAdd,
+  MdArchive,
+  MdAutoAwesome,
+  MdCheck,
+  MdCheckCircle,
+  MdClose,
+  MdContentCopy,
+  MdDescription,
+  MdEdit,
+  MdEvent,
+  MdInbox,
+  MdLightbulb,
+  MdMoreHoriz,
+  MdOpenInNew,
+  MdSchedule,
+  MdSubdirectoryArrowRight,
+  MdUndo,
+} from 'react-icons/md'
 import type {
   DocDestination,
   DocStat,
@@ -14,7 +32,7 @@ import type {
   AddDocNoteResponse,
 } from '../types'
 
-type Tab = 'docs' | 'history'
+type Tab = 'docs' | 'completed' | 'history'
 
 function timeAgo(ts: number): string {
   const s = Math.floor((Date.now() - ts) / 1000)
@@ -69,7 +87,7 @@ function GateScreen({ onSignIn }: { onSignIn: () => Promise<void> }) {
 // ── Docs Tab ──────────────────────────────────────────────────────────────────
 // The destination docs your clips save into. Auth lives in the drawer header.
 
-function DocsTab() {
+function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => void }) {
   const [docs, setDocs] = useState<DocDestination[]>([])
   const [newDocId, setNewDocId] = useState('')
   const [newDocName, setNewDocName] = useState('')
@@ -81,9 +99,23 @@ function DocsTab() {
   const [flash, setFlash] = useState('')
   const [isAdding, setIsAdding] = useState(false)
   const [docStats, setDocStats] = useState<DocStats>({})
+  // destinationId → count of clips saved to it that haven't been cited yet.
+  const [uncitedCounts, setUncitedCounts] = useState<Record<string, number>>({})
+  // Deadline-Aware Citations: which doc's calendar popup is open, if any.
+  const [editingDeadlineFor, setEditingDeadlineFor] = useState<string | null>(null)
+  // Which doc's "···" menu (Mark as done / Remove) is open, if any.
+  const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null)
 
   const nameTouchedRef = useRef(false)
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function computeUncited(clips: HistoryEntry[]): Record<string, number> {
+    const counts: Record<string, number> = {}
+    for (const c of clips) {
+      if (c.destinationId && !c.cited) counts[c.destinationId] = (counts[c.destinationId] ?? 0) + 1
+    }
+    return counts
+  }
 
   useEffect(() => {
     chrome.storage.sync.get(['docs', 'docId', 'notionConfig'], (result) => {
@@ -102,20 +134,24 @@ function DocsTab() {
       if (d.length > 0) syncDocNames(d)
     })
 
-    // Per-doc clip stats live in storage.local → durable across drawer
-    // close/reopen and browser restarts. Read on mount, then stay in sync
-    // so a clip made while the drawer is open updates the count live.
-    chrome.storage.local.get(['docStats'], (result) => {
+    // Per-doc clip stats + uncited-citation counts live in storage.local →
+    // durable across drawer close/reopen and browser restarts. Read on mount,
+    // then stay in sync so a clip (or a citation) made while the drawer is
+    // open updates the counts live.
+    chrome.storage.local.get(['docStats', 'clips', 'history'], (result) => {
       setDocStats((result.docStats as DocStats) ?? {})
+      const clips = result.clips as HistoryEntry[] | undefined
+      const list = clips && clips.length ? clips : ((result.history as HistoryEntry[]) ?? [])
+      setUncitedCounts(computeUncited(list))
     })
 
     const onStatsChange = (
       changes: Record<string, chrome.storage.StorageChange>,
       area: string
     ) => {
-      if (area === 'local' && changes.docStats) {
-        setDocStats((changes.docStats.newValue as DocStats) ?? {})
-      }
+      if (area !== 'local') return
+      if (changes.docStats) setDocStats((changes.docStats.newValue as DocStats) ?? {})
+      if (changes.clips) setUncitedCounts(computeUncited((changes.clips.newValue as HistoryEntry[]) ?? []))
     }
     chrome.storage.onChanged.addListener(onStatsChange)
     return () => chrome.storage.onChanged.removeListener(onStatsChange)
@@ -231,6 +267,37 @@ function DocsTab() {
     chrome.storage.sync.set({ docs: updated })
   }
 
+  // Assignment/Project Mode — "done" and "active" are deliberately independent:
+  // marking a project done doesn't silently flip its toolbar visibility, and
+  // reopening one doesn't silently restore it either. No hidden side effects.
+  function markDone(id: string) {
+    const updated = docs.map(d => d.id === id ? { ...d, done: true } : d)
+    setDocs(updated)
+    chrome.storage.sync.set({ docs: updated })
+    // Marking done moves it out of this tab entirely (into Completed) — a
+    // flash instead of an auto-switch, so the user isn't yanked to another
+    // tab mid-task but still gets confirmation of where it went.
+    showFlash('Marked as done — see the Completed tab.')
+  }
+
+  // Deadline-Aware Citations — a due date is purely local archive metadata on
+  // the destination, like Someday; it never touches the Doc itself. The
+  // calendar commits immediately on click, so there's no separate draft/save
+  // step — just "open the picker" and "apply what was picked."
+  function selectDeadline(id: string, date: string) {
+    const updated = docs.map(d => d.id === id ? { ...d, dueDate: date } : d)
+    setDocs(updated)
+    chrome.storage.sync.set({ docs: updated })
+    setEditingDeadlineFor(null)
+  }
+
+  function clearDeadline(id: string) {
+    const updated = docs.map(d => d.id === id ? { ...d, dueDate: undefined } : d)
+    setDocs(updated)
+    chrome.storage.sync.set({ docs: updated })
+    setEditingDeadlineFor(null)
+  }
+
   function handleSaveNotion() {
     const token = notionToken.trim()
     const pageId = notionPageId.trim()
@@ -256,26 +323,84 @@ function DocsTab() {
   void notionPageId
   void notionPageName
 
+  const activeDocs = docs.filter(d => !d.done)
+
   return (
     <div className="tab-content">
       {/* The tab label "Docs" already names this — no redundant section header */}
       <div className="section">
-        {docs.length > 0 && (
+        {activeDocs.length > 0 && (
           <div className="doc-list">
-            {docs.map(doc => (
-              <div key={doc.id} className={`doc-item${doc.active ? '' : ' inactive'}`}>
-                <div className="doc-info">
-                  <div className="doc-name">{doc.name}</div>
-                  <div className="doc-meta">{formatDocMeta(docStats[doc.id])}</div>
+            {activeDocs.map(doc => {
+              const uncited = uncitedCounts[doc.id] ?? 0
+              const isEditingDeadline = editingDeadlineFor === doc.id
+              const status = doc.dueDate && !isEditingDeadline ? deadlineStatus(doc.dueDate, uncited) : null
+              return (
+                <div key={doc.id} className={`doc-item${doc.active ? '' : ' inactive'}`}>
+                  <div className="doc-item-top">
+                    <div className="doc-info">
+                      <div className="doc-name">{doc.name}</div>
+                      <div className="doc-meta">{formatDocMeta(docStats[doc.id])}</div>
+                    </div>
+                    <button
+                      className={`btn-toggle${doc.active ? ' on' : ' off'}`}
+                      onClick={() => handleToggleDoc(doc.id)}
+                      title={doc.active ? 'Hide from toolbar' : 'Show in toolbar'}
+                    />
+                    <div className="card-menu-wrap">
+                      <button
+                        className="card-menu-btn"
+                        onClick={() => setMenuOpenFor(v => v === doc.id ? null : doc.id)}
+                        title="More"
+                      >
+                        <MdMoreHoriz size={16} />
+                      </button>
+                      {menuOpenFor === doc.id && (
+                        <DocMenu
+                          docName={doc.name}
+                          onSetDeadline={doc.dueDate ? undefined : () => { setEditingDeadlineFor(doc.id); setMenuOpenFor(null) }}
+                          onMarkDone={() => { markDone(doc.id); setMenuOpenFor(null) }}
+                          onRemove={() => { handleRemoveDoc(doc.id); setMenuOpenFor(null) }}
+                          onClose={() => setMenuOpenFor(null)}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {(isEditingDeadline || status) && (
+                    <div className="deadline-row">
+                      {isEditingDeadline ? (
+                        <DeadlineCalendar
+                          value={doc.dueDate ?? ''}
+                          onSelect={(date) => selectDeadline(doc.id, date)}
+                          onClear={() => clearDeadline(doc.id)}
+                          onClose={() => setEditingDeadlineFor(null)}
+                        />
+                      ) : (
+                        <button
+                          className={`deadline-status ${status!.tier}`}
+                          onClick={() => setEditingDeadlineFor(doc.id)}
+                          title="Click to change or remove the deadline"
+                        >
+                          <span className="deadline-status-text">
+                            <span className="severity-dot" />
+                            {status!.label}
+                          </span>
+                          {status!.tier === 'danger' && uncited > 0 && (
+                            <span
+                              className="cite-jump"
+                              onClick={(e) => { e.stopPropagation(); onJumpToHistory(doc.name) }}
+                            >
+                              Cite them →
+                            </span>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <button
-                  className={`btn-toggle${doc.active ? ' on' : ' off'}`}
-                  onClick={() => handleToggleDoc(doc.id)}
-                  title={doc.active ? 'Hide from toolbar' : 'Show in toolbar'}
-                />
-                <button className="btn-remove" onClick={() => handleRemoveDoc(doc.id)} title="Remove">✕</button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -320,7 +445,7 @@ function DocsTab() {
                       <span className="name-preview-text">
                         {isFetchingTitle ? '' : (newDocName || 'My Notes')}
                       </span>
-                      <span className="name-preview-edit" title="Edit name">✎</span>
+                      <span className="name-preview-edit" title="Edit name"><MdEdit size={12} /></span>
                     </div>
                   )}
                 </div>
@@ -340,13 +465,95 @@ function DocsTab() {
           </div>
         ) : (
           <button className="btn-add-trigger" onClick={() => setIsAdding(true)}>
-            <Plus size={16} strokeWidth={2.5} className="btn-add-icon" />
+            <MdAdd size={16} className="btn-add-icon" />
             Add document
           </button>
         )}
       </div>
 
       {/* Notion — hidden until ready */}
+    </div>
+  )
+}
+
+// ── Completed Tab ─────────────────────────────────────────────────────────────
+// A dedicated tab for finished projects (Assignment/Project Mode), separate
+// from DocsTab's active list. Loads its own copy of `docs`/`docStats` — it's
+// a sibling of DocsTab, not a child, so it can't reach into DocsTab's state.
+
+function CompletedTab() {
+  const [docs, setDocs] = useState<DocDestination[]>([])
+  const [docStats, setDocStats] = useState<DocStats>({})
+  const [flash, setFlash] = useState('')
+
+  useEffect(() => {
+    chrome.storage.sync.get(['docs'], (result) => {
+      setDocs((result.docs as DocDestination[]) ?? [])
+    })
+    chrome.storage.local.get(['docStats'], (result) => {
+      setDocStats((result.docStats as DocStats) ?? {})
+    })
+
+    const handler = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (changes.docs) setDocs((changes.docs.newValue as DocDestination[]) ?? [])
+      if (changes.docStats) setDocStats((changes.docStats.newValue as DocStats) ?? {})
+    }
+    chrome.storage.onChanged.addListener(handler)
+    return () => chrome.storage.onChanged.removeListener(handler)
+  }, [])
+
+  function showFlash(msg: string) {
+    setFlash(msg)
+    setTimeout(() => setFlash(''), 3000)
+  }
+
+  function handleReopen(id: string) {
+    const updated = docs.map(d => d.id === id ? { ...d, done: false } : d)
+    setDocs(updated)
+    chrome.storage.sync.set({ docs: updated })
+    showFlash('Reopened — see the Docs tab.')
+  }
+
+  function handleRemove(id: string) {
+    const updated = docs.filter(d => d.id !== id)
+    chrome.storage.sync.set({ docs: updated }, () => {
+      if (chrome.runtime.lastError) { showFlash(`Failed to remove: ${chrome.runtime.lastError.message}`); return }
+      setDocs(updated)
+    })
+  }
+
+  const completedDocs = docs.filter(d => d.done)
+
+  if (completedDocs.length === 0) {
+    return (
+      <div className="tab-content empty-state">
+        <div className="empty-icon"><MdCheckCircle /></div>
+        <div className="empty-text">No completed projects yet</div>
+        <div className="empty-sub">Mark a doc as done from the Docs tab once you're finished with it.</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="tab-content">
+      <div className="section">
+        <div className="doc-list">
+          {completedDocs.map(doc => (
+            <div key={doc.id} className="doc-item done">
+              <div className="doc-item-top">
+                <div className="doc-info">
+                  <div className="doc-name">{doc.name}</div>
+                  <div className="doc-meta">{formatDocMeta(docStats[doc.id])}</div>
+                </div>
+                <button className="btn-reopen" onClick={() => handleReopen(doc.id)}><MdUndo size={13} /> Reopen</button>
+                <button className="btn-remove" onClick={() => handleRemove(doc.id)} title="Remove"><MdClose size={14} /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {flash && <div className="flash">{flash}</div>}
+      </div>
     </div>
   )
 }
@@ -475,6 +682,256 @@ const CITE_STYLES: { id: CitationStyle; label: string }[] = [
 
 const DAY_MS = 86_400_000
 
+// Deadline-Aware Citations — ties the already-shipped citation feature to a
+// real, concrete deadline instead of an abstract virtue. Escalates through
+// three tiers so the same status line reads as informative early on and
+// urgent only once it's actually urgent.
+type DeadlineTier = 'calm' | 'warn' | 'danger'
+
+function deadlineStatus(dueDate: string, uncited: number): { tier: DeadlineTier; label: string } {
+  // End-of-day on the due date, so "due today" doesn't read as overdue at 9am.
+  const due = new Date(`${dueDate}T23:59:59`).getTime()
+  const daysLeft = Math.ceil((due - Date.now()) / DAY_MS)
+  const uncitedLabel = `${uncited} uncited`
+
+  if (daysLeft < 0) return { tier: 'danger', label: `Overdue by ${-daysLeft}d · ${uncitedLabel}` }
+  if (daysLeft === 0) return { tier: 'danger', label: `Due today · ${uncitedLabel}` }
+  if (daysLeft <= 2) return { tier: 'danger', label: `Due in ${daysLeft}d · ${uncitedLabel}` }
+  if (daysLeft <= 7) return { tier: 'warn', label: `Due in ${daysLeft}d · ${uncitedLabel}` }
+  return { tier: 'calm', label: `Due in ${daysLeft}d · ${uncitedLabel}` }
+}
+
+// Local-calendar-day formatting — deliberately NOT toISOString(), which reads
+// UTC and can silently shift the date by a day depending on the user's
+// timezone. dueDate is compared against local "today" everywhere else
+// (deadlineStatus above), so the picker must produce the same local day.
+function toISODate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function getMonthGrid(year: number, month: number): (Date | null)[] {
+  const firstWeekday = new Date(year, month, 1).getDay()  // 0 = Sunday
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const cells: (Date | null)[] = new Array(firstWeekday).fill(null)
+  for (let day = 1; day <= daysInMonth; day++) cells.push(new Date(year, month, day))
+  return cells
+}
+
+const WEEKDAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+
+// A small "···" menu consolidating the two less-frequent doc-card actions
+// (Mark as done, Remove) so the card's button row stays down to just the
+// toggle switch + one trigger — same dismiss-on-outside-click pattern as
+// DeadlineCalendar and the Drawer's avatar menu.
+function DocMenu({
+  docName,
+  onSetDeadline,
+  onMarkDone,
+  onRemove,
+  onClose,
+}: {
+  docName: string
+  // Undefined when a deadline already exists — editing then happens via the
+  // always-visible countdown pill, not this menu (the pill IS the point of
+  // the feature; it stays on the card, only the initial "add one" prompt
+  // moves in here).
+  onSetDeadline?: () => void
+  onMarkDone: () => void
+  onRemove: () => void
+  onClose: () => void
+}) {
+  const menuRef = useRef<HTMLDivElement>(null)
+  // Remove is the one action here that isn't trivially reversible (it drops
+  // the doc's deadline metadata, and it's easy to misread as "delete my
+  // Google Doc" — it isn't). An inline confirm swap, not a separate modal —
+  // SnipKeep's drawer is deliberately non-modal (`modal={false}`) everywhere
+  // else, so a blocking overlay here would be the one inconsistent surface.
+  const [confirming, setConfirming] = useState(false)
+
+  useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.composedPath()[0] as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [onClose])
+
+  if (confirming) {
+    return (
+      <div className="card-menu card-menu-confirm" ref={menuRef}>
+        {/* Two visual tiers, not one run-on sentence: the question (what's
+            happening) reads first and bold; the reassurance (the one thing
+            someone actually worries about) gets its own line so it can't get
+            lost mid-sentence — chunking per Miller's Law, not just wrapping. */}
+        <p className="card-menu-confirm-title">Remove <strong>{docName}</strong>?</p>
+        <p className="card-menu-confirm-text">Your Doc and its clips stay safe — this only stops saving here.</p>
+        <div className="card-menu-confirm-actions">
+          <button className="card-menu-cancel" onClick={() => setConfirming(false)}>Cancel</button>
+          <button className="card-menu-confirm-remove" onClick={onRemove}>Remove</button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card-menu" ref={menuRef}>
+      {onSetDeadline && (
+        <button className="card-menu-item" onClick={onSetDeadline}>
+          <span className="card-menu-icon"><MdEvent /></span>Set a deadline
+        </button>
+      )}
+      <button className="card-menu-item" onClick={onMarkDone}>
+        <span className="card-menu-icon"><MdCheck /></span>Mark as done
+      </button>
+      {/* A divider ahead of the one destructive item, not just another row in
+          the list — the same "give it distance" convention as macOS/VS Code
+          context menus, so a quick click right after Mark as done doesn't
+          land on Remove by muscle memory. */}
+      <div className="card-menu-divider" />
+      <button className="card-menu-item danger" onClick={() => setConfirming(true)}>
+        <span className="card-menu-icon"><MdClose /></span>Remove
+      </button>
+    </div>
+  )
+}
+
+// History card actions split the same way as the Doc card: Source/Doc/Cite
+// are frequent "do something with this content" actions and stay visible;
+// Archived/Add-a-note/Someday are occasional or fallback actions (you don't
+// triage or annotate a clip on every visit — the Reflection Nudge already
+// exists to prompt notes at the right moment, this menu doesn't need to)
+// and move behind "···", reusing the same .card-menu styling for consistency.
+function HistoryCardMenu({
+  archiveUrl,
+  onAddNote,
+  someday,
+  onToggleSomeday,
+  onClose,
+}: {
+  archiveUrl?: string
+  onAddNote?: () => void
+  someday: boolean
+  onToggleSomeday: () => void
+  onClose: () => void
+}) {
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.composedPath()[0] as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [onClose])
+
+  return (
+    <div className="card-menu" ref={menuRef}>
+      {archiveUrl && (
+        <a
+          className="card-menu-item"
+          href={archiveUrl}
+          target="_blank"
+          rel="noreferrer"
+          title="Open a permanent snapshot — works even if the live page is gone"
+        >
+          <span className="card-menu-icon"><MdArchive /></span>Archived
+        </a>
+      )}
+      {onAddNote && (
+        <button className="card-menu-item" onClick={onAddNote}>
+          <span className="card-menu-icon"><MdEdit /></span>Add a note
+        </button>
+      )}
+      <button className="card-menu-item" onClick={onToggleSomeday}>
+        <span className="card-menu-icon">{someday ? <MdCheck /> : <MdSchedule />}</span>
+        {someday ? 'Remove from Someday' : 'Mark as Someday'}
+      </button>
+    </div>
+  )
+}
+
+// A small custom calendar, styled to match SnipKeep's own dark theme — the
+// native <input type="date"> picker is OS-rendered and can't be themed at
+// all, so it would clash with everything else in the drawer. Commits
+// immediately on click (no separate "Set" step); dismisses on an outside
+// click, same pattern as the avatar and destination-menu dropdowns elsewhere.
+function DeadlineCalendar({
+  value,
+  onSelect,
+  onClear,
+  onClose,
+}: {
+  value: string
+  onSelect: (date: string) => void
+  onClear: () => void
+  onClose: () => void
+}) {
+  const initial = value ? new Date(`${value}T00:00:00`) : new Date()
+  const [viewYear, setViewYear] = useState(initial.getFullYear())
+  const [viewMonth, setViewMonth] = useState(initial.getMonth())
+  const popRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      if (popRef.current && !popRef.current.contains(e.composedPath()[0] as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [onClose])
+
+  function prevMonth() {
+    const d = new Date(viewYear, viewMonth - 1, 1)
+    setViewYear(d.getFullYear())
+    setViewMonth(d.getMonth())
+  }
+  function nextMonth() {
+    const d = new Date(viewYear, viewMonth + 1, 1)
+    setViewYear(d.getFullYear())
+    setViewMonth(d.getMonth())
+  }
+
+  const todayIso = toISODate(new Date())
+  const cells = getMonthGrid(viewYear, viewMonth)
+  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  return (
+    <div className="cal-popup" ref={popRef}>
+      <div className="cal-header">
+        <button className="cal-nav" onClick={prevMonth} title="Previous month">‹</button>
+        <span className="cal-month">{monthLabel}</span>
+        <button className="cal-nav" onClick={nextMonth} title="Next month">›</button>
+      </div>
+      <div className="cal-weekdays">
+        {WEEKDAY_LABELS.map(w => <span key={w}>{w}</span>)}
+      </div>
+      <div className="cal-grid">
+        {cells.map((d, i) => {
+          if (!d) return <span key={i} className="cal-cell empty" />
+          const iso = toISODate(d)
+          return (
+            <button
+              key={i}
+              className={`cal-cell${iso === value ? ' selected' : ''}${iso === todayIso ? ' today' : ''}`}
+              disabled={iso < todayIso}
+              onClick={() => onSelect(iso)}
+            >
+              {d.getDate()}
+            </button>
+          )
+        })}
+      </div>
+      {value && (
+        <div className="cal-footer">
+          <button className="cal-clear" onClick={onClear}>Remove deadline</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Deterministically pick one clip to "resurface" per day, preferring clips older
 // than a day so it feels like revisiting, not re-reading what you just saved.
 // Someday-tagged clips are excluded — they've already been triaged once.
@@ -508,6 +965,73 @@ function pickTriageCandidate(clips: HistoryEntry[], excludeSavedAt: number | nul
   return pool[(daySeed + 7) % pool.length]
 }
 
+// Gentle Reflection Nudge — targets the collector's fallacy (saving feels like
+// learning; it isn't) at the exact moment it's happening, without shame. Walks
+// the newest-first archive from the front, counting a streak of consecutive
+// clips from the SAME page that have no margin note — the classic "reading one
+// article, highlighting quote after quote, never once writing a reaction" case.
+const REFLECTION_NUDGE_THRESHOLD = 5
+
+function pickReflectionNudge(clips: HistoryEntry[]): { url: string; title: string; count: number } | null {
+  if (clips.length === 0) return null
+  const url = clips[0].sourceUrl
+  const title = clips[0].sourceTitle
+  let count = 0
+  for (const c of clips) {
+    if (c.sourceUrl !== url || c.note) break
+    count++
+  }
+  return count >= REFLECTION_NUDGE_THRESHOLD ? { url, title, count } : null
+}
+
+// Topic Auto-Clustering — a middle path between "just a pile" and a heavy
+// manual-linking PKM graph. Zero AI: groups by two signals already present in
+// the data, both surfaced as one clickable chip that drops straight into the
+// existing search box (no new filter plumbing).
+interface TopicCluster {
+  label: string  // "#idea" or "nytimes.com" — shown as-is
+  query: string  // what gets typed into search on click
+  count: number
+}
+
+function extractTags(note: string | undefined): string[] {
+  if (!note) return []
+  return Array.from(new Set(note.match(/#[\w-]+/g) ?? []))
+}
+
+function pickTopicClusters(clips: HistoryEntry[]): TopicCluster[] {
+  const tagCounts = new Map<string, number>()
+  const domainUrls = new Map<string, Set<string>>()
+  const domainCounts = new Map<string, number>()
+
+  for (const c of clips) {
+    for (const tag of extractTags(c.note)) {
+      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1)
+    }
+    try {
+      const domain = new URL(c.sourceUrl).hostname.replace(/^www\./, '')
+      if (!domainUrls.has(domain)) domainUrls.set(domain, new Set())
+      domainUrls.get(domain)!.add(c.sourceUrl)
+      domainCounts.set(domain, (domainCounts.get(domain) ?? 0) + 1)
+    } catch {
+      // malformed/legacy sourceUrl — skip domain grouping for this one clip
+    }
+  }
+
+  const clusters: TopicCluster[] = []
+  for (const [tag, count] of tagCounts) {
+    if (count >= 2) clusters.push({ label: tag, query: tag, count })
+  }
+  for (const [domain, urls] of domainUrls) {
+    // Only a "topic" if you've returned to this site across multiple distinct
+    // articles — one article read once is already visible as a single group
+    // in the flat list below, clustering it again would be noise.
+    if (urls.size >= 2) clusters.push({ label: domain, query: domain, count: domainCounts.get(domain) ?? 0 })
+  }
+
+  return clusters.sort((a, b) => b.count - a.count).slice(0, 10)
+}
+
 const MAX_VISIBLE = 50
 
 // Render a margin note, turning #tags into clickable chips that filter the archive.
@@ -519,10 +1043,10 @@ function renderNoteWithTags(note: string, onTag: (tag: string) => void): React.R
   )
 }
 
-function History() {
+function History({ initialFilter, onFilterConsumed }: { initialFilter: string | null; onFilterConsumed: () => void }) {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [citeStyle, setCiteStyle] = useState<CitationStyle>('apa')
-  const [feedback, setFeedback] = useState<{ key: string; text: string } | null>(null)
+  const [feedback, setFeedback] = useState<{ key: string; ok: boolean } | null>(null)
   const [query, setQuery] = useState('')
   // Page url → Wayback Machine snapshot url. Populated by the background's
   // link-rot insurance a few seconds after a save; listened for live so the
@@ -534,28 +1058,59 @@ function History() {
   // again until a new day rotates the pick.
   const [showSomedayOnly, setShowSomedayOnly] = useState(false)
   const [triageDismissedDay, setTriageDismissedDay] = useState<number | null>(null)
+  // Reflection Nudge: remembers the last {url, count} streak that was
+  // dismissed, so it only reappears if the SAME article's note-less streak
+  // grows further — not every time the drawer reopens unchanged.
+  const [reflectionDismissed, setReflectionDismissed] = useState<{ url: string; count: number } | null>(null)
+  // Assignment/Project Mode: destinations marked done are excluded from the
+  // proactive pickers (Resurfaced/Triage/Reflection) — a finished project
+  // shouldn't keep getting surfaced for delight or reflection. The main
+  // searchable list is untouched; you can still find and cite old work.
+  const [doneDestIds, setDoneDestIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    chrome.storage.local.get(['clips', 'history', 'archivedUrls', 'triageDismissedDay'], (result) => {
-      const clips = result.clips as HistoryEntry[] | undefined
-      // Fall back to the legacy recent-10 store until the archive is seeded.
-      setEntries(clips && clips.length ? clips : ((result.history as HistoryEntry[]) ?? []))
-      setArchivedUrls((result.archivedUrls as Record<string, string>) ?? {})
-      setTriageDismissedDay((result.triageDismissedDay as number | undefined) ?? null)
-    })
-    chrome.storage.sync.get(['citationStyle'], (result) => {
+    chrome.storage.local.get(
+      ['clips', 'history', 'archivedUrls', 'triageDismissedDay', 'reflectionNudgeDismissed'],
+      (result) => {
+        const clips = result.clips as HistoryEntry[] | undefined
+        // Fall back to the legacy recent-10 store until the archive is seeded.
+        setEntries(clips && clips.length ? clips : ((result.history as HistoryEntry[]) ?? []))
+        setArchivedUrls((result.archivedUrls as Record<string, string>) ?? {})
+        setTriageDismissedDay((result.triageDismissedDay as number | undefined) ?? null)
+        setReflectionDismissed((result.reflectionNudgeDismissed as { url: string; count: number } | undefined) ?? null)
+      }
+    )
+    chrome.storage.sync.get(['citationStyle', 'docs'], (result) => {
       const s = result.citationStyle as CitationStyle | undefined
       if (s === 'apa' || s === 'mla' || s === 'bibtex') setCiteStyle(s)
+      const docs = (result.docs as DocDestination[] | undefined) ?? []
+      setDoneDestIds(new Set(docs.filter(d => d.done).map(d => d.id)))
     })
 
     const handler = (changes: Record<string, chrome.storage.StorageChange>) => {
       if ('archivedUrls' in changes) {
         setArchivedUrls((changes.archivedUrls.newValue as Record<string, string>) ?? {})
       }
+      if ('docs' in changes) {
+        const docs = (changes.docs.newValue as DocDestination[] | undefined) ?? []
+        setDoneDestIds(new Set(docs.filter(d => d.done).map(d => d.id)))
+      }
     }
     chrome.storage.onChanged.addListener(handler)
     return () => chrome.storage.onChanged.removeListener(handler)
   }, [])
+
+  // "Cite them →" (Deadline-Aware Citations, in DocsTab) lands here by setting
+  // this from the parent — drop it into the search box, then clear it in the
+  // parent so navigating away and back doesn't reapply a stale filter.
+  useEffect(() => {
+    if (initialFilter) {
+      setQuery(initialFilter)
+      onFilterConsumed()
+    }
+    // Intentionally reacts to initialFilter only, not onFilterConsumed —
+    // this only needs to run when the incoming filter itself changes.
+  }, [initialFilter])
 
   function pickStyle(style: CitationStyle) {
     setCiteStyle(style)
@@ -564,8 +1119,22 @@ function History() {
 
   async function handleCite(entry: HistoryEntry, key: string) {
     const ok = await copyToClipboard(formatCitation(entry, citeStyle))
-    setFeedback({ key, text: ok ? 'Copied ✓' : 'Copy failed' })
+    setFeedback({ key, ok })
     setTimeout(() => setFeedback(prev => (prev?.key === key ? null : prev)), 1400)
+
+    // Marks the clip as cited so DocsTab's uncited count (Deadline-Aware
+    // Citations) drops, and the button switches to "✓ Cited" below. A one-way
+    // ratchet — re-clicking just re-copies, it doesn't "un-cite" anything.
+    if (ok && !entry.cited) {
+      setEntries(prev => prev.map(e => e.savedAt === entry.savedAt ? { ...e, cited: true } : e))
+      const result = await chrome.storage.local.get(['clips'])
+      const clips = (result.clips as HistoryEntry[]) ?? []
+      const idx = clips.findIndex(c => c.savedAt === entry.savedAt)
+      if (idx !== -1) {
+        clips[idx] = { ...clips[idx], cited: true }
+        await chrome.storage.local.set({ clips })
+      }
+    }
   }
 
   function handleClear() {
@@ -596,12 +1165,21 @@ function History() {
     chrome.storage.local.set({ triageDismissedDay: day })
   }
 
+  function dismissReflectionNudge(url: string, count: number) {
+    const dismissed = { url, count }
+    setReflectionDismissed(dismissed)
+    chrome.storage.local.set({ reflectionNudgeDismissed: dismissed })
+  }
+
   // "Add a note" works on ANY clip that has a Doc bookmark (namedRangeId) — not
   // just the Resurfaced spotlight. Keyed by savedAt (a stable clip identity, not
   // the render `key`) so opening one card's note box can't leak into another's.
   const [noteOpenFor, setNoteOpenFor] = useState<number | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
   const [noteStatus, setNoteStatus] = useState('')
+  // Which card's "···" menu (Archived / Add a note / Someday) is open, if
+  // any — same savedAt-keyed shape as noteOpenFor, for the same reason.
+  const [cardMenuOpenFor, setCardMenuOpenFor] = useState<number | null>(null)
 
   async function handleAddDocNote(entry: HistoryEntry) {
     const note = noteDraft.trim()
@@ -642,7 +1220,7 @@ function History() {
       <div key={key} className={`history-item${resurfaced ? ' resurfaced' : ''}`}>
         <div className="history-text">{entry.text.slice(0, 80)}{entry.text.length > 80 ? '…' : ''}</div>
         {entry.note && (
-          <div className="history-note">↳ {renderNoteWithTags(entry.note, setQuery)}</div>
+          <div className="history-note"><MdSubdirectoryArrowRight size={13} /> {renderNoteWithTags(entry.note, setQuery)}</div>
         )}
         <div className="history-meta">
           <span className="history-source">{entry.sourceTitle}</span>
@@ -659,47 +1237,43 @@ function History() {
             rel="noreferrer"
             title={entry.kind === 'image' ? 'Open the source page' : 'Open source and highlight this clip'}
           >
-            ↗ Source
+            <MdOpenInNew size={13} /> Source
           </a>
-          {archiveUrl && (
-            <a
-              className="hist-action"
-              href={archiveUrl}
-              target="_blank"
-              rel="noreferrer"
-              title="Open a permanent snapshot — works even if the live page is gone"
-            >
-              🏛 Archived
-            </a>
-          )}
           {doc && (
             <a className="hist-action" href={doc} target="_blank" rel="noreferrer" title="Open in Google Doc">
-              📄 Doc
+              <MdDescription size={13} /> Doc
             </a>
           )}
           <button
-            className="hist-action"
+            className={`hist-action${entry.cited ? ' active' : ''}`}
             onClick={() => handleCite(entry, key)}
             title={`Copy ${citeStyle.toUpperCase()} citation`}
           >
-            {feedback?.key === key ? feedback.text : '⧉ Cite'}
+            {feedback?.key === key
+              ? (feedback.ok ? <><MdCheck size={13} /> Copied</> : 'Copy failed')
+              : (entry.cited ? <><MdCheck size={13} /> Cited</> : <><MdContentCopy size={13} /> Cite</>)}
           </button>
-          {entry.namedRangeId && (
+          <div className="card-menu-wrap">
             <button
-              className="hist-action"
-              onClick={() => setNoteOpenFor(prev => prev === entry.savedAt ? null : entry.savedAt)}
-              title="Add a fresh note back into the Doc, right at this clip"
+              className="card-menu-btn"
+              onClick={() => setCardMenuOpenFor(prev => prev === entry.savedAt ? null : entry.savedAt)}
+              title="More"
             >
-              + Add a note
+              <MdMoreHoriz size={16} />
             </button>
-          )}
-          <button
-            className={`hist-action${entry.someday ? ' active' : ''}`}
-            onClick={() => toggleSomeday(entry)}
-            title={entry.someday ? 'Remove from Someday' : 'Mark as Someday — deprioritize without deleting anything'}
-          >
-            {entry.someday ? '✓ Someday' : '🕒 Someday'}
-          </button>
+            {cardMenuOpenFor === entry.savedAt && (
+              <HistoryCardMenu
+                archiveUrl={archiveUrl}
+                onAddNote={entry.namedRangeId ? () => {
+                  setNoteOpenFor(prev => prev === entry.savedAt ? null : entry.savedAt)
+                  setCardMenuOpenFor(null)
+                } : undefined}
+                someday={!!entry.someday}
+                onToggleSomeday={() => { toggleSomeday(entry); setCardMenuOpenFor(null) }}
+                onClose={() => setCardMenuOpenFor(null)}
+              />
+            )}
+          </div>
         </div>
 
         {noteOpenFor === entry.savedAt && entry.namedRangeId && (
@@ -728,7 +1302,7 @@ function History() {
   function triageCard(entry: HistoryEntry) {
     return (
       <div className="triage-card">
-        <div className="triage-label">🕒 Still relevant?</div>
+        <div className="triage-label"><MdSchedule size={13} /> Still relevant?</div>
         <div className="history-text">{entry.text.slice(0, 80)}{entry.text.length > 80 ? '…' : ''}</div>
         <div className="history-meta">
           <span className="history-source">{entry.sourceTitle}</span>
@@ -752,7 +1326,7 @@ function History() {
   if (entries.length === 0) {
     return (
       <div className="tab-content empty-state">
-        <div className="empty-icon">📋</div>
+        <div className="empty-icon"><MdInbox /></div>
         <div className="empty-text">No clips saved yet</div>
         <div className="empty-sub">Select text on any page and click Save to Notes</div>
       </div>
@@ -770,57 +1344,110 @@ function History() {
         e.text.toLowerCase().includes(q) ||
         e.sourceTitle.toLowerCase().includes(q) ||
         e.destinationName.toLowerCase().includes(q) ||
+        e.sourceUrl.toLowerCase().includes(q) ||
         (e.note?.toLowerCase().includes(q) ?? false))
     : base
   const visible = filtered.slice(0, MAX_VISIBLE)
-  const resurfaced = (q || showSomedayOnly) ? null : pickResurfaced(entries)
+  // Clips saved to a done project are excluded from the proactive pickers —
+  // the main list above is untouched, so old work is still findable/citable.
+  const activeEntries = entries.filter(e => !e.destinationId || !doneDestIds.has(e.destinationId))
+  // Resurfaced is paused for now (kept, not deleted — see pickResurfaced
+  // below) — hardcoding null both skips the JSX block (it's gated on
+  // `resurfaced &&`) and skips computing it at all. Re-enable by restoring
+  // `(q || showSomedayOnly) ? null : pickResurfaced(activeEntries)`.
+  const resurfaced = null as ReturnType<typeof pickResurfaced>
   const todaySeed = Math.floor(Date.now() / DAY_MS)
   const triageCandidate = (q || showSomedayOnly || triageDismissedDay === todaySeed)
     ? null
-    : pickTriageCandidate(entries, resurfaced?.savedAt ?? null)
+    : pickTriageCandidate(activeEntries, resurfaced?.savedAt ?? null)
+  const reflectionRaw = (q || showSomedayOnly) ? null : pickReflectionNudge(activeEntries)
+  // Suppressed once dismissed at this exact streak length or longer — but a
+  // streak that keeps growing after dismissal surfaces again, since the
+  // pattern it's flagging is getting more pronounced, not less.
+  const reflectionNudge = reflectionRaw && !(
+    reflectionDismissed?.url === reflectionRaw.url && reflectionDismissed.count >= reflectionRaw.count
+  ) ? reflectionRaw : null
+  // Computed over `base` — the same population the search box itself filters
+  // over (respects the Someday split) — so a chip click and typing the same
+  // thing manually land on identical results.
+  const topicClusters = (q || showSomedayOnly) ? [] : pickTopicClusters(base)
 
   return (
     <div className="tab-content">
-      <div className="history-header">
-        <span className="muted">{entries.length} clip{entries.length !== 1 ? 's' : ''}</span>
-        <div className="history-header-actions">
-          {somedayCount > 0 && (
-            <button
-              className={`someday-filter${showSomedayOnly ? ' active' : ''}`}
-              onClick={() => setShowSomedayOnly(v => !v)}
-            >
-              🕒 Someday ({somedayCount})
-            </button>
-          )}
-          <button className="btn-ghost small" onClick={handleClear}>Clear all</button>
+      {/* Top controls form one proximity group — header, cite-style, topic
+          chips, search all belong together and stay tightly spaced, with a
+          single larger gap separating the whole cluster from the clip list. */}
+      <div className="history-controls">
+        <div className="history-header">
+          <span className="muted">{entries.length} clip{entries.length !== 1 ? 's' : ''}</span>
+          <div className="history-header-actions">
+            {somedayCount > 0 && (
+              <button
+                className={`someday-filter${showSomedayOnly ? ' active' : ''}`}
+                onClick={() => setShowSomedayOnly(v => !v)}
+              >
+                <MdSchedule size={13} /> Someday ({somedayCount})
+              </button>
+            )}
+            <button className="btn-ghost small" onClick={handleClear}>Clear all</button>
+          </div>
         </div>
-      </div>
-      <div className="cite-style">
-        <span className="cite-label">Cite as</span>
-        {CITE_STYLES.map(s => (
-          <button
-            key={s.id}
-            className={`cite-opt${citeStyle === s.id ? ' active' : ''}`}
-            onClick={() => pickStyle(s.id)}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
+        <div className="cite-style">
+          <span className="cite-label">Cite as</span>
+          {CITE_STYLES.map(s => (
+            <button
+              key={s.id}
+              className={`cite-opt${citeStyle === s.id ? ' active' : ''}`}
+              onClick={() => pickStyle(s.id)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
 
-      <input
-        className="history-search"
-        type="search"
-        placeholder="Search your clips…"
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-      />
+        {topicClusters.length > 0 && (
+          <div className="topic-clusters">
+            {topicClusters.map(c => (
+              <button key={c.label} className="topic-chip" onClick={() => setQuery(c.query)}>
+                {c.label} <span className="topic-chip-count">{c.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <input
+          className="history-search"
+          type="search"
+          placeholder="Search your clips…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
+      </div>
 
       {resurfaced && (
         <>
-          <div className="resurface-label">✨ Resurfaced</div>
+          <div className="resurface-label"><MdAutoAwesome size={13} /> Resurfaced</div>
           {clipCard(resurfaced, 'resurface', true)}
         </>
+      )}
+
+      {reflectionNudge && (
+        <div className="reflection-nudge">
+          <span className="reflection-nudge-text">
+            <MdLightbulb size={13} /> {reflectionNudge.count} clips from "{reflectionNudge.title}", no notes yet — what's the throughline?
+          </span>
+          <span className="reflection-nudge-actions">
+            <button className="reflection-nudge-look" onClick={() => setQuery(reflectionNudge.title)}>
+              Look back
+            </button>
+            <button
+              className="reflection-nudge-dismiss"
+              onClick={() => dismissReflectionNudge(reflectionNudge.url, reflectionNudge.count)}
+            >
+              Dismiss
+            </button>
+          </span>
+        </div>
       )}
 
       {triageCandidate && triageCard(triageCandidate)}
@@ -885,7 +1512,7 @@ export function PrivacyLedger({ onBack, onShowTrust }: { onBack: () => void; onS
       <div className="privacy-list">
         {PRIVACY_ITEMS.map((item, i) => (
           <div key={i} className={`privacy-item ${item.ok ? 'ok' : 'no'}`}>
-            <span className="privacy-icon">{item.ok ? '✓' : '✕'}</span>
+            <span className="privacy-icon">{item.ok ? <MdCheck /> : <MdClose />}</span>
             <div>
               <div className="privacy-item-title">{item.title}</div>
               <div className="privacy-item-body">{item.body}</div>
@@ -944,6 +1571,10 @@ export function TrustCard({ firstDocId, onDismiss }: { firstDocId: string | null
 export function Popup() {
   const [tab, setTab] = useState<Tab>('docs')
   const [isSignedIn, setIsSignedIn] = useState(false)
+  // "Cite them →" (Deadline-Aware Citations) jumps tabs and drops a filter
+  // into History's search box — lifted here since DocsTab and History are
+  // siblings, neither can reach into the other directly.
+  const [historyFilter, setHistoryFilter] = useState<string | null>(null)
 
   useEffect(() => {
     chrome.storage.sync.get(['isSignedIn'], (result) => {
@@ -980,12 +1611,21 @@ export function Popup() {
         <button className={`tab ${tab === 'docs' ? 'active' : ''}`} onClick={() => setTab('docs')}>
           Docs
         </button>
+        <button className={`tab ${tab === 'completed' ? 'active' : ''}`} onClick={() => setTab('completed')}>
+          Completed
+        </button>
         <button className={`tab ${tab === 'history' ? 'active' : ''}`} onClick={() => setTab('history')}>
           History
         </button>
       </div>
 
-      {tab === 'docs' ? <DocsTab /> : <History />}
+      {tab === 'docs' ? (
+        <DocsTab onJumpToHistory={(docName) => { setHistoryFilter(docName); setTab('history') }} />
+      ) : tab === 'completed' ? (
+        <CompletedTab />
+      ) : (
+        <History initialFilter={historyFilter} onFilterConsumed={() => setHistoryFilter(null)} />
+      )}
     </div>
   )
 }

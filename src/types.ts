@@ -2,6 +2,8 @@ export interface DocDestination {
   id: string
   name: string
   active: boolean  // false = stored but hidden from toolbar
+  dueDate?: string // optional ISO date (YYYY-MM-DD) — Deadline-Aware Citations
+  done?: boolean   // Assignment/Project Mode — finished, tucked into "Completed"
 }
 
 export interface NotionConfig {
@@ -35,6 +37,7 @@ export interface HistoryEntry {
   note?: string          // optional personal annotation, if one was added
   namedRangeId?: string  // Docs NamedRange bookmark over this clip's block, for Living Resurface
   someday?: boolean      // soft triage: deprioritized without being deleted or hidden from the Doc
+  cited?: boolean        // set once "⧉ Cite" successfully copies a citation for this clip
 }
 
 // A hyperlink found inside the selected text — character range into the clip's

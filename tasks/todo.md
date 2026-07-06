@@ -405,3 +405,215 @@ gets the dated line) — traced carefully but not run against real Docs/archive.
 Known limitation: Notion destinations get neither bookmark (no NamedRange
 equivalent wired) — archive-link and Living Resurface are Google-Docs-only,
 consistent with Notion being hidden at MVP anyway.
+
+---
+
+# Gentle Reflection Nudge (research report feature #5)
+
+Targets the collector's fallacy at the exact moment it's happening: reading
+one article and highlighting quote after quote without ever writing a
+reaction. A soft, dismissable one-liner, not a popup or a scold.
+
+## Design
+- `pickReflectionNudge(clips)`: walks the newest-first archive from the front,
+  counting a streak of consecutive clips sharing the SAME `sourceUrl` with no
+  `.note` — breaks on the first clip from a different page or with a note.
+  Fires at `REFLECTION_NUDGE_THRESHOLD = 5`.
+- Purely local/client-side, like Soft Triage — no background call, no schema
+  change to HistoryEntry (reads existing `sourceUrl`/`note` fields only).
+- Dismissal (`reflectionNudgeDismissed: {url, count}` in chrome.storage.local)
+  is keyed by streak LENGTH, not just URL: dismissing a 5-clip streak
+  suppresses it, but if the SAME article's streak grows to 8, it resurfaces —
+  the pattern intensifying is worth a second nudge, an unchanged streak isn't.
+- "Look back" sets the search box to the article's title (reuses the existing
+  sourceTitle substring search — no new filter plumbing). "Dismiss" just
+  records the dismissal; ignoring it entirely does the same thing.
+- Suppressed while searching or in Someday-only view, same as Resurfaced/Triage.
+- Rendered between Resurfaced and Triage (delight → in-the-moment nudge →
+  old-stuff check-in), styled as the lightest-weight of the three: no card
+  box, no border, just an inline line — a suggestion, not a decision.
+
+## Tasks
+- [x] Popup.tsx — pickReflectionNudge, reflectionDismissed state + load,
+      dismissReflectionNudge, suppression logic (q/someday/dismissed-streak),
+      render between Resurfaced and Triage
+- [x] popup.css — .reflection-nudge* (deliberately borderless/minimal), focus rings
+- [x] tsc (no new errors) + build; verified compiled into bundle
+
+## Status: DONE. No manifest change → plain reload. Purely local storage —
+same low-risk shape as Soft Triage, no Docs API involvement.
+
+---
+
+# Deadline-Aware Citations (research report feature #6)
+
+Ties the already-shipped citation feature to a real, concrete deadline. Design
+approved via an HTML mockup (research/ — not committed, scratchpad only)
+recreating the actual Docs tab before building.
+
+## Design
+- `DocDestination.dueDate?: string` (ISO YYYY-MM-DD) — purely local metadata on
+  the destination, like Someday; never touches the Doc.
+- `HistoryEntry.cited?: boolean` — set once "⧉ Cite" successfully copies a
+  citation (in `handleCite`, gated on copy success). One-way ratchet: the
+  button becomes "✓ Cited" (active style, mirrors Someday's toggle look) but
+  re-clicking just re-copies, it doesn't un-cite.
+- `deadlineStatus(dueDate, uncited)`: daysLeft via `Math.ceil((due - now)/DAY_MS)`
+  with due-date treated as end-of-day (`T23:59:59`) so "due today" doesn't
+  read as overdue at 9am. Three tiers: calm (>7d), warn (3-7d), danger (≤2d,
+  today, or overdue) — escalates the SAME status line's color, doesn't add a
+  new element.
+- DocsTab: "+ Set a deadline" (hidden once set) → a custom calendar popup (see
+  follow-up below — replaced the native date input before shipping).
+  `.doc-item` restructured from a single flex row to column layout
+  (`.doc-item-top` holds the original row) so the deadline-row can sit below it.
+- Uncited count: DocsTab now also loads `clips`/`history` (previously only
+  `docStats`), computing `Record<destinationId, count>` via `computeUncited`,
+  kept live via the existing `storage.onChanged` listener (extended to also
+  watch `changes.clips`).
+- "Cite them →" (danger tier only, and only if uncited > 0): a nested `<span
+  onClick stopPropagation>` inside the status `<button>` — stopPropagation so
+  clicking it doesn't also trigger the outer button's "edit deadline" handler.
+  Calls `onJumpToHistory(doc.name)`, lifted through `Popup()` root (DocsTab and
+  History are siblings, neither can reach the other directly) as
+  `historyFilter` state → `History`'s `initialFilter` prop, consumed via a
+  `useEffect` that sets the search query then clears the shared state (so
+  revisiting History later doesn't reapply a stale filter).
+- New CSS token `--warn` (amber) alongside the existing `--danger` — semantic
+  escalation colors, kept separate from the violet `--accent`.
+
+## Tasks
+- [x] types.ts — DocDestination.dueDate, HistoryEntry.cited
+- [x] Popup.tsx — deadlineStatus, DocsTab: uncitedCounts/computeUncited,
+      editingDeadlineFor + selectDeadline/clearDeadline, doc-item-top
+      restructure, deadline-row render; History: handleCite marks cited +
+      button shows "✓ Cited", initialFilter/onFilterConsumed props + effect;
+      Popup root: historyFilter lift + wiring
+- [x] popup.css — --warn token, .doc-item column restructure, .deadline-row,
+      .set-deadline-link, .deadline-status(.calm/.warn/.danger),
+      .deadline-status-text, .severity-dot, .cite-jump, focus rings
+- [x] tsc (no new errors, verified with local ./node_modules/.bin/tsc after an
+      npx registry-resolution flake) + build; verified compiled into bundle
+
+## Status: DONE. No manifest change → plain reload. Not yet manually
+click-tested in the live extension (mockup was visually verified; the real
+component wiring was traced carefully but not driven in Chrome).
+
+## Follow-up: native date input → custom calendar popup (same session)
+The native `<input type="date">` was correctly flagged as wrong before this
+ever shipped: it's OS-rendered and impossible to theme, so it would have
+clashed hard with SnipKeep's dark violet UI. Replaced with a custom calendar,
+built to match the design system exactly, and visually verified against the
+real `popup.css` (not a recreation) before considering this done.
+
+- `toISODate(d)` formats using **local** year/month/day — deliberately not
+  `toISOString()`, which reads UTC and can silently shift the stored date by a
+  day depending on the user's timezone. This must agree with `deadlineStatus`,
+  which already compares against local "today."
+- `getMonthGrid(year, month)` builds the 7-wide cell array (leading `null`s for
+  the offset before day 1); `DeadlineCalendar` owns `viewYear`/`viewMonth` nav
+  state, independent of the selected value.
+- Commits **immediately on click** — no separate Set button. Picking a date
+  calls `onSelect` (→ `selectDeadline`) and the popup closes right away.
+  Dates before today are disabled (can't set the past as a new deadline).
+  "Remove deadline" only shows once a date exists.
+- Dismiss-on-outside-click via `composedPath()` + a ref, same pattern already
+  used for the Drawer's avatar dropdown and the Toolbar's destination menu.
+- `.cal-popup` is `position: absolute` anchored to `.deadline-row` (now
+  `position: relative`) — floats over the list rather than pushing cards below
+  it down, same technique as the toolbar/avatar dropdowns.
+- Visually verified: copied the REAL `popup.css` (not a recreation) into a
+  static HTML harness with the real font, screenshotted via headless Chrome —
+  confirmed grid alignment, selected/today color treatment, and the floating
+  shadow all render correctly before calling this done.
+
+---
+
+# Assignment/Project Mode (research report feature #7)
+
+Every other tool in this category models the archive as one infinite,
+undifferentiated pile. This lets a piece of it actually be finished: a Doc
+can be marked "done," moving it out of the active list without deleting it,
+and out of the proactive pickers (Resurfaced/Triage/Reflection) that would
+otherwise keep surfacing a project you've already turned in.
+
+## Design
+- `DocDestination.done?: boolean` — same shape as `active`/`dueDate`: local
+  sync metadata, never touches the Doc. **Deliberately independent of
+  `active`** — marking done doesn't silently flip toolbar visibility, and
+  reopening doesn't silently restore it. No hidden side effects either way.
+- DocsTab splits `docs` into `activeDocs`/`completedDocs`. Active docs gain a
+  third icon button (`✓` next to the existing toggle/remove) to mark done.
+  Completed docs render in a separate, **collapsed-by-default** section
+  (`showCompleted`, same UX pattern as History's Someday filter) behind a
+  "▸ Completed (N)" toggle — muted styling (opacity), simplified card (no
+  toggle switch, no deadline row — a finished project doesn't need either),
+  just name/meta + "↩ Reopen" + remove.
+- `History` now also loads `docs` (previously only DocsTab did) to build
+  `doneDestIds: Set<string>`, live via the same `storage.onChanged` handler
+  (checks `'docs' in changes` — safe without an area filter since `docs` only
+  ever lives in `sync`). Before calling `pickResurfaced`/`pickTriageCandidate`/
+  `pickReflectionNudge`, entries are filtered to `activeEntries` (excludes
+  clips whose `destinationId` is done) — **the main searchable list is
+  untouched**, so old work from a finished project is still findable/citable,
+  only the proactive "hey, look at this" prompts stop firing for it.
+
+## Tasks
+- [x] types.ts — DocDestination.done
+- [x] Popup.tsx — DocsTab: toggleDone, showCompleted, activeDocs/completedDocs
+      split, ✓ button + Completed section render; History: doneDestIds state +
+      load + live listener, activeEntries filter feeding the three pickers
+- [x] popup.css — .btn-done, .completed-section/.completed-toggle,
+      .doc-item.done, .btn-reopen, focus rings
+- [x] tsc (no new errors) + build; verified compiled into bundle; visually
+      verified against the real popup.css (doc-item-top's 3rd button doesn't
+      overflow at 340px; completed section reads clearly de-emphasized)
+
+## Status: DONE. No manifest change → plain reload. Not yet manually
+click-tested in the live extension.
+
+## Follow-up: collapsed section → dedicated "Completed" tab (same session)
+User explicitly asked to promote Completed from a collapsed section (inside
+Docs) to a third top-level tab, after hearing the critique first (Hick's Law —
+a third tab is a permanent cost for rarely-used content; breaks the pattern
+just established for History's Someday filter; risked cramping the 340px tab
+bar; "Docs" would need a less-accurate rename to something like "Active").
+User decided the dedicated tab was worth it anyway — built as instructed.
+
+- `Tab` type: `'docs' | 'completed' | 'history'`. Third `<button className="tab">`
+  added to the bar; visually verified at real 340px width with the real font —
+  fits with room to spare (`Docs` + `Completed` + `History` well under the
+  available ~304px after container padding).
+- `DocsTab` simplified back to active-only (`docs.filter(d => !d.done)`) — the
+  whole `.completed-section`/`showCompleted` collapsed-disclosure UI was
+  removed entirely (dead code once the tab exists; a doc living in two places
+  would be confusing). Its "✓" button renamed `toggleDone` → `markDone`
+  (one-directional now — DocsTab only ever marks *toward* done, since a
+  completed doc no longer appears in its own list) and now shows a flash
+  ("Marked as done — see the Completed tab.") instead of silently vanishing —
+  mitigates the "jarring, no feedback" risk flagged in the original critique
+  without forcing an auto-tab-switch (which would interrupt whatever the user
+  was mid-doing in Docs).
+- New sibling component `CompletedTab` — loads its own `docs`/`docStats`
+  (DocsTab and CompletedTab can't reach into each other's state; each tab
+  fully unmounts when you switch away, so no cross-component sync is needed
+  beyond each independently listening to `storage.onChanged`). Renders
+  "↩ Reopen" (flips `done: false`, flash: "Reopened — see the Docs tab.") and
+  "✕ Remove" per completed doc; a full empty state ("No completed projects
+  yet") when there are none, matching History's empty-state pattern.
+- CSS: removed `.completed-section`/`.completed-toggle` (dead — no more
+  in-place disclosure); kept `.doc-item.done`/`.btn-reopen` (still used, now
+  by `CompletedTab` instead of DocsTab's old inline section).
+
+## Design audit pass (colors / spacing / tab switching)
+
+Confirmed by reading the real CSS:
+- **Color drift:** `.cite-opt.active` on OLD accent `rgba(139,124,248,.12)` (#8B7CF8)
+  while every other active pill uses current `rgba(169,156,255,.12)` (#A99CFF).
+  `.history-item.resurfaced` + `.history-note` (#a99cff literal) also off-token.
+  → introduce `--accent-soft`, fix drift, tokenize. CLAUDE.md still says #8B7CF8.
+- **Spacing:** no scale; History double-spaces (tab-content gap:22 + child
+  margin-bottoms 10/10/12/14 → 32–34px real gaps). Add 4px token scale; group
+  History top controls tightly (proximity), drop additive margins.
+- **Tab switching:** instant swap, no motion → keyed entrance animation.
+Verify: tsc + build + real-CSS headless screenshots (Docs, History, switch).

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { MdCheck, MdClose, MdEdit, MdKeyboardReturn, MdMoreHoriz } from 'react-icons/md'
 import type { Destination, ToolbarApi } from '../types'
 
 const STYLES = `
@@ -100,6 +101,9 @@ const STYLES = `
 
   /* ── Feedback states ── */
   .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 13px;
     font-weight: 600;
     letter-spacing: -0.1px;
@@ -117,6 +121,8 @@ const STYLES = `
     font-size: 12px;
     line-height: 1;
     font-family: inherit;
+    display: inline-flex;
+    align-items: center;
     transition: color 0.1s;
   }
   .btn-close:hover { color: #F2F1F5; }
@@ -153,7 +159,7 @@ const STYLES = `
     transition: background 0.1s, color 0.1s;
   }
   .dropdown-item:hover { background: #2E2A3E; color: #F2F1F5; }
-  .dropdown-item .check { color: #A99CFF; width: 14px; flex-shrink: 0; font-size: 11px; }
+  .dropdown-item .check { display: inline-flex; align-items: center; justify-content: center; color: #A99CFF; width: 14px; flex-shrink: 0; font-size: 11px; }
   .dropdown-item .dest-name {
     flex: 1;
     white-space: nowrap;
@@ -223,7 +229,7 @@ const STYLES = `
     margin-top: 7px;
     padding: 0 2px;
   }
-  .note-hint { font-size: 11px; color: #6E6980; }
+  .note-hint { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: #6E6980; }
   .note-save {
     background: rgba(169,156,255,0.12);
     color: #A99CFF;
@@ -349,11 +355,11 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
         <div className="wrap">
           <div className="toolbar feedback">
             {state === 'saving' && <span className="status saving">Saving…</span>}
-            {state === 'saved'  && <span className="status saved">✓ Saved</span>}
+            {state === 'saved'  && <span className="status saved"><MdCheck size={14} /> Saved</span>}
             {state === 'error'  && (
               <>
                 <span className="status error">{errorMsg}</span>
-                <button className="btn-close" onClick={onDismiss}>✕</button>
+                <button className="btn-close" onClick={onDismiss}><MdClose size={13} /></button>
               </>
             )}
           </div>
@@ -378,7 +384,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
             onClick={() => { setShowNote(v => !v); setShowDropdown(false) }}
             title="Add your take"
           >
-            ✎
+            <MdEdit size={14} />
           </button>
           {destinations.length > 1 && (
             <button
@@ -386,7 +392,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
               onClick={() => { setShowDropdown(v => !v); setShowNote(false) }}
               title="Choose destination"
             >
-              ···
+              <MdMoreHoriz size={16} />
             </button>
           )}
         </div>
@@ -402,7 +408,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
               onKeyDown={handleNoteKey}
             />
             <div className="note-foot">
-              <span className="note-hint">↵ save · ⇧↵ newline</span>
+              <span className="note-hint"><MdKeyboardReturn size={11} /> save · ⇧<MdKeyboardReturn size={11} /> newline</span>
               <button className="note-save" onClick={() => handleSave()}>Save with note</button>
             </div>
           </div>
@@ -416,7 +422,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
                 className="dropdown-item"
                 onClick={() => handlePickDest(dest)}
               >
-                <span className="check">{dest.id === activeDestId ? '✓' : ''}</span>
+                <span className="check">{dest.id === activeDestId ? <MdCheck /> : null}</span>
                 <span className="dest-name">{dest.name}</span>
               </button>
             ))}

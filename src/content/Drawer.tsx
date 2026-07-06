@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Bookmark } from 'lucide-react'
+import { MdClose, MdKeyboardReturn, MdLock } from 'react-icons/md'
 import type { GetUserEmailMessage, GetUserEmailResponse, SignOutMessage, DocDestination } from '../types'
 import { Popup, PrivacyLedger, TrustCard } from '../popup/Popup'
 import { ensureFontLoaded } from '../lib/fonts'
@@ -11,8 +12,6 @@ import {
   SheetTitle,
   SHEET_CSS,
 } from '@/components/ui/sheet'
-
-const isMac = navigator.userAgent.includes('Mac')
 
 const POPUP_CSS = popupStyles
   .replace(/:root\s*\{/g, ':host {')
@@ -111,7 +110,9 @@ const BODY_CSS = `
   }
 
   .cn-auth-privacy {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     width: 100%;
     padding: 11px 14px;
     background: none;
@@ -351,7 +352,7 @@ export function Drawer({ container, onClose, closeRef }: Props) {
                         className="cn-auth-privacy"
                         onClick={() => { setView('privacy'); setShowAuthMenu(false) }}
                       >
-                        🔒 Privacy
+                        <MdLock size={13} /> Privacy
                       </button>
                       <button className="cn-auth-signout" onClick={handleSignOut}>
                         Sign out
@@ -361,7 +362,7 @@ export function Drawer({ container, onClose, closeRef }: Props) {
                 </button>
               )}
               <button className="cn-sheet-close-btn" onClick={close} title="Close (Esc)">
-                ✕
+                <MdClose size={15} />
               </button>
             </div>
           </SheetHeader>
@@ -379,9 +380,7 @@ export function Drawer({ container, onClose, closeRef }: Props) {
 
             {isSignedIn && view === 'main' && (
               <div className="cn-footer">
-                <span className="cn-kbd">{isMac ? '⌘' : 'Ctrl'}</span>
-                <span className="cn-kbd">⇧</span>
-                <span className="cn-kbd">S</span>
+                <span className="cn-kbd"><MdKeyboardReturn size={12} /></span>
                 <span className="cn-footer-text">to clip any selection</span>
               </div>
             )}

@@ -16,7 +16,8 @@
         contrast (7.6:1 on --surface, was 5.5:1). Hover always lightens. ── */
   --accent: #A99CFF;
   --accent-hover: #BCB2FF;
-  --accent-dim: rgba(169, 156, 255, 0.10);
+  --accent-dim: rgba(169, 156, 255, 0.10);  /* focus-ring glow / flash fill */
+  --accent-soft: rgba(169, 156, 255, 0.14); /* "active pill" fill — one source for every selected chip/toggle */
   --accent-ink: #15121C;  /* text on an accent fill — 7.9:1 */
   --toggle-on: #6F61BE;   /* muted violet — "on" without out-shouting the doc name */
 
@@ -25,9 +26,20 @@
   --text-2: #A8A4B5;      /* secondary — 6.5:1 on card */
   --text-3: #948FA1;      /* tertiary — 5.1:1 on card, 6.1:1 on bg (WCAG AA) */
   --danger: #FF6B6B;
+  --warn: #E8B34D;  /* mid-urgency amber for deadline escalation — semantic, not the accent */
 
   --radius: 10px;         /* buttons, inputs */
   --radius-sm: 7px;       /* cards, small controls */
+
+  /* ── Spacing scale: 4px base grid. Every gap/padding/margin should land on
+        one of these so vertical rhythm stays predictable instead of drifting
+        across 7/10/11/14/22 one-off values. ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
 
   --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: 'SF Mono', ui-monospace, 'Fira Mono', monospace;
@@ -69,6 +81,18 @@ a { color: inherit; text-decoration: none; }
 .triage-btn-keep:focus-visible,
 .triage-btn-someday:focus-visible,
 .triage-skip:focus-visible,
+.reflection-nudge-look:focus-visible,
+.reflection-nudge-dismiss:focus-visible,
+.deadline-status:focus-visible,
+.cal-nav:focus-visible,
+.cal-cell:focus-visible,
+.cal-clear:focus-visible,
+.card-menu-btn:focus-visible,
+.card-menu-item:focus-visible,
+.card-menu-cancel:focus-visible,
+.card-menu-confirm-remove:focus-visible,
+.btn-reopen:focus-visible,
+.topic-chip:focus-visible,
 .name-preview:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -127,15 +151,27 @@ a { color: inherit; text-decoration: none; }
 .tab.active::after { background: var(--accent); }
 
 /* ── Tab content ── */
+/* Each tab is a distinct component, so switching tabs unmounts one and mounts
+   the next — this entrance animation therefore fires exactly on switch (and
+   once, gently, when the popup first opens), making the change feel like a
+   settle rather than a hard swap. Same easing as the add-form reveal. */
+@keyframes cn-tab-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 .tab-content {
-  padding: 18px 20px 22px;
+  padding: var(--space-5) var(--space-5) var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: var(--space-5);
+  animation: cn-tab-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab-content { animation: none; }
 }
 
 /* ── Section ── */
-.section { display: flex; flex-direction: column; gap: 11px; }
+.section { display: flex; flex-direction: column; gap: var(--space-3); }
 
 .section-label {
   font-size: 11px;
@@ -152,21 +188,22 @@ a { color: inherit; text-decoration: none; }
   justify-content: space-between;
   background: var(--card);
   border-radius: var(--radius-sm);
-  padding: 11px 14px;
+  padding: var(--space-3) var(--space-4);
 }
 .account-status { font-size: 13px; color: var(--text); font-weight: 500; }
 
 /* ── Doc list — borderless cards, depth from bg lift alone ── */
-.doc-list { display: flex; flex-direction: column; gap: 7px; }
+.doc-list { display: flex; flex-direction: column; gap: var(--space-2); }
 
 .doc-item {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   background: var(--card);
   border: 1px solid var(--card-edge);
   border-radius: var(--radius-sm);
-  padding: 11px 12px 11px 14px;
-  gap: 10px;
+  /* Left padding a step wider than the rest so the inset accent bar (hover)
+     has breathing room and text never crowds it. */
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
   box-shadow: inset 0 0 0 0 var(--accent);
   transition: background 0.15s, box-shadow 0.15s;
 }
@@ -177,6 +214,7 @@ a { color: inherit; text-decoration: none; }
   box-shadow: inset 2px 0 0 0 var(--accent);
 }
 
+.doc-item-top { display: flex; align-items: center; gap: 10px; }
 .doc-info { flex: 1; min-width: 0; }
 .doc-name { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
 .doc-meta {
@@ -238,6 +276,296 @@ a { color: inherit; text-decoration: none; }
 /* Inactive doc dims — in the library but not in the toolbar */
 .doc-item.inactive { opacity: 0.5; }
 .doc-item.inactive:hover { opacity: 0.85; border-color: var(--border-active); }
+
+/* ── Doc card "···" menu — consolidates Mark as done + Remove so the card's
+   button row stays to just the toggle switch + one trigger. Same floating-
+   dropdown technique as the calendar/avatar menus (position:absolute anchored
+   to a position:relative wrapper, dismiss on outside click). ── */
+.card-menu-wrap { position: relative; }
+.card-menu-btn {
+  background: none;
+  border: 1px solid var(--card-edge);
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.card-menu-btn:hover { color: var(--text); border-color: var(--border-active); background: var(--card-2); }
+
+.card-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 168px;
+  background: var(--surface);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.card-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 9px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.card-menu-item:hover { background: var(--card-2); color: var(--text); }
+.card-menu-item.danger:hover { color: var(--danger); }
+/* Fixed-width icon column so "+"/"✓"/"✕" — three glyphs of very different
+   natural widths — don't leave each label starting at a different x
+   position; every row's text lines up on the same left edge. */
+.card-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.card-menu-divider { height: 1px; margin: 5px 4px; background: var(--card-edge); }
+
+/* Inline "are you sure" swap for Remove — same floating surface widens in
+   place, no separate modal/overlay (kept consistent with the drawer's own
+   modal={false} stance). Widened from an earlier, cramped 216px/12px pass —
+   at that size the question and reassurance ran together as one 3-line
+   paragraph; text-2/danger both independently verified at 7.5:1 / 6.6:1 on
+   --surface (comfortably past WCAG AA 4.5:1), so the fix is hierarchy and
+   room, not color. */
+.card-menu-confirm { width: 240px; padding: 16px; }
+.card-menu-confirm-title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text);
+}
+.card-menu-confirm-text {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.card-menu-confirm-title strong,
+.card-menu-confirm-text strong { color: var(--text); font-weight: 700; }
+.card-menu-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.card-menu-cancel,
+.card-menu-confirm-remove {
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 7px;
+  padding: 8px 14px;
+  min-height: 32px;  /* comfortably past WCAG 2.5.8's 24px target-size floor */
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.card-menu-cancel {
+  background: none;
+  border: 1px solid var(--card-edge);
+  color: var(--text-2);
+}
+.card-menu-cancel:hover { color: var(--text); border-color: var(--border-active); }
+.card-menu-confirm-remove {
+  background: rgba(255, 107, 107, 0.12);
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  color: var(--danger);
+}
+.card-menu-confirm-remove:hover { background: rgba(255, 107, 107, 0.2); border-color: var(--danger); }
+
+/* Completed doc cards — muted, simplified (no toggle, no deadline row: a
+   finished project doesn't need either anymore). */
+.doc-item.done { opacity: 0.55; }
+.doc-item.done:hover { opacity: 0.9; border-color: var(--border-active); }
+.btn-reopen {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  transition: color 0.12s;
+}
+.btn-reopen:hover { color: var(--accent-hover); }
+
+/* ── Deadline-Aware Citations ── */
+/* Only rendered at all once a deadline exists (or its calendar is open) — no
+   dangling empty row / awkward gap on the common case of "no deadline set". */
+.deadline-row { position: relative; margin-top: 8px; }
+
+/* Custom calendar popup — the native <input type="date"> is OS-rendered and
+   can't be themed, so it would clash with the rest of the drawer. Anchored to
+   .deadline-row (position:relative below), same floating-dropdown pattern as
+   the toolbar's destination menu and the drawer's avatar menu. */
+.cal-popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: 232px;
+  background: var(--surface);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius);
+  padding: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.cal-month { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.cal-nav {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-2);
+  font-size: 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.cal-nav:hover { background: var(--card-2); color: var(--text); }
+
+.cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 3px;
+}
+.cal-weekdays span {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-align: center;
+  padding: 2px 0;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.cal-cell {
+  font-family: inherit;
+  font-size: 11.5px;
+  color: var(--text-2);
+  background: none;
+  border: none;
+  border-radius: 5px;
+  width: 100%;
+  aspect-ratio: 1;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.cal-cell:hover:not(:disabled) { background: var(--card-2); color: var(--text); }
+.cal-cell:disabled { color: var(--text-3); opacity: 0.3; cursor: default; }
+.cal-cell.empty { visibility: hidden; cursor: default; }
+.cal-cell.today { color: var(--accent); font-weight: 700; }
+.cal-cell.selected { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cal-cell.selected:hover { background: var(--accent-hover); color: var(--accent-ink); }
+
+.cal-footer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.cal-clear {
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--danger);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.cal-clear:hover { text-decoration: underline; }
+
+.deadline-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  width: 100%;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.deadline-status-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.severity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.deadline-status.calm {
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+}
+.deadline-status.calm .severity-dot { background: var(--text-3); }
+.deadline-status.warn {
+  color: var(--warn);
+  background: rgba(232, 179, 77, 0.10);
+  border: 1px solid rgba(232, 179, 77, 0.28);
+}
+.deadline-status.warn .severity-dot { background: var(--warn); }
+.deadline-status.danger {
+  color: var(--danger);
+  background: rgba(255, 107, 107, 0.10);
+  border: 1px solid rgba(255, 107, 107, 0.30);
+  font-weight: 700;
+}
+.deadline-status.danger .severity-dot { background: var(--danger); }
+.cite-jump {
+  color: var(--accent);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.cite-jump:hover { color: var(--accent-hover); }
 
 /* ── Grouped input card — name + URL share one card with an internal divider ── */
 .input-group {
@@ -434,11 +762,19 @@ a { color: inherit; text-decoration: none; }
 .muted { color: var(--text-2); font-size: 13px; }
 
 /* ── History ── */
+/* Top-of-tab controls (count/filter, cite style, topic chips, search) grouped
+   tightly as one cluster — proximity says these belong together, and it keeps
+   them from inheriting the larger tab-content gap meant for separating the
+   cluster from the clip list below. */
+.history-controls { display: flex; flex-direction: column; gap: var(--space-3); }
 .history-header { display: flex; align-items: center; justify-content: space-between; }
-.history-header-actions { display: flex; align-items: center; gap: 8px; }
-.history-list { display: flex; flex-direction: column; gap: 7px; }
+.history-header-actions { display: flex; align-items: center; gap: var(--space-2); }
+.history-list { display: flex; flex-direction: column; gap: var(--space-2); }
 
 .someday-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-family: var(--font);
   font-size: 11px;
   font-weight: 600;
@@ -454,7 +790,7 @@ a { color: inherit; text-decoration: none; }
 .someday-filter.active {
   color: var(--accent);
   border-color: var(--accent);
-  background: rgba(169, 156, 255, 0.12);
+  background: var(--accent-soft);
 }
 
 .history-item {
@@ -462,7 +798,7 @@ a { color: inherit; text-decoration: none; }
   background: var(--card);
   border: 1px solid var(--card-edge);
   border-radius: var(--radius-sm);
-  padding: 11px 14px;
+  padding: var(--space-3) var(--space-4);
   box-shadow: inset 0 0 0 0 var(--accent);
   transition: background 0.15s, box-shadow 0.15s;
 }
@@ -475,6 +811,7 @@ a { color: inherit; text-decoration: none; }
    opacity, so cards don't jump). Source = open + highlight; Doc = open the Doc. */
 .history-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
   margin-top: 10px;
   opacity: 0;
@@ -485,6 +822,9 @@ a { color: inherit; text-decoration: none; }
   opacity: 1;
 }
 .hist-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
@@ -505,15 +845,14 @@ a { color: inherit; text-decoration: none; }
 .hist-action.active {
   color: var(--accent);
   border-color: var(--accent);
-  background: rgba(169, 156, 255, 0.12);
+  background: var(--accent-soft);
 }
 
 /* "Cite as" style selector (once per History tab, persisted) */
 .cite-style {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
+  gap: var(--space-2);
 }
 .cite-label {
   font-size: 11px;
@@ -537,7 +876,7 @@ a { color: inherit; text-decoration: none; }
 .cite-opt.active {
   color: var(--accent);
   border-color: var(--accent);
-  background: rgba(139, 124, 248, 0.12);
+  background: var(--accent-soft);
 }
 
 /* Archive search */
@@ -547,8 +886,7 @@ a { color: inherit; text-decoration: none; }
   background: var(--card);
   border: 1px solid var(--card-edge);
   border-radius: var(--radius-sm);
-  padding: 8px 11px;
-  margin-bottom: 12px;
+  padding: var(--space-2) var(--space-3);
   color: var(--text);
   font-family: inherit;
   font-size: 12px;
@@ -559,20 +897,21 @@ a { color: inherit; text-decoration: none; }
 .history-search:focus { border-color: var(--border-active); }
 
 .history-empty-search,
-.history-more { margin-top: 8px; font-size: 11px; }
+.history-more { font-size: 11px; }
 
 /* Resurfaced spotlight */
 .resurface-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   font-size: 11px;
   font-weight: 700;
   color: var(--accent);
   letter-spacing: 0.2px;
-  margin-bottom: 6px;
 }
 .history-item.resurfaced {
-  border-color: rgba(139, 124, 248, 0.45);
-  background: rgba(139, 124, 248, 0.07);
-  margin-bottom: 14px;
+  border-color: rgba(169, 156, 255, 0.45);
+  background: rgba(169, 156, 255, 0.07);
 }
 
 .history-text {
@@ -588,9 +927,9 @@ a { color: inherit; text-decoration: none; }
 .history-note {
   font-size: 12px;
   font-style: italic;
-  color: #a99cff;
+  color: var(--accent);
   line-height: 1.5;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
   white-space: pre-line;
 }
 .note-tag {
@@ -690,11 +1029,11 @@ a { color: inherit; text-decoration: none; }
 }
 .privacy-item {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
   background: var(--card);
   border: 1px solid var(--card-edge);
   border-radius: var(--radius-sm);
-  padding: 11px 13px;
+  padding: var(--space-3) var(--space-4);
 }
 .privacy-icon {
   flex-shrink: 0;
@@ -847,8 +1186,7 @@ a { color: inherit; text-decoration: none; }
   background: var(--card);
   border: 1px dashed var(--border-active);
   border-radius: var(--radius-sm);
-  padding: 11px 14px;
-  margin-bottom: 14px;
+  padding: var(--space-3) var(--space-4);
 }
 .triage-label {
   font-size: 11px;
@@ -891,3 +1229,66 @@ a { color: inherit; text-decoration: none; }
   transition: color 0.12s;
 }
 .triage-skip:hover { color: var(--text-2); }
+
+/* ── Gentle Reflection Nudge — the lightest-weight element in the tab on
+   purpose: no card box, no border, just a quiet line. A suggestion, not a
+   decision like Triage or a delight like Resurfaced. ── */
+.reflection-nudge {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.reflection-nudge-text {
+  color: var(--text-2);
+  line-height: 1.5;
+  flex: 1;
+  min-width: 0;
+}
+.reflection-nudge-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.reflection-nudge-look,
+.reflection-nudge-dismiss {
+  font-family: var(--font);
+  font-size: 11.5px;
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.12s;
+}
+.reflection-nudge-look { color: var(--accent); }
+.reflection-nudge-look:hover { color: var(--accent-hover); }
+.reflection-nudge-dismiss { color: var(--text-3); }
+.reflection-nudge-dismiss:hover { color: var(--text-2); }
+
+/* ── Topic Auto-Clustering — a browse entry point above the search box, not
+   a decision or a nudge, so it stays visually quiet: same neutral pill
+   treatment as the Someday filter, no accent color until hovered. ── */
+.topic-clusters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.topic-chip {
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--card-edge);
+  border-radius: 100px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.topic-chip:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+.topic-chip-count { color: var(--text-3); }
+.topic-chip:hover .topic-chip-count { color: var(--accent); }
