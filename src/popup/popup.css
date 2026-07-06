@@ -67,9 +67,9 @@ a { color: inherit; text-decoration: none; }
 .btn-toggle:focus-visible,
 .btn-remove:focus-visible,
 .btn-add-trigger:focus-visible,
+.filter-active-chip:focus-visible,
 .history-item:focus-visible,
 .hist-action:focus-visible,
-.cite-opt:focus-visible,
 .privacy-back:focus-visible,
 .privacy-open-docs:focus-visible,
 .privacy-trust-link:focus-visible,
@@ -766,8 +766,13 @@ a { color: inherit; text-decoration: none; }
    inheriting the larger tab-content gap meant for separating the cluster from
    the clip list below. */
 .history-controls { display: flex; flex-direction: column; gap: var(--space-3); }
-.history-header { display: flex; align-items: center; justify-content: space-between; }
-.history-header-actions { display: flex; align-items: center; gap: var(--space-2); }
+/* Wraps gracefully: the clip count stays intact on line 1; if the three
+   filter/action pills can't fit beside it (Filter + Someday + Clear all is
+   wider than 340px allows), the whole action group drops to line 2, still
+   right-aligned via margin-left:auto. No squished/broken "18 / clips". */
+.history-header { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.history-header > .muted { white-space: nowrap; }
+.history-header-actions { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .history-list { display: flex; flex-direction: column; gap: var(--space-2); }
 
 .someday-filter {
@@ -806,33 +811,84 @@ a { color: inherit; text-decoration: none; }
   box-shadow: inset 2px 0 0 0 var(--accent);
 }
 
-/* Per-clip actions, revealed on hover / keyboard focus. Collapsed to zero
-   height at rest (not just opacity:0) so every card stays compact — reserving
-   the row on all cards used to leave a dead ~34px band under the meta on each
-   one. max-height + margin animate the reveal as a gentle downward expand, so
-   there's no hard jump; the hovered card's own top never moves (it grows
-   downward), only cards below slide, and smoothly. */
-.history-actions {
+/* Per-clip actions. The wrapper is just a positioning context for the pop-open
+   menus (Cite style, "···") — those render as its direct children so they are
+   NOT inside the overflow-clipped row below and never get cut off. */
+.history-actions { position: relative; }
+
+/* Reveal-on-hover, collapsed to zero height at rest so cards stay compact
+   (reserving the row used to leave a dead ~34px band under every card's meta).
+   The smoothness comes from animating grid-template-rows 0fr → 1fr: 1fr is the
+   *exact* content height, so there is no max-height overshoot to freeze on at
+   the end of the transition (that overshoot was the "jerky" tail, worst on
+   collapse). The gap to the meta lives as padding-top on the inner, so it
+   grows as part of the same animated height rather than as a separate margin.
+   Buttons stay in the tab order while collapsed, so :focus-within reveals them. */
+.history-actions-row {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.24s cubic-bezier(0.33, 1, 0.68, 1),
+              opacity 0.18s ease;
+}
+.history-actions-inner {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 0;
-  max-height: 0;
-  opacity: 0;
+  min-height: 0;      /* required — lets the grid row actually collapse to 0 */
   overflow: hidden;
-  transition: max-height 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-              margin-top 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-              opacity 0.16s ease;
+  padding: var(--space-2) 0 2px;  /* top = gap to meta; bottom = focus-ring room */
 }
-.history-item:hover .history-actions,
-.history-item:focus-within .history-actions {
-  max-height: 40px;
-  margin-top: var(--space-2);
+.history-item:hover .history-actions-row,
+.history-item:focus-within .history-actions-row {
+  grid-template-rows: 1fr;
   opacity: 1;
 }
 @media (prefers-reduced-motion: reduce) {
-  .history-actions { transition: opacity 0.16s ease; }
+  .history-actions-row { transition: opacity 0.18s ease; }
 }
+/* Cite style menu — same floating surface as the "···" menu, just narrower for
+   its three short "Copy as …" rows. */
+.cite-menu { min-width: 150px; }
+
+/* Filter-by-document control — reuses the .someday-filter pill for the trigger
+   and the .card-menu surface for the dropdown, so it reads as the same family
+   as the other header filters rather than a new pattern. */
+.filter-wrap { position: relative; }
+.filter-menu { min-width: 184px; max-width: 240px; }
+.filter-menu-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filter-menu-count {
+  flex-shrink: 0;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+/* Active-filter status chip below the search — accent-filled to read as "on",
+   the whole chip clears the filter (the ✕ names the affordance). */
+.filter-active-chip {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 100px;
+  padding: 4px 8px 4px 10px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.filter-active-chip:hover { background: rgba(169, 156, 255, 0.22); }
+.filter-active-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .hist-action {
   display: inline-flex;
   align-items: center;
@@ -860,36 +916,6 @@ a { color: inherit; text-decoration: none; }
   background: var(--accent-soft);
 }
 
-/* "Cite as" style selector (once per History tab, persisted) */
-.cite-style {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.cite-label {
-  font-size: 11px;
-  color: var(--text-3);
-  margin-right: 2px;
-}
-.cite-opt {
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: -0.1px;
-  color: var(--text-2);
-  background: transparent;
-  border: 1px solid var(--card-edge);
-  border-radius: 6px;
-  padding: 4px 9px;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-.cite-opt:hover { color: var(--text); border-color: var(--border-active); }
-.cite-opt.active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
 
 /* Archive search */
 .history-search {

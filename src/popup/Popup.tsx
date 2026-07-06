@@ -10,6 +10,7 @@ import {
   MdDescription,
   MdEdit,
   MdEvent,
+  MdFilterList,
   MdInbox,
   MdLightbulb,
   MdMoreHoriz,
@@ -853,6 +854,91 @@ function HistoryCardMenu({
   )
 }
 
+// Citation style is picked here, at the moment of citing — not from a persistent
+// "Cite as APA/MLA/BibTeX" strip up top (removed: that strip put academic jargon
+// in prime real estate for the ~majority of users who never cite). The last
+// style picked is remembered (marked with a check), so a repeat citer's usual
+// format is the obvious one-tap choice, and non-citers never see the jargon.
+function CiteMenu({
+  current,
+  onPick,
+  onClose,
+}: {
+  current: CitationStyle
+  onPick: (style: CitationStyle) => void
+  onClose: () => void
+}) {
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.composedPath()[0] as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [onClose])
+
+  return (
+    <div className="card-menu cite-menu" ref={menuRef}>
+      {CITE_STYLES.map(s => (
+        <button key={s.id} className="card-menu-item" onClick={() => onPick(s.id)}>
+          <span className="card-menu-icon">{current === s.id ? <MdCheck /> : null}</span>
+          Copy as {s.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Filter History by which document a clip was saved to — recognition (shows the
+// list of docs) rather than recall (typing a name into search), and it matches
+// by exact destinationId, not a name substring. Only rendered when there is
+// more than one document to choose between (otherwise it can't filter anything).
+interface DocOption {
+  id: string
+  name: string
+  count: number
+}
+
+function FilterMenu({
+  options,
+  current,
+  onPick,
+  onClose,
+}: {
+  options: DocOption[]
+  current: string | null
+  onPick: (id: string | null) => void
+  onClose: () => void
+}) {
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.composedPath()[0] as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [onClose])
+
+  return (
+    <div className="card-menu filter-menu" ref={menuRef}>
+      <button className="card-menu-item" onClick={() => onPick(null)}>
+        <span className="card-menu-icon">{current === null ? <MdCheck /> : null}</span>
+        All documents
+      </button>
+      <div className="card-menu-divider" />
+      {options.map(o => (
+        <button key={o.id} className="card-menu-item" onClick={() => onPick(o.id)}>
+          <span className="card-menu-icon">{current === o.id ? <MdCheck /> : null}</span>
+          <span className="filter-menu-name">{o.name}</span>
+          <span className="filter-menu-count">{o.count}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // A small custom calendar, styled to match SnipKeep's own dark theme — the
 // native <input type="date"> picker is OS-rendered and can't be themed at
 // all, so it would clash with everything else in the drawer. Commits
@@ -1009,6 +1095,9 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   // the last time a triage check-in was answered/skipped, so it doesn't nag
   // again until a new day rotates the pick.
   const [showSomedayOnly, setShowSomedayOnly] = useState(false)
+  // Filter History to a single destination doc (by id), or null for all.
+  const [docFilter, setDocFilter] = useState<string | null>(null)
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [triageDismissedDay, setTriageDismissedDay] = useState<number | null>(null)
   // Reflection Nudge: remembers the last {url, count} streak that was
   // dismissed, so it only reappears if the SAME article's note-less streak
@@ -1064,13 +1153,14 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
     // this only needs to run when the incoming filter itself changes.
   }, [initialFilter])
 
-  function pickStyle(style: CitationStyle) {
-    setCiteStyle(style)
-    chrome.storage.sync.set({ citationStyle: style })
-  }
-
-  async function handleCite(entry: HistoryEntry, key: string) {
-    const ok = await copyToClipboard(formatCitation(entry, citeStyle))
+  async function handleCite(entry: HistoryEntry, key: string, style: CitationStyle) {
+    // The always-on "Cite as" strip is gone; the last style used IS the
+    // remembered preference now, so persist whichever one was just picked.
+    if (style !== citeStyle) {
+      setCiteStyle(style)
+      chrome.storage.sync.set({ citationStyle: style })
+    }
+    const ok = await copyToClipboard(formatCitation(entry, style))
     setFeedback({ key, ok })
     setTimeout(() => setFeedback(prev => (prev?.key === key ? null : prev)), 1400)
 
@@ -1132,6 +1222,8 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   // Which card's "···" menu (Archived / Add a note / Someday) is open, if
   // any — same savedAt-keyed shape as noteOpenFor, for the same reason.
   const [cardMenuOpenFor, setCardMenuOpenFor] = useState<number | null>(null)
+  // Which card's Cite style menu is open, if any (same keying).
+  const [citeMenuOpenFor, setCiteMenuOpenFor] = useState<number | null>(null)
 
   async function handleAddDocNote(entry: HistoryEntry) {
     const note = noteDraft.trim()
@@ -1181,51 +1273,67 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
           <span className="history-dot">·</span>
           <span className="history-time">{timeAgo(entry.savedAt)}</span>
         </div>
+        {/* Reveal-on-hover, smoothly. `.history-actions-row` is a grid whose
+            single row animates 0fr → 1fr (the real content height, no
+            max-height overshoot), and `.history-actions-inner` is the
+            overflow-clipped flex row of buttons. The pop-open menus are
+            SIBLINGS of the row (children of the position:relative wrapper),
+            not inside the clipped row, so the clip never eats them. */}
         <div className="history-actions">
-          <a
-            className="hist-action"
-            href={sourceHref(entry)}
-            target="_blank"
-            rel="noreferrer"
-            title={entry.kind === 'image' ? 'Open the source page' : 'Open source and highlight this clip'}
-          >
-            <MdOpenInNew size={13} /> Source
-          </a>
-          {doc && (
-            <a className="hist-action" href={doc} target="_blank" rel="noreferrer" title="Open in Google Doc">
-              <MdDescription size={13} /> Doc
-            </a>
-          )}
-          <button
-            className={`hist-action${entry.cited ? ' active' : ''}`}
-            onClick={() => handleCite(entry, key)}
-            title={`Copy ${citeStyle.toUpperCase()} citation`}
-          >
-            {feedback?.key === key
-              ? (feedback.ok ? <><MdCheck size={13} /> Copied</> : 'Copy failed')
-              : (entry.cited ? <><MdCheck size={13} /> Cited</> : <><MdContentCopy size={13} /> Cite</>)}
-          </button>
-          <div className="card-menu-wrap">
-            <button
-              className="card-menu-btn"
-              onClick={() => setCardMenuOpenFor(prev => prev === entry.savedAt ? null : entry.savedAt)}
-              title="More"
-            >
-              <MdMoreHoriz size={16} />
-            </button>
-            {cardMenuOpenFor === entry.savedAt && (
-              <HistoryCardMenu
-                archiveUrl={archiveUrl}
-                onAddNote={entry.namedRangeId ? () => {
-                  setNoteOpenFor(prev => prev === entry.savedAt ? null : entry.savedAt)
-                  setCardMenuOpenFor(null)
-                } : undefined}
-                someday={!!entry.someday}
-                onToggleSomeday={() => { toggleSomeday(entry); setCardMenuOpenFor(null) }}
-                onClose={() => setCardMenuOpenFor(null)}
-              />
-            )}
+          <div className="history-actions-row">
+            <div className="history-actions-inner">
+              <a
+                className="hist-action"
+                href={sourceHref(entry)}
+                target="_blank"
+                rel="noreferrer"
+                title={entry.kind === 'image' ? 'Open the source page' : 'Open source and highlight this clip'}
+              >
+                <MdOpenInNew size={13} /> Source
+              </a>
+              {doc && (
+                <a className="hist-action" href={doc} target="_blank" rel="noreferrer" title="Open in Google Doc">
+                  <MdDescription size={13} /> Doc
+                </a>
+              )}
+              <button
+                className={`hist-action${entry.cited ? ' active' : ''}${citeMenuOpenFor === entry.savedAt ? ' active' : ''}`}
+                onClick={() => { setCiteMenuOpenFor(prev => prev === entry.savedAt ? null : entry.savedAt); setCardMenuOpenFor(null) }}
+                title="Copy a citation"
+              >
+                {feedback?.key === key
+                  ? (feedback.ok ? <><MdCheck size={13} /> Copied</> : 'Copy failed')
+                  : (entry.cited ? <><MdCheck size={13} /> Cited</> : <><MdContentCopy size={13} /> Cite</>)}
+              </button>
+              <button
+                className="card-menu-btn"
+                onClick={() => { setCardMenuOpenFor(prev => prev === entry.savedAt ? null : entry.savedAt); setCiteMenuOpenFor(null) }}
+                title="More"
+              >
+                <MdMoreHoriz size={16} />
+              </button>
+            </div>
           </div>
+
+          {citeMenuOpenFor === entry.savedAt && (
+            <CiteMenu
+              current={citeStyle}
+              onPick={(style) => { handleCite(entry, key, style); setCiteMenuOpenFor(null) }}
+              onClose={() => setCiteMenuOpenFor(null)}
+            />
+          )}
+          {cardMenuOpenFor === entry.savedAt && (
+            <HistoryCardMenu
+              archiveUrl={archiveUrl}
+              onAddNote={entry.namedRangeId ? () => {
+                setNoteOpenFor(prev => prev === entry.savedAt ? null : entry.savedAt)
+                setCardMenuOpenFor(null)
+              } : undefined}
+              someday={!!entry.someday}
+              onToggleSomeday={() => { toggleSomeday(entry); setCardMenuOpenFor(null) }}
+              onClose={() => setCardMenuOpenFor(null)}
+            />
+          )}
         </div>
 
         {noteOpenFor === entry.savedAt && entry.namedRangeId && (
@@ -1291,14 +1399,34 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   // fewer things staring at you — not just a filter you have to remember to
   // apply) but never further away than one click via the header toggle.
   const base = entries.filter(e => (showSomedayOnly ? e.someday : !e.someday))
-  const filtered = q
-    ? base.filter(e =>
-        e.text.toLowerCase().includes(q) ||
-        e.sourceTitle.toLowerCase().includes(q) ||
-        e.destinationName.toLowerCase().includes(q) ||
-        e.sourceUrl.toLowerCase().includes(q) ||
-        (e.note?.toLowerCase().includes(q) ?? false))
-    : base
+  // Docs available to filter by, from the current (someday-split) population —
+  // count each so the menu shows how many clips land in each doc. Only clips
+  // that carry a destinationId are filterable (legacy clips without one aren't).
+  const docCounts = new Map<string, DocOption>()
+  for (const e of base) {
+    if (!e.destinationId) continue
+    const cur = docCounts.get(e.destinationId)
+    if (cur) cur.count++
+    else docCounts.set(e.destinationId, { id: e.destinationId, name: e.destinationName, count: 1 })
+  }
+  const docOptions = [...docCounts.values()].sort((a, b) => b.count - a.count)
+  // A filter that can only pick the one existing doc is pointless — only offer
+  // it once there are at least two docs to choose between (progressive disclosure).
+  const canFilterByDoc = docOptions.length > 1
+  // If docs drop to ≤1 (or the filtered doc no longer has clips), the filter
+  // auto-disables so the view can't get stuck showing nothing with no way out.
+  const effectiveDocFilter = canFilterByDoc && docFilter && docCounts.has(docFilter) ? docFilter : null
+  const activeDocName = effectiveDocFilter ? docCounts.get(effectiveDocFilter)!.name : null
+
+  const filtered = base.filter(e => {
+    if (effectiveDocFilter && e.destinationId !== effectiveDocFilter) return false
+    if (!q) return true
+    return e.text.toLowerCase().includes(q) ||
+      e.sourceTitle.toLowerCase().includes(q) ||
+      e.destinationName.toLowerCase().includes(q) ||
+      e.sourceUrl.toLowerCase().includes(q) ||
+      (e.note?.toLowerCase().includes(q) ?? false)
+  })
   const visible = filtered.slice(0, MAX_VISIBLE)
   // Clips saved to a done project are excluded from the proactive pickers —
   // the main list above is untouched, so old work is still findable/citable.
@@ -1322,13 +1450,35 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
 
   return (
     <div className="tab-content">
-      {/* Top controls form one proximity group — header, cite-style, and
-          search all belong together and stay tightly spaced, with a single
-          larger gap separating the whole cluster from the clip list. */}
+      {/* Top controls form one proximity group — the count/filter header and
+          search belong together and stay tightly spaced, with a single larger
+          gap separating the cluster from the clip list. (Citation style used
+          to live here as a persistent "Cite as" strip; it moved into the
+          per-card Cite action — most users never cite, so it shouldn't own
+          prime real estate or expose APA/MLA/BibTeX jargon by default.) */}
       <div className="history-controls">
         <div className="history-header">
           <span className="muted">{entries.length} clip{entries.length !== 1 ? 's' : ''}</span>
           <div className="history-header-actions">
+            {canFilterByDoc && (
+              <div className="filter-wrap">
+                <button
+                  className={`someday-filter${activeDocName ? ' active' : ''}`}
+                  onClick={() => setFilterMenuOpen(v => !v)}
+                  title={activeDocName ? `Filtering by ${activeDocName}` : 'Filter by document'}
+                >
+                  <MdFilterList size={13} /> Filter
+                </button>
+                {filterMenuOpen && (
+                  <FilterMenu
+                    options={docOptions}
+                    current={effectiveDocFilter}
+                    onPick={(id) => { setDocFilter(id); setFilterMenuOpen(false) }}
+                    onClose={() => setFilterMenuOpen(false)}
+                  />
+                )}
+              </div>
+            )}
             {somedayCount > 0 && (
               <button
                 className={`someday-filter${showSomedayOnly ? ' active' : ''}`}
@@ -1340,18 +1490,6 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
             <button className="btn-ghost small" onClick={handleClear}>Clear all</button>
           </div>
         </div>
-        <div className="cite-style">
-          <span className="cite-label">Cite as</span>
-          {CITE_STYLES.map(s => (
-            <button
-              key={s.id}
-              className={`cite-opt${citeStyle === s.id ? ' active' : ''}`}
-              onClick={() => pickStyle(s.id)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
 
         <input
           className="history-search"
@@ -1360,6 +1498,17 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
           value={query}
           onChange={e => setQuery(e.target.value)}
         />
+
+        {/* Active-filter status as a removable chip — keeps the header trigger
+            a fixed-width "Filter" pill (no crowding) while still showing which
+            doc is filtered and giving a large one-click clear target. */}
+        {activeDocName && (
+          <button className="filter-active-chip" onClick={() => setDocFilter(null)} title="Clear filter">
+            <MdFilterList size={12} />
+            <span className="filter-active-name">{activeDocName}</span>
+            <MdClose size={13} />
+          </button>
+        )}
       </div>
 
       {resurfaced && (
@@ -1392,9 +1541,11 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
 
       {filtered.length === 0 ? (
         <div className="muted history-empty-search">
-          {showSomedayOnly
-            ? (q ? `No Someday clips match "${query}".` : 'Nothing in Someday yet.')
-            : (q ? `No clips match "${query}".` : 'Everything is tagged Someday — nice job triaging.')}
+          {activeDocName
+            ? (q ? `No clips in ${activeDocName} match "${query}".` : `No clips in ${activeDocName}.`)
+            : showSomedayOnly
+              ? (q ? `No Someday clips match "${query}".` : 'Nothing in Someday yet.')
+              : (q ? `No clips match "${query}".` : 'Everything is tagged Someday — nice job triaging.')}
         </div>
       ) : (
         <div className="history-list">
