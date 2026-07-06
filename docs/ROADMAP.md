@@ -6,7 +6,7 @@ Source of truth for **what's shipped, what's next, and why** — derived from a 
 
 Every read-later/clipper competitor (Pocket, Omnivore) stores your archive in a database *they* control — both died in the last 18 months, taking users' archives with them. SnipKeep writes straight into a Google Doc the user already owns; there is no SnipKeep server. That's the structural, hard-to-copy trust advantage the whole roadmap is built to make visible and to protect (see "Investment must never become lock-in" below).
 
-## Shipped (9 of 11 report features)
+## Shipped (8 of 11 report features)
 
 | # | Feature | One-line |
 |---|---|---|
@@ -18,7 +18,8 @@ Every read-later/clipper competitor (Pocket, Omnivore) stores your archive in a 
 | 6 | **Deadline-Aware Citations** | A Doc can carry a due date; calm→warn→danger countdown + uncited count; custom calendar picker |
 | 7 | **Assignment/Project Mode** | Mark a Doc "done" → moves to its own **Completed** tab; excluded from proactive pickers, still findable |
 | 8 | **Living Resurface** | "+ Add a note" writes a freshly dated note back into the Doc at any bookmarked clip's exact spot |
-| 10 | **Topic Auto-Clustering** | Zero-AI tag/domain chips above the search box — click one to filter, no separate view |
+
+**#10 — Topic Auto-Clustering was built, then removed** (2026-07-06, user decision after a UX critique). It showed tag/domain chips above History's search box that dropped a query into search on click. Removed — not paused, fully deleted (`pickTopicClusters`/`extractTags`/`.topic-*` all gone) — for two reasons: (1) at realistic archive sizes the chips carried no signal (a domain chip covering ~100% of clips filters to "everything"; a just-applied tag reveals nothing), violating progressive disclosure; (2) the recognition/browse value it aimed at is already served inline — every `#tag` on a card is a clickable filter and each card shows its source domain, so the chips largely duplicated an existing affordance. The one keeper from that work: History's search now also matches `sourceUrl`, so typing a domain (e.g. `nytimes.com`) filters by site — an independently useful capability, retained. If clustering is ever wanted again, it belongs at real scale with a hard "must actually discriminate" gate, not shown unconditionally.
 
 Plus, pre-roadmap (built earlier the same session, before the research pass): the **ClipNote → SnipKeep rebrand**, **margin notes**, **keyboard-first toolbar**, **link preservation**, **right-click image capture**, **living archive + full-text search**, **history navigation** (↗ Source / 📄 Doc / ⧉ Cite), **auto-citation**, and a **sign-out bug fix** + **#tag filtering**.
 
@@ -26,9 +27,9 @@ Plus, pre-roadmap (built earlier the same session, before the research pass): th
 
 ## Not yet built (2 remaining — both explicitly deferred by user choice, not skipped for cause)
 
-All 9 buildable-without-a-backend features from the report are now shipped. Both remaining items were explained in full and deliberately set aside by the user (2026-07-06) — treat this as "later," not "no":
+Of the report's buildable-without-a-backend features, all were shipped; #10 was then removed after evaluation (see above). The two below were explained in full and deliberately set aside by the user (2026-07-06) — treat this as "later," not "no":
 
-- **#9 — Weekly Synthesis Digest.** An opt-in, once-a-week in-drawer view clustering that week's clips by tag/source, ending with an open-ended prompt rather than a summary — the "reward" half of the Hook Model loop that's still thin. A backend-dependent emailed version is a natural v2, not required for v1. **Note:** now that Topic Auto-Clustering (#10) exists, the digest could reuse `pickTopicClusters` for its grouping instead of inventing new clustering logic.
+- **#9 — Weekly Synthesis Digest.** An opt-in, once-a-week in-drawer view clustering that week's clips by tag/source, ending with an open-ended prompt rather than a summary — the "reward" half of the Hook Model loop that's still thin. A backend-dependent emailed version is a natural v2, not required for v1.
 - **#11 — Anonymous Aggregate Highlight Signal.** "14 people also highlighted this passage" — opt-in, no-account, anonymized. **Needs real backend infrastructure and a security/privacy review before it should ship at all** — the one feature in the whole report that isn't client-only or talking directly to Google/archive.org with the user's own credentials. Deferred specifically because it's a different *category* of work (real infra + a privacy review), not just another feature pass.
 
 **When resuming either:** don't re-explain from scratch — both were already walked through in detail with the user; check this file and `docs/FEATURES.md` for what's already decided before re-deriving the design.

@@ -91,18 +91,14 @@ The date picker is a **custom calendar**, not a native `<input type="date">` —
 
 `done` is **deliberately independent of `active`** — marking a project done doesn't silently hide it from the toolbar, and reopening doesn't silently restore that either; both stay under the user's explicit control. `History` also loads `docs` to build `doneDestIds: Set<string>`, kept live via its own `storage.onChanged` handler; before calling `pickResurfaced`/`pickTriageCandidate`/`pickReflectionNudge`, entries are narrowed to `activeEntries` (excludes clips whose `destinationId` is done). Only the **proactive pickers** are affected — the main searchable History list is untouched, so a finished project's clips stay fully findable and citable, they just stop being surfaced unprompted.
 
-## Topic Auto-Clustering (report #10)
+## Topic Auto-Clustering (report #10) — built, then removed
 
-A middle path between "just a pile" (the default) and a heavy manual-linking PKM graph (Obsidian/Roam — itself a well-documented productivity trap, per the research report's "Second Brain Delusion" citation). Zero AI: `pickTopicClusters(clips)` groups by two signals already present in the data —
+Shipped as a row of tag/domain pill chips above History's search box (each click dropped its label into the search query), then **fully removed** 2026-07-06 after a UX critique — deleted, not paused (`pickTopicClusters`, `extractTags`, `TopicCluster`, and the `.topic-*` CSS are all gone). Two reasons it didn't earn its place:
 
-- **Tags** — `extractTags(note)` pulls every `#word` out of a clip's margin note (same regex family as `renderNoteWithTags`'s tag-chip rendering). Any tag appearing on **2+ clips** becomes a cluster.
-- **Domains** — grouped by hostname (`www.` stripped). Only surfaced as a cluster if the domain spans **2+ distinct `sourceUrl`s** — a single article read once is already visible as one group in the flat list below; clustering it again would just be noise. Not "returning to a site across multiple articles" is the bar for it to count as a real recurring interest.
+1. **No signal at realistic scale.** The chips showed unconditionally, so a domain that covered ~100% of a small archive produced a chip that filtered to "everything," and a just-applied tag produced a chip revealing nothing. That's a progressive-disclosure failure — complexity shown when it has nothing to say.
+2. **Duplicated an existing affordance.** The recognition/browse value it targeted (recognition-over-recall vs. the blank search box) was already delivered inline: every `#tag` on a card is a clickable filter (`renderNoteWithTags`) and each card shows its source domain. The chips mostly re-surfaced what the cards already exposed; their only unique value (aggregate counts + off-screen clusters) only matters in a large, varied archive.
 
-Both signals produce the same `{ label, query, count }` shape, sorted by count and capped at 10. Rendered as a **row of pill chips** above the search box — clicking one just calls `setQuery(cluster.query)`, reusing the exact same search-filter path a manually typed query would take (no new filter plumbing). This is why `e.sourceUrl.toLowerCase().includes(q)` was added to History's search predicate — domain clusters wouldn't have matched anything otherwise, since the existing filter checked `text`/`sourceTitle`/`destinationName`/`note` but never the URL itself.
-
-Computed over `base` (the same population the search box itself filters — respects the Someday split), not raw `entries`, so a chip click and typing the same thing by hand always agree. Hidden while a search is active or while viewing the Someday-only list, same suppression pattern as Resurfaced/Triage/Reflection Nudge. Styled deliberately quiet — neutral pill, no accent until hovered — since this is a browse aid, not a prompt or a decision.
-
-Visually verified against the real `popup.css` and font at 340px: chips wrap cleanly across rows, no overflow.
+**One keeper from that work:** History's search predicate still includes `e.sourceUrl.toLowerCase().includes(q)` — originally added so domain chips would match, now retained as an independently useful capability (typing a bare domain like `nytimes.com` filters History by site). If clustering is ever revisited, it should appear only at real scale behind a hard "the cluster must actually discriminate" gate (e.g. exclude any cluster covering most of the archive), never shown unconditionally.
 
 ---
 

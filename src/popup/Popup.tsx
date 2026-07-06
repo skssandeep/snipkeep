@@ -984,54 +984,6 @@ function pickReflectionNudge(clips: HistoryEntry[]): { url: string; title: strin
   return count >= REFLECTION_NUDGE_THRESHOLD ? { url, title, count } : null
 }
 
-// Topic Auto-Clustering — a middle path between "just a pile" and a heavy
-// manual-linking PKM graph. Zero AI: groups by two signals already present in
-// the data, both surfaced as one clickable chip that drops straight into the
-// existing search box (no new filter plumbing).
-interface TopicCluster {
-  label: string  // "#idea" or "nytimes.com" — shown as-is
-  query: string  // what gets typed into search on click
-  count: number
-}
-
-function extractTags(note: string | undefined): string[] {
-  if (!note) return []
-  return Array.from(new Set(note.match(/#[\w-]+/g) ?? []))
-}
-
-function pickTopicClusters(clips: HistoryEntry[]): TopicCluster[] {
-  const tagCounts = new Map<string, number>()
-  const domainUrls = new Map<string, Set<string>>()
-  const domainCounts = new Map<string, number>()
-
-  for (const c of clips) {
-    for (const tag of extractTags(c.note)) {
-      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1)
-    }
-    try {
-      const domain = new URL(c.sourceUrl).hostname.replace(/^www\./, '')
-      if (!domainUrls.has(domain)) domainUrls.set(domain, new Set())
-      domainUrls.get(domain)!.add(c.sourceUrl)
-      domainCounts.set(domain, (domainCounts.get(domain) ?? 0) + 1)
-    } catch {
-      // malformed/legacy sourceUrl — skip domain grouping for this one clip
-    }
-  }
-
-  const clusters: TopicCluster[] = []
-  for (const [tag, count] of tagCounts) {
-    if (count >= 2) clusters.push({ label: tag, query: tag, count })
-  }
-  for (const [domain, urls] of domainUrls) {
-    // Only a "topic" if you've returned to this site across multiple distinct
-    // articles — one article read once is already visible as a single group
-    // in the flat list below, clustering it again would be noise.
-    if (urls.size >= 2) clusters.push({ label: domain, query: domain, count: domainCounts.get(domain) ?? 0 })
-  }
-
-  return clusters.sort((a, b) => b.count - a.count).slice(0, 10)
-}
-
 const MAX_VISIBLE = 50
 
 // Render a margin note, turning #tags into clickable chips that filter the archive.
@@ -1367,16 +1319,12 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   const reflectionNudge = reflectionRaw && !(
     reflectionDismissed?.url === reflectionRaw.url && reflectionDismissed.count >= reflectionRaw.count
   ) ? reflectionRaw : null
-  // Computed over `base` — the same population the search box itself filters
-  // over (respects the Someday split) — so a chip click and typing the same
-  // thing manually land on identical results.
-  const topicClusters = (q || showSomedayOnly) ? [] : pickTopicClusters(base)
 
   return (
     <div className="tab-content">
-      {/* Top controls form one proximity group — header, cite-style, topic
-          chips, search all belong together and stay tightly spaced, with a
-          single larger gap separating the whole cluster from the clip list. */}
+      {/* Top controls form one proximity group — header, cite-style, and
+          search all belong together and stay tightly spaced, with a single
+          larger gap separating the whole cluster from the clip list. */}
       <div className="history-controls">
         <div className="history-header">
           <span className="muted">{entries.length} clip{entries.length !== 1 ? 's' : ''}</span>
@@ -1404,16 +1352,6 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
             </button>
           ))}
         </div>
-
-        {topicClusters.length > 0 && (
-          <div className="topic-clusters">
-            {topicClusters.map(c => (
-              <button key={c.label} className="topic-chip" onClick={() => setQuery(c.query)}>
-                {c.label} <span className="topic-chip-count">{c.count}</span>
-              </button>
-            ))}
-          </div>
-        )}
 
         <input
           className="history-search"
