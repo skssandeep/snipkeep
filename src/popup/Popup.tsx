@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   MdAdd,
   MdArchive,
@@ -7,6 +7,7 @@ import {
   MdCheckCircle,
   MdClose,
   MdContentCopy,
+  MdDeleteOutline,
   MdDescription,
   MdEdit,
   MdEvent,
@@ -109,6 +110,70 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
 
   const nameTouchedRef = useRef(false)
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // FLIP reorder animation for the doc list: when a toggle moves a card (active
+  // docs sort above inactive), the card slides to its new spot instead of
+  // teleporting. Each render, compare every card's current top to where it was
+  // last render; if it moved, play the delta as a slide-into-place.
+  //
+  // Uses the native Web Animations API (`el.animate()`) rather than hand-toggling
+  // CSS `transition`/`transform`, fixing two real bugs the earlier CSS-based
+  // version had:
+  //  1. `el.style.transition = 'transform ...'` REPLACES the card's own CSS
+  //     transition for its hover highlight (`background`/`box-shadow`). Since
+  //     the mouse is sitting on the card when its toggle is clicked, that hover
+  //     state is live during the slide — so the highlight was snapping instead
+  //     of fading, reading as jank even when the slide itself was smooth.
+  //     `.animate()` runs as an independent animation layer; it can never touch
+  //     or conflict with the element's CSS transitions.
+  //  2. It also removes the need for the manual "set instant transform, force
+  //     a reflow, then requestAnimationFrame to release it" choreography — the
+  //     browser applies the first keyframe deterministically, no timing tricks
+  //     or cleanup-on-transitionend required.
+  //
+  // Two more levers beyond "slower":
+  //  - Duration scales with distance traveled — a fixed duration for every
+  //    distance breaks the naive-physics expectation that farther = longer.
+  //  - A small per-card stagger, so when several cards move at once they
+  //    cascade top-to-bottom instead of moving in perfect, robotic lockstep
+  //    (real independent objects never move in exact unison).
+  //
+  // Easing: cubic-bezier(0.65, 0, 0.35, 1) — a pronounced, genuinely symmetric
+  // ease-in-out ("easeInOutCubic"). Verified numerically (solving the actual
+  // bezier curve, not eyeballing it) before landing on this: Material's
+  // "standard" curve, tried previously, has a ZERO tangent at t=0 in theory but
+  // still reaches ~24% progress by just 25% of the duration — i.e., very close
+  // to linear at the start, not gentle in practice. This curve reaches only ~7%
+  // progress by 25% of the duration (and, symmetrically, ~93% by 75%) — a real
+  // slow-in AND slow-out, not just a mathematically-technically-nonzero one.
+  const cardEls = useRef<Map<string, HTMLDivElement>>(new Map())
+  const prevTops = useRef<Map<string, number>>(new Map())
+  useLayoutEffect(() => {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    // Iterate in the doc's current visual order (not Map insertion order) so
+    // the stagger index below reflects top-to-bottom position, not the id.
+    activeDocs.forEach((doc, index) => {
+      const el = cardEls.current.get(doc.id)
+      if (!el) return
+      // offsetTop (layout-relative), not getBoundingClientRect (viewport-
+      // relative): immune to scroll between renders and ignores in-flight
+      // transforms, so we compare true layout positions only.
+      const nextTop = el.offsetTop
+      const prevTop = prevTops.current.get(doc.id)
+      if (prevTop !== undefined && !reduce) {
+        const dy = prevTop - nextTop
+        if (Math.abs(dy) > 1) {
+          const duration = Math.min(650, 380 + Math.abs(dy) * 0.4)
+          const delay = Math.min(150, index * 20)
+          el.animate(
+            [{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }],
+            { duration, delay, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'none' }
+          )
+        }
+      }
+      prevTops.current.set(doc.id, nextTop)
+    })
+  })
 
   function computeUncited(clips: HistoryEntry[]): Record<string, number> {
     const counts: Record<string, number> = {}
@@ -324,7 +389,10 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   void notionPageId
   void notionPageName
 
-  const activeDocs = docs.filter(d => !d.done)
+  // Active docs sort above inactive ones (usable destinations on top, dormant
+  // ones sink) — a stable sort, so order within each group is preserved. The
+  // FLIP effect above animates the card as it moves between groups on toggle.
+  const activeDocs = docs.filter(d => !d.done).sort((a, b) => Number(b.active) - Number(a.active))
 
   return (
     <div className="tab-content">
@@ -337,7 +405,11 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
               const isEditingDeadline = editingDeadlineFor === doc.id
               const status = doc.dueDate && !isEditingDeadline ? deadlineStatus(doc.dueDate, uncited) : null
               return (
-                <div key={doc.id} className={`doc-item${doc.active ? '' : ' inactive'}`}>
+                <div
+                  key={doc.id}
+                  ref={(el) => { if (el) cardEls.current.set(doc.id, el); else cardEls.current.delete(doc.id) }}
+                  className={`doc-item${doc.active ? '' : ' inactive'}`}
+                >
                   <div className="doc-item-top">
                     <div className="doc-info">
                       <div className="doc-name">{doc.name}</div>
@@ -810,12 +882,14 @@ function HistoryCardMenu({
   onAddNote,
   someday,
   onToggleSomeday,
+  onRemove,
   onClose,
 }: {
   archiveUrl?: string
   onAddNote?: () => void
   someday: boolean
   onToggleSomeday: () => void
+  onRemove: () => void
   onClose: () => void
 }) {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -849,6 +923,17 @@ function HistoryCardMenu({
       <button className="card-menu-item" onClick={onToggleSomeday}>
         <span className="card-menu-icon">{someday ? <MdCheck /> : <MdSchedule />}</span>
         {someday ? 'Remove from Someday' : 'Mark as Someday'}
+      </button>
+      {/* Destructive, so divider-separated (distance from the safe actions) and
+          labelled "history" — it only drops SnipKeep's local record; the Doc
+          keeps the text. Undo (below) is the safety net, so no blocking dialog. */}
+      <div className="card-menu-divider" />
+      <button
+        className="card-menu-item danger"
+        onClick={onRemove}
+        title="Remove from SnipKeep — your Google Doc keeps the text"
+      >
+        <span className="card-menu-icon"><MdDeleteOutline /></span>Remove from history
       </button>
     </div>
   )
@@ -1085,6 +1170,11 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [citeStyle, setCiteStyle] = useState<CitationStyle>('apa')
   const [feedback, setFeedback] = useState<{ key: string; ok: boolean } | null>(null)
+  // Removal (single or bulk) stages a snapshot so the undo bar can restore it.
+  const [undo, setUndo] = useState<{ snapshot: HistoryEntry[]; label: string } | null>(null)
+  const undoTimer = useRef<number | null>(null)
+  // The bottom "Clear" control swaps to an inline "are you sure?" when armed.
+  const [clearConfirming, setClearConfirming] = useState(false)
   const [query, setQuery] = useState('')
   // Page url → Wayback Machine snapshot url. Populated by the background's
   // link-rot insurance a few seconds after a save; listened for live so the
@@ -1141,6 +1231,9 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
     return () => chrome.storage.onChanged.removeListener(handler)
   }, [])
 
+  // Don't leave the undo timeout running after the tab unmounts.
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current) }, [])
+
   // "Cite them →" (Deadline-Aware Citations, in DocsTab) lands here by setting
   // this from the parent — drop it into the search box, then clear it in the
   // parent so navigating away and back doesn't reapply a stale filter.
@@ -1179,9 +1272,45 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
     }
   }
 
-  function handleClear() {
-    chrome.storage.local.remove(['clips', 'history'])
-    setEntries([])
+  // Single source for writing the archive: state + storage together. When the
+  // archive goes empty we also drop the legacy `history` seed, or the loader
+  // (clips.length ? clips : history) would resurrect the old last-10 on remount.
+  function commitClips(next: HistoryEntry[]) {
+    setEntries(next)
+    if (next.length === 0) chrome.storage.local.set({ clips: [] }, () => chrome.storage.local.remove(['history']))
+    else chrome.storage.local.set({ clips: next })
+  }
+
+  // Deleting anything is reversible for a few seconds via the undo bar, so no
+  // blocking confirm on the small stuff — undo beats a dialog for frequent,
+  // low-stakes removes (design rule: always offer a way back). `snapshot` is
+  // the whole pre-delete array, so one restore path covers single + bulk.
+  function stageUndo(snapshot: HistoryEntry[], label: string) {
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+    setUndo({ snapshot, label })
+    undoTimer.current = window.setTimeout(() => setUndo(null), 6000)
+  }
+
+  function removeClip(entry: HistoryEntry) {
+    const snapshot = entries
+    commitClips(entries.filter(e => e.savedAt !== entry.savedAt))
+    stageUndo(snapshot, 'Clip removed from history')
+  }
+
+  function clearClips(toRemove: HistoryEntry[]) {
+    if (toRemove.length === 0) return
+    const snapshot = entries
+    const removeIds = new Set(toRemove.map(e => e.savedAt))
+    commitClips(entries.filter(e => !removeIds.has(e.savedAt)))
+    stageUndo(snapshot, `${toRemove.length} clip${toRemove.length !== 1 ? 's' : ''} removed`)
+    setClearConfirming(false)
+  }
+
+  function applyUndo() {
+    if (!undo) return
+    commitClips(undo.snapshot)
+    if (undoTimer.current) clearTimeout(undoTimer.current)
+    setUndo(null)
   }
 
   // Someday is purely local archive metadata — never touches the Doc, so no
@@ -1331,6 +1460,7 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
               } : undefined}
               someday={!!entry.someday}
               onToggleSomeday={() => { toggleSomeday(entry); setCardMenuOpenFor(null) }}
+              onRemove={() => { removeClip(entry); setCardMenuOpenFor(null) }}
               onClose={() => setCardMenuOpenFor(null)}
             />
           )}
@@ -1428,6 +1558,12 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
       (e.note?.toLowerCase().includes(q) ?? false)
   })
   const visible = filtered.slice(0, MAX_VISIBLE)
+  // The bottom clear control acts on "whatever you're looking at": if the view
+  // is narrowed (search / doc filter / Someday-only) it clears just that subset
+  // ("Clear these N"); otherwise it clears the whole archive ("Clear all
+  // history", including any hidden Someday clips).
+  const isNarrowed = !!q || !!effectiveDocFilter || showSomedayOnly
+  const clearTarget = isNarrowed ? filtered : entries
   // Clips saved to a done project are excluded from the proactive pickers —
   // the main list above is untouched, so old work is still findable/citable.
   const activeEntries = entries.filter(e => !e.destinationId || !doneDestIds.has(e.destinationId))
@@ -1487,7 +1623,10 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
                 <MdSchedule size={13} /> Someday ({somedayCount})
               </button>
             )}
-            <button className="btn-ghost small" onClick={handleClear}>Clear all</button>
+            {/* "Clear" is NOT here anymore — a destructive, rare action doesn't
+                belong in the prime top-right zone next to the safe filters
+                (accidental-tap risk + wrong visual weight). It lives at the
+                bottom of the list instead; see the clear control below. */}
           </div>
         </div>
 
@@ -1555,6 +1694,38 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
 
       {filtered.length > visible.length && (
         <div className="muted history-more">Showing first {visible.length} of {filtered.length} — search to narrow.</div>
+      )}
+
+      {/* Clear control lives at the END of the list, out of the accidental-tap
+          path — reached by a deliberate scroll. Acts on the current view, so
+          it's "Clear these N" when narrowed and "Clear all history" otherwise.
+          Inline confirm (high stakes) + undo bar (recoverable) both guard it. */}
+      {clearTarget.length > 0 && (
+        clearConfirming ? (
+          <div className="clear-confirm">
+            <span className="clear-confirm-text">
+              Clear {clearTarget.length} clip{clearTarget.length !== 1 ? 's' : ''}? Your Google Doc keeps the text — this only wipes SnipKeep's local history.
+            </span>
+            <div className="clear-confirm-actions">
+              <button className="card-menu-cancel" onClick={() => setClearConfirming(false)}>Cancel</button>
+              <button className="card-menu-confirm-remove" onClick={() => clearClips(clearTarget)}>
+                {isNarrowed ? 'Clear these' : 'Clear all'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="clear-history-btn" onClick={() => setClearConfirming(true)}>
+            <MdDeleteOutline size={14} />
+            {isNarrowed ? `Clear these ${clearTarget.length}` : 'Clear all history'}
+          </button>
+        )
+      )}
+
+      {undo && (
+        <div className="undo-bar">
+          <span className="undo-bar-label">{undo.label}</span>
+          <button className="undo-btn" onClick={applyUndo}>Undo</button>
+        </div>
       )}
     </div>
   )
