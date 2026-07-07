@@ -39,12 +39,14 @@ The clip is more than plain text: an optional **margin note** ("your take"), pre
 ### `chrome.identity` is NOT available in content scripts (the #1 gotcha)
 
 The drawer (and the Popup it renders) runs in the **content-script** context, where `chrome.identity` is `undefined`. Any identity/auth/Docs-token work from the drawer must be routed to the background via `chrome.runtime.sendMessage`. Handlers:
-- `GET_USER_EMAIL` → avatar email (`getProfileUserInfo`)
+- `GET_USER_PROFILE` → avatar email + display name (`getProfileUserInfo` for email; name via Google's `oauth2/v3/userinfo` endpoint, requiring the `userinfo.profile` OAuth scope — see below)
 - `GET_DOC_TITLE` → resolve a Doc's title (silent token + Docs API)
-- `SIGN_IN` (gate screen) → interactive OAuth + cache email
-- `SIGN_OUT` (drawer) → `removeCachedAuthToken` + clear `isSignedIn`/`userEmail`
+- `SIGN_IN` (gate screen) → interactive OAuth + cache email/name
+- `SIGN_OUT` (drawer) → `removeCachedAuthToken` + clear `isSignedIn`/`userEmail`/`userName`
 
 Background auth helpers: `getAuthToken()` (interactive) and `getAuthTokenSilent()` (non-interactive, never prompts). Sign-out: `Drawer.handleSignOut` sends `SIGN_OUT` and optimistically clears the avatar; the `chrome.storage` change flips `isSignedIn` → the gate screen. (`SIGN_OUT` only drops Chrome's cached token, not the Google-side grant, so re-sign-in is a fast silent re-grant.)
+
+**Display name gotcha:** `chrome.identity.getProfileUserInfo()` only ever returns `{email, id}` — never a name, regardless of scopes granted; that's a hard limit of the Chrome-level API, not a config issue. The only way to get a real name is Google's own `oauth2/v3/userinfo` endpoint via `fetch()` with the OAuth token, which requires the `userinfo.profile` scope (added to `manifest.json` alongside the existing `documents` scope). Adding a new scope means **already-signed-in users need to sign in again** before a silently-fetched token can include it — `getUserName()` in the background handles this by failing silently (returns `null`) rather than erroring, and the UI (`Drawer.tsx`) already treats a missing name as "not available yet, show email only," never a broken state.
 
 The avatar dropdown also has a **🔒 Privacy** entry and, on first use, a **Trust Card** — see `docs/FEATURES.md` for both.
 
@@ -73,7 +75,7 @@ Save text    → content → SAVE_NOTE        → background → Google Docs API
 Save image   → background contextMenus.onClicked → CAPTURE_IMAGE → content (read img size/title)
              → content → SAVE_IMAGE       → background → Google Docs API   (insertInlineImage)
 Add doc note → content → ADD_DOC_NOTE     → background → Google Docs API   (Living Resurface write-back)
-Drawer auth  → content → GET_USER_EMAIL / GET_DOC_TITLE / SIGN_IN / SIGN_OUT → background (chrome.identity)
+Drawer auth  → content → GET_USER_PROFILE / GET_DOC_TITLE / SIGN_IN / SIGN_OUT → background (chrome.identity)
 ```
 All message types are in `src/types.ts`.
 
@@ -83,7 +85,7 @@ All message types are in `src/types.ts`.
 |---|---|---|
 | `sync` | `docs` | `DocDestination[]` — `{ id, name, active, dueDate?, done? }` |
 | `sync` | `defaultDestId` | last used destination ID |
-| `sync` | `isSignedIn` / `userEmail` | auth state + cached email for the avatar |
+| `sync` | `isSignedIn` / `userEmail` / `userName` | auth state + cached email/display name for the avatar dropdown (`userName` may be empty for a token that predates the `userinfo.profile` scope, until next sign-in) |
 | `sync` | `notionConfig` | Notion token/page (hidden at MVP) |
 | `sync` | `citationStyle` | APA/MLA/BibTeX preference |
 | `sync` | `hasSeenTrustCard` | gates the one-time Trust Card |

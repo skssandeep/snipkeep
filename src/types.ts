@@ -99,12 +99,15 @@ export interface ToggleDrawerMessage {
   type: 'TOGGLE_DRAWER'
 }
 
-export interface GetUserEmailMessage {
-  type: 'GET_USER_EMAIL'
+export interface GetUserProfileMessage {
+  type: 'GET_USER_PROFILE'
 }
 
-export interface GetUserEmailResponse {
+export interface GetUserProfileResponse {
   email: string
+  // Requires the userinfo.profile OAuth scope — null for a token that
+  // predates that scope (silently, until the user next signs in), not an error.
+  name: string | null
 }
 
 export interface SignInMessage {
@@ -114,6 +117,7 @@ export interface SignInMessage {
 export interface SignInResponse {
   success: boolean
   email?: string
+  name?: string | null
   error?: string
 }
 

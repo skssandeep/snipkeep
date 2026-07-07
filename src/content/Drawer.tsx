@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Bookmark } from 'lucide-react'
 import { MdClose, MdKeyboardReturn, MdLock } from 'react-icons/md'
-import type { GetUserEmailMessage, GetUserEmailResponse, SignOutMessage, DocDestination } from '../types'
+import type { GetUserProfileMessage, GetUserProfileResponse, SignOutMessage, DocDestination } from '../types'
 import { Popup, PrivacyLedger, TrustCard } from '../popup/Popup'
 import { ensureFontLoaded } from '../lib/fonts'
 import popupStyles from '../popup/popup.css?inline'
@@ -84,7 +84,16 @@ const BODY_CSS = `
   .cn-avatar:hover { border-color: var(--accent); color: var(--text); }
   .cn-avatar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  /* ── Sign-out dropdown ── */
+  /* ── Sign-out dropdown ──
+     Three tiers, in order of a Jakob's-Law-familiar account menu:
+       1. Identity (name + email) — who you are, tightly grouped (proximity:
+          same fact about the same person, so minimal gap between them).
+       2. Privacy — a settings-like, informational action.
+       3. Sign out — the one destructive-ish action, visually distinct (danger
+          color) and last.
+     Each tier shares one padding rhythm (var(--space-3) var(--space-4), the
+     same convention documented for content cards elsewhere in this app) so
+     the whole menu reads as one consistent rhythm, not three ad-hoc rows. ── */
   .cn-auth-dropdown {
     position: absolute;
     top: calc(100% + 10px);
@@ -92,18 +101,32 @@ const BODY_CSS = `
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    min-width: 200px;
+    min-width: 208px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.5);
     overflow: hidden;
     z-index: 10;
   }
 
+  .cn-auth-identity {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border);
+  }
+  .cn-auth-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .cn-auth-email {
-    padding: 11px 14px;
-    font-size: 11px;
+    /* Tight, deliberately closer than the identity block's own outer padding —
+       this line and the name above it are one fact, not two. */
+    margin-top: 2px;
+    font-size: 11.5px;
     font-family: var(--font);
     color: var(--text-3);
-    border-bottom: 1px solid var(--border);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -112,9 +135,9 @@ const BODY_CSS = `
   .cn-auth-privacy {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     width: 100%;
-    padding: 11px 14px;
+    padding: var(--space-3) var(--space-4);
     background: none;
     border: none;
     border-bottom: 1px solid var(--border);
@@ -131,7 +154,7 @@ const BODY_CSS = `
   .cn-auth-signout {
     display: block;
     width: 100%;
-    padding: 11px 14px;
+    padding: var(--space-3) var(--space-4);
     background: none;
     border: none;
     color: var(--danger);
@@ -189,6 +212,7 @@ export function Drawer({ container, onClose, closeRef }: Props) {
   const [open, setOpen] = useState(true)
   const [isSignedIn, setIsSignedIn] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [userName, setUserName] = useState('')
   const [showAuthMenu, setShowAuthMenu] = useState(false)
   type DrawerView = 'main' | 'privacy' | 'trust'
   const [view, setView] = useState<DrawerView>('main')
@@ -201,12 +225,14 @@ export function Drawer({ container, onClose, closeRef }: Props) {
   useEffect(() => {
     ensureFontLoaded()
 
-    chrome.storage.sync.get(['isSignedIn', 'userEmail', 'docs', 'hasSeenTrustCard'], (result) => {
+    chrome.storage.sync.get(['isSignedIn', 'userEmail', 'userName', 'docs', 'hasSeenTrustCard'], (result) => {
       const signedIn = !!result.isSignedIn
       const email = (result.userEmail as string) ?? ''
+      const name = (result.userName as string) ?? ''
       const docs = (result.docs as DocDestination[] | undefined) ?? []
       setIsSignedIn(signedIn)
       setUserEmail(email)
+      setUserName(name)
       setFirstDocId(docs[0]?.id ?? null)
 
       // First time this account has ever had a doc AND never dismissed the card —
@@ -216,13 +242,17 @@ export function Drawer({ container, onClose, closeRef }: Props) {
         setView('trust')
       }
 
-      // Email not cached yet — ask the background service worker
-      // (getProfileUserInfo works reliably there, not always in content scripts)
-      if (signedIn && !email) {
+      // Email/name not cached yet — ask the background service worker
+      // (getProfileUserInfo works reliably there, not always in content
+      // scripts; name additionally needs a token silently upgraded to the
+      // userinfo.profile scope, which an already-signed-in user may not have
+      // yet — that's fine, it just comes back null until their next sign-in).
+      if (signedIn && (!email || !name)) {
         chrome.runtime.sendMessage(
-          { type: 'GET_USER_EMAIL' } satisfies GetUserEmailMessage,
-          (res: GetUserEmailResponse) => {
+          { type: 'GET_USER_PROFILE' } satisfies GetUserProfileMessage,
+          (res: GetUserProfileResponse) => {
             if (res?.email) setUserEmail(res.email)
+            if (res?.name) setUserName(res.name)
           }
         )
       }
@@ -231,6 +261,7 @@ export function Drawer({ container, onClose, closeRef }: Props) {
     const handler = (changes: Record<string, chrome.storage.StorageChange>) => {
       if ('isSignedIn' in changes) setIsSignedIn(!!changes.isSignedIn.newValue)
       if ('userEmail' in changes) setUserEmail(changes.userEmail.newValue as string ?? '')
+      if ('userName' in changes) setUserName(changes.userName.newValue as string ?? '')
       if ('docs' in changes) {
         const docs = (changes.docs.newValue as DocDestination[] | undefined) ?? []
         setFirstDocId(docs[0]?.id ?? null)
@@ -298,6 +329,7 @@ export function Drawer({ container, onClose, closeRef }: Props) {
   function handleSignOut() {
     setShowAuthMenu(false)
     setUserEmail('')  // optimistic; the storage change flips isSignedIn → gate screen
+    setUserName('')
     // chrome.identity is undefined in this content-script context, so the actual
     // token removal + flag clearing must happen in the background.
     const msg: SignOutMessage = { type: 'SIGN_OUT' }
@@ -309,7 +341,10 @@ export function Drawer({ container, onClose, closeRef }: Props) {
     setView('main')
   }
 
-  const initial = userEmail ? userEmail[0].toUpperCase() : (isSignedIn ? 'G' : '')
+  // Name-first initial (matches how people expect their own avatar to read —
+  // "S" for Sandeep, not for a possibly-unrelated email prefix), falling back
+  // to email, then a generic account glyph for the rare pre-name-fetch moment.
+  const initial = userName ? userName[0].toUpperCase() : (userEmail ? userEmail[0].toUpperCase() : (isSignedIn ? 'G' : ''))
 
   return (
     <>
@@ -342,12 +377,20 @@ export function Drawer({ container, onClose, closeRef }: Props) {
                   ref={avatarRef}
                   className="cn-avatar"
                   onClick={() => setShowAuthMenu(v => !v)}
-                  title={userEmail || 'Google Account'}
+                  title={userName || userEmail || 'Google Account'}
                 >
                   {initial}
                   {showAuthMenu && (
                     <div className="cn-auth-dropdown">
-                      <div className="cn-auth-email">{userEmail}</div>
+                      {/* Identity block: name (primary) + email (secondary) sit
+                          tightly together — same person, same fact — then a
+                          divider marks the break into actions (Jakob's Law:
+                          this mirrors the identity-then-actions shape of
+                          Google's own account menu, so it needs no learning). */}
+                      <div className="cn-auth-identity">
+                        {userName && <div className="cn-auth-name">{userName}</div>}
+                        <div className="cn-auth-email">{userEmail}</div>
+                      </div>
                       <button
                         className="cn-auth-privacy"
                         onClick={() => { setView('privacy'); setShowAuthMenu(false) }}

@@ -11,8 +11,8 @@ import type {
   CaptureImageMessage,
   TriggerSaveMessage,
   ToggleDrawerMessage,
-  GetUserEmailMessage,
-  GetUserEmailResponse,
+  GetUserProfileMessage,
+  GetUserProfileResponse,
   GetDocTitleMessage,
   GetDocTitleResponse,
   SignInMessage,
@@ -59,6 +59,26 @@ function getAuthTokenSilent(): Promise<string | null> {
       resolve(token)
     })
   })
+}
+
+// Display name — chrome.identity.getProfileUserInfo only ever returns
+// {email, id}, never a name, regardless of scopes; the only way to get one is
+// Google's own userinfo endpoint, which requires the userinfo.profile scope.
+// Best-effort and silent: a token issued before that scope was added (any
+// already-signed-in user) won't carry it, and this simply returns null rather
+// than erroring — the UI already treats a missing name as "not available yet,
+// show email only," not a failure.
+async function getUserName(token: string): Promise<string | null> {
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return typeof data.name === 'string' && data.name ? data.name : null
+  } catch {
+    return null
+  }
 }
 
 // ── Retry ─────────────────────────────────────────────────────────────────────
@@ -1013,16 +1033,29 @@ chrome.runtime.onMessage.addListener(
   }
 )
 
-// User email — fetched in the background where getProfileUserInfo is reliable
+// User profile — fetched in the background where getProfileUserInfo is
+// reliable. Email always works (Chrome-level API, no scope needed); name is
+// best-effort via getUserName and silently null if the current token
+// predates the userinfo.profile scope (an already-signed-in user — they'll
+// pick up a name on their next sign-in, once that grants the new scope).
 chrome.runtime.onMessage.addListener(
-  (message: GetUserEmailMessage, _sender, sendResponse: (r: GetUserEmailResponse) => void) => {
-    if (message.type !== 'GET_USER_EMAIL') return false
+  (message: GetUserProfileMessage, _sender, sendResponse: (r: GetUserProfileResponse) => void) => {
+    if (message.type !== 'GET_USER_PROFILE') return false
 
-    chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }, (info) => {
-      const email = info.email ?? ''
-      if (email) chrome.storage.sync.set({ userEmail: email })
-      sendResponse({ email })
-    })
+    ;(async () => {
+      const email = await new Promise<string>((resolve) => {
+        chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }, (info) => resolve(info.email ?? ''))
+      })
+      const token = await getAuthTokenSilent()
+      const name = token ? await getUserName(token) : null
+
+      const toStore: Record<string, string> = {}
+      if (email) toStore.userEmail = email
+      if (name) toStore.userName = name
+      if (Object.keys(toStore).length > 0) chrome.storage.sync.set(toStore)
+
+      sendResponse({ email, name })
+    })()
 
     return true
   }
@@ -1036,12 +1069,13 @@ chrome.runtime.onMessage.addListener(
 
     ;(async () => {
       try {
-        await getAuthToken()  // interactive — surfaces the Google consent screen
+        const token = await getAuthToken()  // interactive — surfaces the Google consent screen
         const email = await new Promise<string>((resolve) => {
           chrome.identity.getProfileUserInfo({ accountStatus: 'ANY' }, (info) => resolve(info.email ?? ''))
         })
-        await chrome.storage.sync.set({ isSignedIn: true, userEmail: email })
-        sendResponse({ success: true, email })
+        const name = await getUserName(token)
+        await chrome.storage.sync.set({ isSignedIn: true, userEmail: email, ...(name ? { userName: name } : {}) })
+        sendResponse({ success: true, email, name })
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Sign-in failed' })
       }
@@ -1065,7 +1099,7 @@ chrome.runtime.onMessage.addListener(
             chrome.identity.removeCachedAuthToken({ token }, () => resolve())
           )
         }
-        await chrome.storage.sync.set({ isSignedIn: false, userEmail: '' })
+        await chrome.storage.sync.set({ isSignedIn: false, userEmail: '', userName: '' })
         sendResponse({ success: true })
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Sign-out failed' })
