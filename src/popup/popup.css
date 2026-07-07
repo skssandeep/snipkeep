@@ -196,6 +196,32 @@ a { color: inherit; text-decoration: none; }
 /* ── Doc list — borderless cards, depth from bg lift alone ── */
 .doc-list { display: flex; flex-direction: column; gap: var(--space-2); }
 
+/* Separator at the active → inactive boundary (Gestalt common region): extra
+   margin-top ON TOP OF the list's own flex gap doubles the space above the
+   divider (16px vs. the normal 8px between cards), while the gap below stays
+   the standard 8px — reads as "attached to what follows, broken from what
+   came before," the usual convention for a group label. */
+.doc-list-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.doc-list-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.doc-list-divider-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .doc-item {
   display: flex;
   flex-direction: column;
@@ -277,6 +303,16 @@ a { color: inherit; text-decoration: none; }
 /* Inactive doc dims — in the library but not in the toolbar */
 .doc-item.inactive { opacity: 0.5; }
 .doc-item.inactive:hover { opacity: 0.85; border-color: var(--border-active); }
+
+/* A card's opacity < 1 (inactive/done) silently creates its own CSS stacking
+   context — so its "···" menu (however high ITS OWN z-index) is trapped
+   inside that context, and a LATER sibling card that's also opacity < 1 can
+   still paint over the whole thing, menu included, since sibling-vs-sibling
+   order is decided one level up, by the CARDS' stacking slots, not the menu's.
+   Fix: while a card's popover (menu or deadline calendar) is open, promote
+   the CARD ITSELF above its siblings with an explicit z-index — it's the
+   card's stacking slot that was losing, not the popover's. */
+.doc-item.popover-active { position: relative; z-index: 30; }
 
 /* ── Doc card "···" menu — consolidates Mark as done + Remove so the card's
    button row stays to just the toggle switch + one trigger. Same floating-

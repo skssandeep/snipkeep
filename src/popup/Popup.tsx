@@ -393,6 +393,76 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   // ones sink) — a stable sort, so order within each group is preserved. The
   // FLIP effect above animates the card as it moves between groups on toggle.
   const activeDocs = docs.filter(d => !d.done).sort((a, b) => Number(b.active) - Number(a.active))
+  // Index of the last active doc (-1 if none are active) — "Add document"
+  // renders right after it, not at the true bottom of the whole list. Adding
+  // a destination is an active-oriented action (a fresh doc is active by
+  // default), so it belongs grouped with "the docs you're using," not
+  // dangling after the "Hidden from toolbar" section — and it stays reachable
+  // without scrolling past however many toggled-off docs have piled up.
+  const lastActiveIdx = activeDocs.reduce((acc, d, idx) => d.active ? idx : acc, -1)
+
+  // Shared between its two render sites: normally right after the last active
+  // card, but if literally no doc is active, there's no "after the active
+  // group" position to hook onto, so it falls back to rendering above the
+  // (all-inactive) list instead of disappearing.
+  const addControl = (isAdding || docs.length === 0) ? (
+    <div className="add-form">
+      <div className="input-group">
+        <div className="field">
+          <span className="field-label">Google Doc URL</span>
+          <input
+            className="field-input mono"
+            value={newDocId}
+            onChange={e => handleDocUrlChange(e.target.value)}
+            placeholder="Paste URL or Doc ID"
+            spellCheck={false}
+            autoFocus={isAdding}
+          />
+        </div>
+
+        {newDocId.trim() && (
+          <div className="field name-preview-field">
+            <span className="field-label">
+              Name {isFetchingTitle && <span className="field-fetching">fetching…</span>}
+            </span>
+            {nameEditMode ? (
+              <input
+                className="field-input"
+                value={newDocName}
+                onChange={e => handleNameChange(e.target.value)}
+                placeholder="Enter a name"
+                autoFocus
+                onBlur={() => { if (!newDocName.trim()) setNameEditMode(false) }}
+              />
+            ) : (
+              <div className="name-preview" onClick={() => setNameEditMode(true)}>
+                <span className="name-preview-text">
+                  {isFetchingTitle ? '' : (newDocName || 'My Notes')}
+                </span>
+                <span className="name-preview-edit" title="Edit name"><MdEdit size={12} /></span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <p className="hint">Paste the full URL from your browser — the ID is extracted automatically.</p>
+
+      <div className="add-actions">
+        {docs.length > 0 && (
+          <button className="btn-ghost" onClick={handleCancelAdd}>Cancel</button>
+        )}
+        <button className="btn-primary add-submit" onClick={handleAddDoc} disabled={!newDocId.trim()}>
+          Add Document
+        </button>
+      </div>
+    </div>
+  ) : (
+    <button className="btn-add-trigger" onClick={() => setIsAdding(true)}>
+      <MdAdd size={16} className="btn-add-icon" />
+      Add document
+    </button>
+  )
 
   return (
     <div className="tab-content">
@@ -400,16 +470,30 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
       <div className="section">
         {activeDocs.length > 0 && (
           <div className="doc-list">
-            {activeDocs.map(doc => {
+            {activeDocs.map((doc, i) => {
               const uncited = uncitedCounts[doc.id] ?? 0
               const isEditingDeadline = editingDeadlineFor === doc.id
               const status = doc.dueDate && !isEditingDeadline ? deadlineStatus(doc.dueDate, uncited) : null
+              // Sort already groups active-above-inactive, but a sort alone is
+              // invisible — nothing signals WHY cards start dimming partway
+              // down. A label + rule at the exact transition point turns an
+              // implicit grouping into a perceptible one (Gestalt common
+              // region), and names the toggle's own effect ("Hide from
+              // toolbar" tooltip → "Hidden from toolbar" label) rather than
+              // inventing new vocabulary for the same concept.
+              const showInactiveDivider = i > 0 && activeDocs[i - 1].active && !doc.active
               return (
-                <div
-                  key={doc.id}
-                  ref={(el) => { if (el) cardEls.current.set(doc.id, el); else cardEls.current.delete(doc.id) }}
-                  className={`doc-item${doc.active ? '' : ' inactive'}`}
-                >
+                <React.Fragment key={doc.id}>
+                  {i === 0 && lastActiveIdx === -1 && addControl}
+                  {showInactiveDivider && (
+                    <div className="doc-list-divider">
+                      <span className="doc-list-divider-label">Hidden from toolbar</span>
+                    </div>
+                  )}
+                  <div
+                    ref={(el) => { if (el) cardEls.current.set(doc.id, el); else cardEls.current.delete(doc.id) }}
+                    className={`doc-item${doc.active ? '' : ' inactive'}${(menuOpenFor === doc.id || isEditingDeadline) ? ' popover-active' : ''}`}
+                  >
                   <div className="doc-item-top">
                     <div className="doc-info">
                       <div className="doc-name">{doc.name}</div>
@@ -471,7 +555,9 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
                       )}
                     </div>
                   )}
-                </div>
+                  </div>
+                  {i === lastActiveIdx && addControl}
+                </React.Fragment>
               )
             })}
           </div>
@@ -483,65 +569,10 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
 
         {flash && <div className="flash">{flash}</div>}
 
-        {/* Form is revealed on demand — or always open on first run (no docs yet) */}
-        {(isAdding || docs.length === 0) ? (
-          <div className="add-form">
-            <div className="input-group">
-              <div className="field">
-                <span className="field-label">Google Doc URL</span>
-                <input
-                  className="field-input mono"
-                  value={newDocId}
-                  onChange={e => handleDocUrlChange(e.target.value)}
-                  placeholder="Paste URL or Doc ID"
-                  spellCheck={false}
-                  autoFocus={isAdding}
-                />
-              </div>
-
-              {newDocId.trim() && (
-                <div className="field name-preview-field">
-                  <span className="field-label">
-                    Name {isFetchingTitle && <span className="field-fetching">fetching…</span>}
-                  </span>
-                  {nameEditMode ? (
-                    <input
-                      className="field-input"
-                      value={newDocName}
-                      onChange={e => handleNameChange(e.target.value)}
-                      placeholder="Enter a name"
-                      autoFocus
-                      onBlur={() => { if (!newDocName.trim()) setNameEditMode(false) }}
-                    />
-                  ) : (
-                    <div className="name-preview" onClick={() => setNameEditMode(true)}>
-                      <span className="name-preview-text">
-                        {isFetchingTitle ? '' : (newDocName || 'My Notes')}
-                      </span>
-                      <span className="name-preview-edit" title="Edit name"><MdEdit size={12} /></span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <p className="hint">Paste the full URL from your browser — the ID is extracted automatically.</p>
-
-            <div className="add-actions">
-              {docs.length > 0 && (
-                <button className="btn-ghost" onClick={handleCancelAdd}>Cancel</button>
-              )}
-              <button className="btn-primary add-submit" onClick={handleAddDoc} disabled={!newDocId.trim()}>
-                Add Document
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button className="btn-add-trigger" onClick={() => setIsAdding(true)}>
-            <MdAdd size={16} className="btn-add-icon" />
-            Add document
-          </button>
-        )}
+        {/* Fallback for when the list itself doesn't render at all — either
+            genuinely zero docs, or every doc is marked done/completed — since
+            in either case the in-list insertion points above never fire. */}
+        {activeDocs.length === 0 && addControl}
       </div>
 
       {/* Notion — hidden until ready */}
