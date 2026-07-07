@@ -103,7 +103,7 @@ Tokens live in `popup.css` `:root` — warm-near-black surfaces + one electric-v
 
 **Spacing:** a 4px-grid scale lives in `:root` as `--space-1`…`--space-6` (4/8/12/16/20/24). Gaps, padding, and margins should reference these, not raw px. Do **not** stack a child `margin-bottom` on top of a parent flex `gap` — that double-spaces (History's control cluster hit exactly this: `gap:22` + per-child margins → 32–34px real gaps). Group related controls under one wrapper with its own `gap` (proximity) instead. Content cards (`.doc-item`/`.history-item`/`.account-row`/`.privacy-item`/`.triage-card`) all share `var(--space-3) var(--space-4)` padding.
 
-**Tab switching:** the three tabs are distinct components, so switching unmounts one and mounts the next — `.tab-content` therefore carries a mount entrance animation (`cn-tab-in`, fade + 6px settle) that fires exactly on switch, gated behind `prefers-reduced-motion`. No key or extra state needed; don't add a shared persistent wrapper around the tabs or the animation stops firing.
+**Tab switching:** instant, no entrance animation — a `.tab-content` mount animation was tried and then deliberately removed (see `docs/FEATURES.md`). The only motion left in the popup is the tuned card-reorder slide in `DocsTab`; don't reintroduce a whole-section fade/settle on tab switch without being asked.
 
 **Gotcha:** `Toolbar.tsx` and the toast (`content/index.tsx`) are separate Shadow DOM roots that **hardcode hex values** (no access to the CSS variables). When tokens change, update those by hand or they silently drift out of WCAG sync.
 

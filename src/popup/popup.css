@@ -152,23 +152,14 @@ a { color: inherit; text-decoration: none; }
 .tab.active::after { background: var(--accent); }
 
 /* ── Tab content ── */
-/* Each tab is a distinct component, so switching tabs unmounts one and mounts
-   the next — this entrance animation therefore fires exactly on switch (and
-   once, gently, when the popup first opens), making the change feel like a
-   settle rather than a hard swap. Same easing as the add-form reveal. */
-@keyframes cn-tab-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+/* No entrance animation on tab switch (removed — see docs/FEATURES.md): the
+   only motion left in this UI is the deliberate, tuned card-reorder slide in
+   DocsTab. Switching tabs is now an instant swap, on purpose. */
 .tab-content {
   padding: var(--space-5) var(--space-5) var(--space-6);
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  animation: cn-tab-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-}
-@media (prefers-reduced-motion: reduce) {
-  .tab-content { animation: none; }
 }
 
 /* ── Section ── */
@@ -281,6 +272,13 @@ a { color: inherit; text-decoration: none; }
   flex-shrink: 0;
   transition: background 0.2s;
 }
+/* Knob slides via `transform`, not `left` — `left` is a layout property, so
+   animating it forces a layout+paint recalculation on every frame (a classic
+   cause of janky, non-smooth motion, worse still inside a content script's
+   Shadow DOM competing with the host page's own rendering). `transform` is
+   compositor-only: the browser can slide it on the GPU with no layout work
+   at all. `left: 2px` below is now a fixed base position, not the animated
+   value — the knob's two states differ only by how far they translate. */
 .btn-toggle::after {
   content: '';
   position: absolute;
@@ -289,7 +287,9 @@ a { color: inherit; text-decoration: none; }
   border-radius: 50%;
   background: #fff;
   top: 2px;
-  transition: left 0.2s;
+  left: 2px;
+  transform: translateX(0);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 .btn-toggle.on  { background: var(--toggle-on); }
@@ -297,8 +297,8 @@ a { color: inherit; text-decoration: none; }
 /* Brighten to full accent only on interaction, so the doc name leads at rest */
 .doc-item:hover .btn-toggle.on,
 .btn-toggle.on:hover { background: var(--accent); }
-.btn-toggle.on::after  { left: 12px; }
-.btn-toggle.off::after { left: 2px; }
+.btn-toggle.on::after  { transform: translateX(10px); }
+.btn-toggle.off::after { transform: translateX(0); }
 
 /* Inactive doc dims — in the library but not in the toolbar */
 .doc-item.inactive { opacity: 0.5; }

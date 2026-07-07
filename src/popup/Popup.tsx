@@ -148,6 +148,10 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   // slow-in AND slow-out, not just a mathematically-technically-nonzero one.
   const cardEls = useRef<Map<string, HTMLDivElement>>(new Map())
   const prevTops = useRef<Map<string, number>>(new Map())
+  // Tracks each card's active state as of the last render, so an active↔
+  // inactive flip (opacity 1 ↔ 0.5) can be folded into the SAME animate()
+  // call as the position slide — see the opacity note below for why.
+  const prevActiveMap = useRef<Map<string, boolean>>(new Map())
   useLayoutEffect(() => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     // Iterate in the doc's current visual order (not Map insertion order) so
@@ -160,18 +164,35 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
       // transforms, so we compare true layout positions only.
       const nextTop = el.offsetTop
       const prevTop = prevTops.current.get(doc.id)
-      if (prevTop !== undefined && !reduce) {
-        const dy = prevTop - nextTop
-        if (Math.abs(dy) > 1) {
-          const duration = Math.min(650, 380 + Math.abs(dy) * 0.4)
-          const delay = Math.min(150, index * 20)
-          el.animate(
-            [{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }],
-            { duration, delay, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'none' }
-          )
-        }
+      const prevWasActive = prevActiveMap.current.get(doc.id)
+      const dy = prevTop !== undefined ? prevTop - nextTop : 0
+      const positionChanged = prevTop !== undefined && Math.abs(dy) > 1
+      const opacityChanged = prevWasActive !== undefined && prevWasActive !== doc.active
+      if (!reduce && (positionChanged || opacityChanged)) {
+        // .doc-item.inactive is opacity 0.5 in CSS (see popup.css) — but that
+        // CSS transition only ever covered background/box-shadow, never
+        // opacity. Toggling active/inactive therefore SNAPPED the dimming
+        // instantly, at the exact same moment the slide began: a sharp,
+        // un-animated visual change landing right at the start of otherwise
+        // smooth motion is exactly what reads as a "jerk," independent of how
+        // good the sliding itself is. Folding opacity into this SAME
+        // animate() call (rather than a separate CSS transition) guarantees
+        // it's perfectly synced to the slide's duration/delay/easing — no
+        // second timeline that could drift out of step with the first.
+        const fromOpacity = prevWasActive === undefined ? (doc.active ? 1 : 0.5) : (prevWasActive ? 1 : 0.5)
+        const toOpacity = doc.active ? 1 : 0.5
+        const duration = Math.min(780, 460 + Math.abs(dy) * 0.4)
+        const delay = Math.min(150, index * 20)
+        el.animate(
+          [
+            { transform: `translateY(${dy}px)`, opacity: fromOpacity },
+            { transform: 'translateY(0)', opacity: toOpacity },
+          ],
+          { duration, delay, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'none' }
+        )
       }
       prevTops.current.set(doc.id, nextTop)
+      prevActiveMap.current.set(doc.id, doc.active)
     })
   })
 
