@@ -347,11 +347,6 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
       } else if (event.kind === 'error') {
         setVoiceError(event.error)
         setIsRecording(false)
-      } else if (event.kind === 'permission-needed') {
-        // The background already opened a real tab — that's the only place
-        // Chrome will actually show the mic permission dialog.
-        setVoiceError('Opening a tab so you can allow microphone access — try the mic again once you\'ve granted it.')
-        setIsRecording(false)
       } else {
         setIsRecording(false)
       }

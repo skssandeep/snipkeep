@@ -74,22 +74,22 @@ Plus Jakarta Sans is bundled at `public/fonts/plus-jakarta-sans.woff2` (one vari
 
 `chrome.action.onClicked` messages the tab with `TOGGLE_DRAWER`. Tabs opened *before* the extension loaded have no content script, so on failure the background injects `src/content/index.js` via `chrome.scripting.executeScript` and retries. On restricted pages (New Tab, `chrome://`, Web Store, PDF viewer) injection is impossible → a `chrome.notifications` message explains why. The right-click "Save image" context menu uses the same inject-on-demand fallback.
 
-### Offscreen document (`src/offscreen/`) — voice-note capture
+### Voice tab (`src/voice/`) — voice-note capture
 
-The Toolbar's mic button (speak a margin note instead of typing it) runs `SpeechRecognition` inside a **`chrome.offscreen` document**, not directly in the content-script context. Reason: a mic permission requested from a content script is scoped to *whatever website the user is on* ("nytimes.com wants to use your microphone") — asked again per new domain, and silently blocked outright on sites with a restrictive Permissions-Policy header. Requesting it from the extension's own stable origin (`chrome-extension://<id>/src/offscreen/index.html`) instead means it's asked once, ever, attributed to SnipKeep, and works identically on every site after.
+The Toolbar's mic button (speak a margin note instead of typing it) runs `SpeechRecognition` inside a **real, visible tab** (`chrome.tabs.create({url: 'src/voice/index.html'})`), not the content-script context and — this took two attempts to land on — not a `chrome.offscreen` document either.
 
-`vite.config.ts` needs `additionalInputs: ['src/offscreen/index.html']` — offscreen documents aren't declared anywhere in the manifest schema (`chrome.offscreen.createDocument()` just takes a URL string at runtime), so without this the plugin never bundles it into `dist/`.
+**Why not a content script:** a mic permission requested there is scoped to *whatever website the user is on* ("nytimes.com wants to use your microphone") — asked again per new domain, silently blocked outright on sites with a restrictive Permissions-Policy header.
 
-**Five message types, one hop each — never reuse a type name across hops.** `chrome.tabs.sendMessage` with an explicit `frameId` goes to exactly one frame; `chrome.runtime.sendMessage` broadcasts to *every* extension context (every tab's content script, the offscreen doc, etc.). Mixing the two up (or reusing one type name on two different hops) risks a listener seeing the same event twice:
+**Why not `chrome.offscreen` (tried first, reverted):** offscreen documents have no visible surface for Chrome to anchor a `getUserMedia` prompt to, so `recognition.start()` there fails immediately with `NotAllowedError`, no dialog ever shown — confirmed against the Chromium extensions mailing list and multiple GitHub issues describing the identical failure. The natural-seeming fix — grant the permission via a separate real tab first, then let the offscreen doc (same extension origin) use it afterward — was built and tested live, and **still failed**: granting via the tab worked (confirmed: native prompt appeared, "Microphone in use" indicator lit up), but the offscreen document still couldn't use the mic afterward. Since no source could be found confirming offscreen documents can *ever* successfully call `getUserMedia`, even post-grant, the whole approach was abandoned rather than guessed at a third time. `src/offscreen/` and `src/permission/` (the two-file split from that attempt) no longer exist.
+
+**Current design:** one real tab does both jobs — requesting the permission (shows Chrome's native dialog on first use; resolves instantly with no prompt on every use after, since the grant is scoped to the extension's stable origin) and running the recognition itself, live, for as long as the tab stays open. `vite.config.ts` needs `additionalInputs: ['src/voice/index.html']` — like the abandoned offscreen/permission pages, this isn't declared anywhere in the manifest schema (`chrome.tabs.create()` just takes a URL string at runtime), so without this the plugin never bundles it into `dist/`.
+
 ```
-Toolbar --START_VOICE_NOTE/STOP_VOICE_NOTE--> background
-background --OFFSCREEN_START/STOP_RECOGNITION--> offscreen doc (created on demand)
-offscreen doc --VOICE_RECOGNITION_EVENT--> background (rejects any instance carrying a sender.tab — should only ever come from the offscreen doc)
-background --VOICE_NOTE_UPDATE (chrome.tabs.sendMessage, explicit frameId)--> Toolbar
+Toolbar --START_VOICE_NOTE--> background --(chrome.tabs.create)--> voice tab
+voice tab --VOICE_RECOGNITION_EVENT--> background --VOICE_NOTE_UPDATE (explicit frameId)--> Toolbar
+Toolbar --STOP_VOICE_NOTE--> background --VOICE_TAB_STOP (explicit tabId, chrome.tabs.sendMessage)--> voice tab
 ```
-The background tracks which `{tabId, frameId}` requested the active session in a plain in-memory variable (`voiceNoteTarget`) — fine for a live-streaming interaction, unlike the durable data elsewhere in this file that must survive a service-worker restart; if the SW is killed mid-recording, that one session just stops.
-
-**Gotcha — offscreen documents cannot show the `getUserMedia` permission dialog, ever.** They have no visible surface for Chrome to anchor the prompt to, so `recognition.start()` there fails immediately with `NotAllowedError`/`not-allowed` regardless of whether the user was ever actually asked — confirmed against the Chromium extensions mailing list and multiple independent GitHub issues describing the identical failure, not assumed. The fix is a **second** extra page, `src/permission/index.html` (also in `vite.config.ts`'s `additionalInputs`) — a real, visible tab opened via `chrome.tabs.create`, whose only job is to call `getUserMedia` itself so Chrome's native dialog can actually appear. Once granted there, the offscreen doc can use it freely (same extension origin, no re-prompt). The offscreen script's `onerror` routes all three of `not-allowed`/`permission-denied`/`service-not-allowed` into a distinct `VoiceEvent` kind, `'permission-needed'` — never treated as a plain error, since the fix isn't "show a message," it's "open the one page that can actually resolve this."
+The background tracks `voiceSession: {originTabId, originFrameId, voiceTabId}` in a plain in-memory variable — fine for a live-streaming interaction, unlike the durable data elsewhere in this file that must survive a service-worker restart; if the SW is killed mid-recording, that one session just stops. Because the voice tab is a real tab (not an offscreen doc), `chrome.tabs.sendMessage` can target it directly by id for the stop command — no broadcast-collision risk to design around on that leg, unlike the origin-tab relay leg which still needs an explicit `frameId`. A `chrome.tabs.onRemoved` listener also ends the session if the voice tab is closed any other way (user closes it manually, or it self-closes after an error), so state can't linger stale. Ending a session always calls `chrome.tabs.update(originTabId, {active: true})` to explicitly return focus to wherever the user was working — `chrome.tabs.create`'s own opener-based focus-return isn't reliable when the tab was opened from the background rather than a real click in the origin tab.
 
 ### Message flow
 
@@ -101,8 +101,9 @@ Save image   → background contextMenus.onClicked → CAPTURE_IMAGE → content
              → content → SAVE_IMAGE       → background → Google Docs API   (insertInlineImage)
 Add doc note → content → ADD_DOC_NOTE     → background → Google Docs API   (Living Resurface write-back)
 Drawer auth  → content → GET_USER_PROFILE / GET_DOC_TITLE / SIGN_IN / SIGN_OUT → background (chrome.identity)
-Voice note   → content → START/STOP_VOICE_NOTE → background → OFFSCREEN_START/STOP_RECOGNITION → offscreen doc
-             → offscreen doc → VOICE_RECOGNITION_EVENT → background → VOICE_NOTE_UPDATE (explicit frameId) → content
+Voice note   → content → START_VOICE_NOTE → background → chrome.tabs.create → voice tab (src/voice/)
+             → voice tab → VOICE_RECOGNITION_EVENT → background → VOICE_NOTE_UPDATE (explicit frameId) → content
+             → content → STOP_VOICE_NOTE → background → VOICE_TAB_STOP (explicit tabId) → voice tab
 ```
 All message types are in `src/types.ts`.
 

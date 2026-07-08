@@ -8,12 +8,11 @@ export default defineConfig({
     react(),
     webExtension({
       manifest: 'manifest.json',
-      // Neither the offscreen document nor the mic-permission tab (both part
-      // of voice-note capture) are declared anywhere in manifest.json's
-      // schema — chrome.offscreen.createDocument() and chrome.tabs.create()
-      // just take URL strings at runtime — so both need to be listed here
-      // explicitly or the plugin never bundles them into dist/.
-      additionalInputs: ['src/offscreen/index.html', 'src/permission/index.html'],
+      // The voice-note tab (src/voice/) isn't declared anywhere in
+      // manifest.json's schema — chrome.tabs.create() just takes a URL
+      // string at runtime — so it needs to be listed here explicitly or the
+      // plugin never bundles it into dist/.
+      additionalInputs: ['src/voice/index.html'],
     }),
   ],
   resolve: {

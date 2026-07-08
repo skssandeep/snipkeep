@@ -24,11 +24,9 @@ import type {
   StartVoiceNoteMessage,
   StartVoiceNoteResponse,
   StopVoiceNoteMessage,
-  OffscreenStartRecognitionMessage,
-  OffscreenStopRecognitionMessage,
+  VoiceTabStopMessage,
   VoiceRecognitionEventMessage,
   VoiceNoteUpdateMessage,
-  MicPermissionGrantedMessage,
 } from '../types'
 
 const DOCS_API = 'https://docs.googleapis.com/v1/documents'
@@ -1236,34 +1234,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 })
 
 // ── Voice-note capture ─────────────────────────────────────────────────────
-// SpeechRecognition/getUserMedia run in an offscreen document (its own stable
-// chrome-extension:// origin), not directly in the Toolbar's content-script
-// context — a mic permission requested from a content script is scoped to
-// whatever website the user is on ("nytimes.com wants your microphone"),
-// asked again per new domain, and silently blocked outright on sites with a
-// restrictive Permissions-Policy header. Requesting it from the extension's
-// own origin instead means it's asked once, ever, and works identically
-// everywhere after. See tasks/todo.md's "Voice-note capture" entry for the
-// full message-flow design (five distinct types, one hop each).
+// SpeechRecognition/getUserMedia run in a real, visible tab (src/voice/), not
+// a chrome.offscreen document. Offscreen was tried first specifically to
+// avoid a visible tab appearing — confirmed live that it doesn't work:
+// getUserMedia there fails immediately with NotAllowedError and no prompt
+// ever shown, and granting the permission via a separate real tab first
+// didn't make a subsequent offscreen attempt succeed either. A real tab is
+// the one thing proven to work end to end, so recognition happens right
+// there instead. See CLAUDE.md's "Voice tab" section for the full design.
 
 // In-memory only — a live-streaming interaction, not persisted data. If the
 // service worker is killed mid-recording, that one session just stops.
-let voiceNoteTarget: { tabId: number; frameId: number } | null = null
+let voiceSession: { originTabId: number; originFrameId: number; voiceTabId: number } | null = null
 
-// Which tab to return focus to once the mic-permission tab reports success.
-// Captured separately from voiceNoteTarget (which gets cleared the instant
-// the permission-needed event is handled) since the user may take a while
-// to grant it, by which point voiceNoteTarget is long gone.
-let pendingPermissionReturnTabId: number | null = null
-
-async function ensureOffscreenDocument(): Promise<void> {
-  const has = await chrome.offscreen.hasDocument()
-  if (has) return
-  await chrome.offscreen.createDocument({
-    url: 'src/offscreen/index.html',
-    reasons: [chrome.offscreen.Reason.USER_MEDIA],
-    justification: 'Transcribes a spoken margin note into text for the clip toolbar\'s note field.',
-  })
+function endVoiceSession(returnFocus: boolean) {
+  if (!voiceSession) return
+  const { originTabId } = voiceSession
+  voiceSession = null
+  if (returnFocus) chrome.tabs.update(originTabId, { active: true }).catch(() => {})
 }
 
 chrome.runtime.onMessage.addListener(
@@ -1273,9 +1261,9 @@ chrome.runtime.onMessage.addListener(
     ;(async () => {
       if (!sender.tab?.id) { sendResponse({ success: false, error: 'No active tab' }); return }
       try {
-        await ensureOffscreenDocument()
-        voiceNoteTarget = { tabId: sender.tab.id, frameId: sender.frameId ?? 0 }
-        chrome.runtime.sendMessage({ type: 'OFFSCREEN_START_RECOGNITION' } satisfies OffscreenStartRecognitionMessage)
+        const voiceTab = await chrome.tabs.create({ url: 'src/voice/index.html', openerTabId: sender.tab.id })
+        if (!voiceTab.id) throw new Error('Could not open the voice-input tab')
+        voiceSession = { originTabId: sender.tab.id, originFrameId: sender.frameId ?? 0, voiceTabId: voiceTab.id }
         sendResponse({ success: true })
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Could not start voice input' })
@@ -1288,52 +1276,36 @@ chrome.runtime.onMessage.addListener(
 
 chrome.runtime.onMessage.addListener((message: StopVoiceNoteMessage) => {
   if (message.type !== 'STOP_VOICE_NOTE') return false
-  chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP_RECOGNITION' } satisfies OffscreenStopRecognitionMessage)
+  if (voiceSession) {
+    const stop: VoiceTabStopMessage = { type: 'VOICE_TAB_STOP' }
+    chrome.tabs.sendMessage(voiceSession.voiceTabId, stop).catch(() => {})
+  }
   return false
 })
 
-// Relays the offscreen doc's transcript/error/ended events to the one tab+
-// frame that actually asked for them — chrome.tabs.sendMessage with an
-// explicit frameId, not a chrome.runtime broadcast, so this can't double-
-// deliver to every open tab's content script.
+// Relays the voice tab's transcript/error/ended events to the one tab+frame
+// that actually asked for them — chrome.tabs.sendMessage with an explicit
+// frameId, not a chrome.runtime broadcast, so this can't double-deliver to
+// every open tab's content script.
 chrome.runtime.onMessage.addListener((message: VoiceRecognitionEventMessage, sender) => {
   if (message.type !== 'VOICE_RECOGNITION_EVENT') return false
-  if (sender.tab) return false  // defensive: this should only ever come from the offscreen doc
-  if (!voiceNoteTarget) return false
+  // Only accept this from the specific voice tab this session opened — a
+  // real tab now (not an offscreen doc), so it does have a sender.tab; the
+  // check is that its id matches, not merely that a tab id is present.
+  if (!voiceSession || sender.tab?.id !== voiceSession.voiceTabId) return false
 
-  const { tabId, frameId } = voiceNoteTarget
+  const { originTabId, originFrameId } = voiceSession
   const update: VoiceNoteUpdateMessage = { type: 'VOICE_NOTE_UPDATE', event: message.event }
-  chrome.tabs.sendMessage(tabId, update, { frameId }).catch(() => {})
+  chrome.tabs.sendMessage(originTabId, update, { frameId: originFrameId }).catch(() => {})
 
-  // The offscreen doc can never show Chrome's actual mic permission dialog —
-  // the only place that can is a real, visible tab. Open one; the Toolbar
-  // just shows a message explaining that (see its VOICE_NOTE_UPDATE handler).
-  if (message.event.kind === 'permission-needed') {
-    pendingPermissionReturnTabId = tabId
-    // openerTabId groups the new tab next to the one the user was working
-    // in and gives Chrome its own "return here" hint — but that's a
-    // heuristic, not a guarantee (this tab was opened from the background,
-    // not a real click in the origin tab, so Chrome has no natural opener
-    // relationship to fall back on). The MIC_PERMISSION_GRANTED handler
-    // below does the actual, deterministic focus-back via chrome.tabs.update.
-    chrome.tabs.create({ url: 'src/permission/index.html', openerTabId: tabId })
-  }
-
-  if (message.event.kind === 'ended' || message.event.kind === 'error' || message.event.kind === 'permission-needed') {
-    voiceNoteTarget = null
-  }
+  if (message.event.kind === 'ended' || message.event.kind === 'error') endVoiceSession(true)
   return false
 })
 
-// The permission tab sends this once getUserMedia actually succeeds —
-// explicitly switch focus back to wherever the user was working, rather than
-// relying on chrome.tabs.create's opener heuristics (unreliable here, since
-// the tab was opened from the background, not a real click in the origin tab).
-chrome.runtime.onMessage.addListener((message: MicPermissionGrantedMessage) => {
-  if (message.type !== 'MIC_PERMISSION_GRANTED') return false
-  if (pendingPermissionReturnTabId !== null) {
-    chrome.tabs.update(pendingPermissionReturnTabId, { active: true }).catch(() => {})
-    pendingPermissionReturnTabId = null
-  }
-  return false
+// The voice tab can also close on its own (user closes it manually, or it
+// self-closes after an error state) without the 'ended'/'error' event above
+// necessarily having been the thing that triggered it — clean up either way
+// so a stale session can't linger.
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (voiceSession?.voiceTabId === tabId) endVoiceSession(true)
 })

@@ -626,161 +626,112 @@ Hold/click a mic button in the toolbar's note panel and speak a margin note
 instead of typing it — transcribed via the Web Speech API. Chosen from a
 fresh 5-idea creative brainstorm (docs/IDEAS.md) as the first to build.
 
-## Design
+## Why not a direct content-script call
 
-**Why an offscreen document, not a direct content-script call.** Researched
-before building: calling `SpeechRecognition`/`getUserMedia` directly from the
-Toolbar (a content script) would trigger a mic-permission prompt scoped to
-*whatever website the user is currently on* ("nytimes.com wants to use your
+Calling `SpeechRecognition`/`getUserMedia` directly from the Toolbar (a
+content script) would trigger a mic-permission prompt scoped to *whatever
+website the user is currently on* ("nytimes.com wants to use your
 microphone") — asked again per new domain, and silently blocked outright on
-any site with a restrictive Permissions-Policy header. The documented fix:
-request the permission from the extension's own stable origin instead, via
-MV3's `chrome.offscreen` API (`reasons: ['USER_MEDIA']`) — asked once, ever,
-attributed to SnipKeep, works identically on every site afterward.
+any site with a restrictive Permissions-Policy header.
 
-**Message flow — five distinct types, one hop each, zero ambiguity.**
-`chrome.runtime.sendMessage` broadcasts to *every* extension context (all
-tabs' content scripts, the offscreen doc, etc.), unlike `chrome.tabs.
-sendMessage` with an explicit `frameId`. To avoid any double-delivery, each
-message type is used on exactly one hop, never reused across hops:
-- `START_VOICE_NOTE` / `STOP_VOICE_NOTE` — Toolbar → background.
-- `OFFSCREEN_START_RECOGNITION` / `OFFSCREEN_STOP_RECOGNITION` — background →
-  offscreen doc (created on demand via `chrome.offscreen.createDocument`,
-  `additionalInputs: ['src/offscreen/index.html']` added to `vite.config.ts`
-  since offscreen documents aren't declared in the manifest schema at all).
-- `VOICE_RECOGNITION_EVENT` — offscreen → background (background rejects any
-  instance of this with a `sender.tab` present, as a defensive check — it
-  should only ever come from the offscreen doc).
+## Two architectures tried — only the second one actually works, confirmed live
+
+**First: `chrome.offscreen` (built, shipped, then fully reverted).** The
+documented fix for "request a permission scoped to the extension's own
+origin" is `chrome.offscreen` (`reasons: ['USER_MEDIA']`). Failed on the
+first live test: "Microphone permission was denied," instantly, no prompt
+shown. Researched rather than guessing again — confirmed via the Chromium
+extensions mailing list and multiple GitHub issues that offscreen documents
+have no visible surface for Chrome to anchor a `getUserMedia` prompt to, a
+hard platform restriction. Built the natural next fix — a *separate* real
+tab (`src/permission/`) whose only job was triggering the dialog, then
+letting the offscreen doc use the mic afterward (same extension origin).
+Tested live: the permission step itself worked (native dialog appeared,
+"Microphone in use" indicator lit up) — but the offscreen document still
+couldn't use the microphone afterward. No source could be found confirming
+an offscreen document can *ever* successfully call `getUserMedia`, granted
+or not. Abandoned entirely rather than patched a third time —
+`src/offscreen/` and `src/permission/` no longer exist.
+
+**Second, current: a real, visible tab does the recognition itself.** The
+one thing proven to work end to end is a real tab — so recognition now
+happens right there. `src/voice/index.html` + `index.ts`, opened via
+`chrome.tabs.create` when the mic button is clicked: requests
+`getUserMedia({audio:true})` on load (native dialog first time, instant
+resolve every time after, since the grant is scoped to the extension's
+stable origin), then immediately starts `SpeechRecognition` for as long as
+the tab stays open.
+
+## Message flow (current)
+
+A real tab has an actual id, so `chrome.tabs.sendMessage` can target it
+directly — no broadcast-collision risk to design around on that leg, unlike
+the abandoned offscreen version where every hop needed a uniquely-named
+message type to avoid `chrome.runtime.sendMessage`'s broadcast-to-everyone
+behavior colliding with itself.
+- `START_VOICE_NOTE` — Toolbar → background. Background opens the voice tab,
+  tracks `voiceSession: {originTabId, originFrameId, voiceTabId}` in a plain
+  in-memory variable (fine for a live-streaming interaction — if the service
+  worker is killed mid-recording, that one session just stops).
+- `VOICE_RECOGNITION_EVENT` — voice tab → background. Checks
+  `sender.tab?.id === voiceSession.voiceTabId` — a real tab always has a
+  `sender.tab`, unlike the old offscreen doc, so this is about matching the
+  *right* tab, not detecting the absence of one.
 - `VOICE_NOTE_UPDATE` — background → Toolbar, via `chrome.tabs.sendMessage`
-  with the exact `{tabId, frameId}` captured when `START_VOICE_NOTE` was
-  handled (in-memory only in the background; a live-streaming interaction,
-  not persisted data — if the service worker is killed mid-recording, that
-  one session just stops, an acceptable degradation).
+  with the origin's exact `{tabId, frameId}`.
+- `STOP_VOICE_NOTE` — Toolbar → background → `VOICE_TAB_STOP` sent directly
+  to `voiceSession.voiceTabId`.
+- `chrome.tabs.onRemoved` also ends the session if the voice tab closes any
+  other way (user closes it manually, or it self-closes after an error).
 
-**Transcript merging.** The note's value at the moment recording starts is
-captured as `baseNote`; every `onresult` event replaces (never appends to)
-the "this session" portion — `baseNote + (baseNote ? ' ' : '') + sessionText`
-— since interim results re-fire with cumulative text each time, naive
-appending would duplicate words on every update.
+**Returning focus to the origin tab is explicit, not left to Chrome.** A
+live test surfaced this as its own bug: after the tab closed, Chrome
+switched focus to some unrelated tab instead of back to the one the user
+was working in, because the tab was opened from the background (no "current
+tab" concept, so no real opener relationship for Chrome to fall back on).
+Fixed by never relying on that — ending a voice session always calls
+`chrome.tabs.update(originTabId, {active: true})` explicitly, regardless of
+how the session ended.
 
-**Failure modes handled explicitly, not silently:** `SpeechRecognition`
-unsupported in this browser → mic button hidden entirely (feature-detected
-once); permission denied → inline error text, button reverts to idle,
-retriable; recognition ends on its own (silence/timeout) → treated the same
-as an explicit stop. A 90s safety timeout in the offscreen script force-stops
-a forgotten-open mic.
+**Transcript merging** still happens in the Toolbar, not the voice tab
+(unchanged from the original design): `baseNote + (baseNote ? ' ' : '') +
+sessionText`, replacing rather than appending the session portion each
+update, since `onresult` re-fires with cumulative text each time.
+
+**Failure modes, still explicit:** unsupported browser → mic button hidden
+(feature-detected directly via `'webkitSpeechRecognition' in window`,
+skipping a message round-trip); permission denied → the voice tab points at
+the address bar's site-settings icon (Chrome won't re-show its prompt after
+an explicit denial) and reports an error so the Toolbar reflects it too;
+recognition ending on its own is treated like an explicit stop; a 90s safety
+timeout force-stops a forgotten-open mic; Toolbar unmount mid-recording
+sends `STOP_VOICE_NOTE`.
 
 ## Tasks
-- [x] types.ts — the 5 message types above (StartVoiceNote*, StopVoiceNote,
-      Offscreen*, VoiceRecognitionEvent, VoiceNoteUpdate) + a shared
-      discriminated VoiceEvent union (transcript/error/ended)
-- [x] vite.config.ts — additionalInputs: ['src/offscreen/index.html']
-- [x] manifest.json — add "offscreen" permission
-- [x] src/offscreen/index.html + index.ts — SpeechRecognition lifecycle,
-      base/session transcript merge is NOT here (offscreen only streams raw
-      transcript text; merging with baseNote happens in the Toolbar, since
-      the offscreen doc has no notion of "what's already in the note field")
-- [x] background/index.ts — ensureOffscreenDocument, START/STOP handlers,
-      voiceNoteTarget in-memory tracking, VOICE_RECOGNITION_EVENT relay
+- [x] types.ts — VoiceEvent (transcript/error/ended), Start/StopVoiceNote,
+      VoiceTabStop, VoiceRecognitionEvent, VoiceNoteUpdate
+- [x] vite.config.ts — additionalInputs: ['src/voice/index.html']
+- [x] manifest.json — no extra permission needed (offscreen permission
+      removed along with the abandoned offscreen approach)
+- [x] src/voice/index.html + index.ts — permission request + SpeechRecognition
+      lifecycle + Listening/error UI, all in one real tab
+- [x] background/index.ts — voiceSession tracking, START/STOP handlers,
+      VOICE_RECOGNITION_EVENT relay (matched by voiceTabId), VOICE_TAB_STOP,
+      chrome.tabs.onRemoved cleanup, explicit focus-return on session end
 - [x] Toolbar.tsx — mic button in .note-foot, recording state, baseNote
-      capture + merge on VOICE_NOTE_UPDATE, error text. Feature-detection
-      ended up simpler than planned: checked directly via `'webkitSpeech
-      Recognition' in window` in the Toolbar itself, no message round-trip —
-      the API's mere existence isn't origin-restricted, only actually using
-      the mic is, so this is valid without needing the offscreen doc's context.
-- [x] Toolbar STYLES — hardcoded hex (matches this component's existing
-      convention, not popup.css's CSS-variable system), pulse animation
-      respecting prefers-reduced-motion
-- [x] tsc (clean) + build; verified compiled into all three bundles
-      (background: voiceNoteTarget/ensureOffscreenDocument/USER_MEDIA;
-      content: btn-mic/isRecording/START_VOICE_NOTE; offscreen:
-      webkitSpeechRecognition/MAX_SESSION_MS/VOICE_RECOGNITION_EVENT).
-      Visually verified all 3 UI states (idle/recording/permission-denied)
-      against the real extracted Toolbar STYLES string via headless Chrome.
+      capture + merge on VOICE_NOTE_UPDATE, error text, feature-detection
+      (unchanged from original design — this component didn't need to
+      change across either architecture attempt)
+- [x] tsc clean + build; verified dist/src/voice/ exists, dist/src/offscreen/
+      and dist/src/permission/ no longer do, offscreen manifest permission
+      removed, and expected identifiers compiled into all affected bundles
+- [x] Voice tab's "Listening…" state visually verified via headless Chrome
+      against its real HTML/CSS
 - [ ] Live verification in Chrome (mic permission prompt, transcript
-      accuracy, stop/resume, denied-permission path) — needs the real
-      microphone + a real Google account context; not testable via headless
-      automation. FULL reload required (new "offscreen" permission).
+      accuracy, stop/resume) — needs a real microphone; not testable via
+      headless automation. FULL reload required.
 
-## Status: Built, type-checked, and visually verified. NOT yet live-tested —
-this is the one part of this feature that genuinely needs the user's own
-Chrome + microphone, same as OAuth-dependent features elsewhere in this file.
-
-## Follow-up: offscreen documents can't show the mic permission dialog at all (same session)
-
-First live test hit "Microphone permission was denied" instantly, with no
-permission prompt ever appearing. Researched rather than guessing again:
-this is a hard, documented Chrome limitation — `chrome.offscreen` documents
-have no visible surface for Chrome to anchor a `getUserMedia` prompt to, so
-they get an immediate `NotAllowedError` regardless of whether the user was
-ever actually asked. Confirmed via the Chromium extensions mailing list and
-multiple independent GitHub issues describing the exact same failure.
-
-**Fix: a new, real, visible tab whose only job is to trigger the actual
-prompt.** `src/permission/index.html` + `index.ts` — calls
-`getUserMedia({audio:true})` immediately on load (a real tab, so Chrome's
-native dialog can actually appear), stops the resulting stream (only the
-grant was needed), shows a friendly status line, and auto-closes after
-~1.8s on success. On failure, since Chrome won't re-show its native prompt
-after an explicit denial, it instead points the user to the site-settings
-icon in the address bar — the only remaining way back.
-
-- `types.ts` — `VoiceEvent` gained a `{ kind: 'permission-needed' }` variant,
-  distinct from a plain `'error'` — this isn't a user decision to surface as
-  an error message, it's "Chrome structurally can't ask here."
-- `offscreen/index.ts` — `recognition.onerror` now special-cases
-  `not-allowed`/`permission-denied`/`service-not-allowed` into
-  `permission-needed` rather than a generic error message, since all three
-  fire identically whether permission was never asked or was previously
-  denied, and this offscreen doc can never meaningfully resolve either case
-  itself.
-- `background/index.ts` — on relaying a `permission-needed` event, also
-  calls `chrome.tabs.create({ url: 'src/permission/index.html' })` before
-  forwarding to the Toolbar.
-- `Toolbar.tsx` — its `VOICE_NOTE_UPDATE` handler shows a specific message
-  for this case ("Opening a tab so you can allow microphone access...")
-  rather than a bare error, since a tab is about to open and the user
-  should know why.
-- `vite.config.ts` — `additionalInputs` gained the new permission page
-  alongside the offscreen doc (same reason: neither is declared in
-  manifest.json's schema, so the build silently drops them without this).
-
-Verified: tsc clean, build confirms `dist/src/permission/` exists alongside
-`dist/src/offscreen/`, and the new `permission-needed` identifier compiled
-into all three affected bundles (offscreen, background, content). The
-permission page itself was rendered via headless Chrome to confirm it reads
-clearly. Still needs the same live-Chrome verification as the base feature —
-this fixes the *mechanism*, but only a real microphone grant confirms the
-full loop end to end.
-
-## Follow-up: tab focus didn't return to the origin tab after granting (same session)
-
-Live test confirmed the permission flow itself works (screenshot showed
-"✓ All set", mic-in-use indicator active) — but after the tab auto-closed,
-Chrome switched focus to some other tab instead of back to the one the user
-was actually working in. Root cause: `chrome.tabs.create({url})` was called
-from the **background service worker**, which has no "current tab" concept —
-so Chrome had no real opener relationship to fall back on when the tab
-closed, and just picked something via its own generic heuristic (unreliable
-with many tabs open, as in the user's screenshot).
-
-Fixed with an explicit, deterministic return rather than relying on Chrome's
-default behavior: `pendingPermissionReturnTabId` (background module state)
-captures the origin tab's id right when the permission tab is opened
-(`voiceNoteTarget.tabId`, before that gets cleared) and is also passed as
-`openerTabId` on `chrome.tabs.create` (cheap to add, helps the tab-strip
-grouping even though it isn't the real fix). The permission page now sends a
-new `MIC_PERMISSION_GRANTED` message the instant `getUserMedia` succeeds
-(before the 1.8s auto-close delay); the background's handler for it calls
-`chrome.tabs.update(pendingPermissionReturnTabId, {active: true})` — an
-explicit, guaranteed focus switch back to the right tab, not a hope that
-Chrome's own heuristic lands there.
-
-- [x] types.ts — MicPermissionGrantedMessage
-- [x] background/index.ts — pendingPermissionReturnTabId state, capture on
-      permission-needed, openerTabId on chrome.tabs.create, new listener
-      calling chrome.tabs.update on MIC_PERMISSION_GRANTED
-- [x] permission/index.ts — send MIC_PERMISSION_GRANTED on success, before
-      the auto-close timeout
-- [x] tsc clean + build; verified both identifiers compiled into background
-      and permission bundles
+## Status: Architecture rebuilt after two live-test failures on the
+offscreen-document approach. Type-checks, builds, and visually verifies
+correctly. Still needs a full live pass with a real microphone to confirm
+the actual recognition loop end to end — this is now the one open item.

@@ -166,27 +166,22 @@ export interface ToolbarApi {
   handleNavKey: (key: string) => boolean
 }
 
-// ── Voice-note capture (Toolbar's note panel → background → offscreen doc) ──
-// Five distinct types, one hop each — chrome.runtime.sendMessage broadcasts to
-// every extension context (unlike chrome.tabs.sendMessage with an explicit
-// frameId), so reusing a type name across hops risks a listener seeing the
-// same event twice. Each type below is sent on exactly one leg of the chain:
-//   Toolbar --START/STOP_VOICE_NOTE--> background
-//   background --OFFSCREEN_START/STOP_RECOGNITION--> offscreen doc
-//   offscreen doc --VOICE_RECOGNITION_EVENT--> background
-//   background --VOICE_NOTE_UPDATE (chrome.tabs.sendMessage, explicit frameId)--> Toolbar
+// ── Voice-note capture (Toolbar's note panel → background → a real voice tab) ──
+// Speech recognition runs in a real, visible tab (src/voice/), not a
+// chrome.offscreen document — offscreen documents get an immediate
+// NotAllowedError from getUserMedia with no permission dialog ever shown, a
+// hard Chrome platform restriction confirmed live (not assumed): granting
+// mic access via a separate real tab first, then retrying in the offscreen
+// doc, still failed. A real tab is the one thing proven to work end to end.
+//
+//   Toolbar --START_VOICE_NOTE--> background --(chrome.tabs.create)--> voice tab
+//   voice tab --VOICE_RECOGNITION_EVENT--> background --VOICE_NOTE_UPDATE (explicit frameId)--> Toolbar
+//   Toolbar --STOP_VOICE_NOTE--> background --VOICE_TAB_STOP (explicit tabId)--> voice tab
 
 export type VoiceEvent =
   | { kind: 'transcript'; text: string }
   | { kind: 'error'; error: string }
   | { kind: 'ended' }
-  // Chrome's offscreen documents cannot show a getUserMedia permission
-  // prompt at all — they get an immediate NotAllowedError with no dialog
-  // ever shown, a hard platform restriction, not a denial by the user. This
-  // is a distinct outcome from a real denial: the background reacts by
-  // opening a real, visible tab (the only place Chrome will actually show
-  // the prompt) instead of just displaying an error.
-  | { kind: 'permission-needed' }
 
 export interface StartVoiceNoteMessage {
   type: 'START_VOICE_NOTE'
@@ -200,13 +195,18 @@ export interface StopVoiceNoteMessage {
   type: 'STOP_VOICE_NOTE'
 }
 
-export interface OffscreenStartRecognitionMessage {
-  type: 'OFFSCREEN_START_RECOGNITION'
-}
-export interface OffscreenStopRecognitionMessage {
-  type: 'OFFSCREEN_STOP_RECOGNITION'
+// background → the specific voice tab it opened (chrome.tabs.sendMessage
+// with that tab's id — never broadcast, so no other tab's listener can see
+// this even coincidentally).
+export interface VoiceTabStopMessage {
+  type: 'VOICE_TAB_STOP'
 }
 
+// voice tab → background. sender.tab is absent for messages from an
+// offscreen document but IS present for a normal tab, so the background's
+// listener distinguishes this from a stray content-script message by
+// checking sender.tab.id against the voice tab it's currently tracking,
+// not by sender shape.
 export interface VoiceRecognitionEventMessage {
   type: 'VOICE_RECOGNITION_EVENT'
   event: VoiceEvent
@@ -215,13 +215,4 @@ export interface VoiceRecognitionEventMessage {
 export interface VoiceNoteUpdateMessage {
   type: 'VOICE_NOTE_UPDATE'
   event: VoiceEvent
-}
-
-// Sent by the permission tab (src/permission/) once getUserMedia actually
-// succeeds, so the background can explicitly focus back to the tab the user
-// was working in — chrome.tabs.create's default/opener-based focus-return
-// heuristics aren't reliable here, since this tab was opened from the
-// background, not from a real click in the origin tab.
-export interface MicPermissionGrantedMessage {
-  type: 'MIC_PERMISSION_GRANTED'
 }
