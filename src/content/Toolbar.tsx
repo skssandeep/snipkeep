@@ -431,10 +431,18 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
     }
   }, [showNote])
 
+  // Clicking this button leaves it holding DOM focus — and a browser's
+  // default behavior for a focused <button> is to treat Enter as a click on
+  // THAT button, not a global keystroke. Without returning focus to the
+  // textarea, a follow-up Enter (intended to save) would just re-trigger
+  // this button's own onClick instead of ever reaching handleNoteKey —
+  // toggling the mic again rather than saving. Same fix already applied
+  // to the pencil button opening this panel (see the showNote effect above).
   const handleMicClick = async () => {
     if (isRecording) {
       setIsRecording(false)  // optimistic — feels immediate; a late transcript/ended event is a no-op either way
       chrome.runtime.sendMessage({ type: 'STOP_VOICE_NOTE' } satisfies StopVoiceNoteMessage)
+      noteRef.current?.focus()
       return
     }
     setVoiceError('')
@@ -446,6 +454,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
     // (baseNoteRef already accounts for it as the prefix).
     lastVoiceWriteRef.current = note
     lastSessionTextRef.current = ''
+    noteRef.current?.focus()
     const res: StartVoiceNoteResponse = await chrome.runtime.sendMessage(
       { type: 'START_VOICE_NOTE' } satisfies StartVoiceNoteMessage
     )

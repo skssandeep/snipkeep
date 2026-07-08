@@ -859,3 +859,25 @@ well before this fires either way.
       1.2s fallback timer that force-saves if saveAfterStopRef is still set
 - [x] tsc clean + build; verified the 1200 constant compiled into the
       content bundle
+
+## Follow-up: clicking mic left focus stuck on the button itself (same session)
+
+User feedback with a screenshot: the mic button visibly kept a focus ring
+after being clicked, and pressing Enter afterward just toggled the mic on/
+off again instead of saving. Root cause: clicking any `<button>` leaves it
+holding DOM focus, and a browser's *default* behavior for a focused button
+is to treat Enter as a click on that button specifically — not a page-wide
+keystroke. `handleNoteKey` (with all the deferred-save logic from the two
+follow-ups above) is only wired to the *textarea's* `onKeyDown`, so an
+Enter press landing on the still-focused mic button never reached any of
+that — it just re-triggered the mic button's own onClick.
+
+Fixed by returning focus to the textarea right after handling the mic
+click (both starting and stopping), mirroring a fix already in this exact
+component: the pencil button that opens the note panel already does this
+(`useEffect` on `showNote`). The mic button just hadn't gotten the same
+treatment.
+
+- [x] Toolbar.tsx — `noteRef.current?.focus()` after both branches of
+      handleMicClick
+- [x] tsc clean + build
