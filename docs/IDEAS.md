@@ -65,3 +65,26 @@ from scratch later): a standalone quick-capture "inbox" for thoughts not tied
 to a page selection (risks diluting the clip-first identity); a mobile/cross-
 device bridge (needs a backend or companion app — contradicts the no-server
 thesis, out of scope entirely).
+
+## Adjacent / umbrella products (not SnipKeep features)
+
+Ideas for growing the "SnipKeep umbrella" that are **separate products**, not
+features of this extension — recorded here so they aren't lost, not because
+they belong in this codebase.
+
+### PACER content-splitter site (exploratory, 2026-07-08)
+
+A site where students submit content/sources/links and AI sorts it per Justin
+Sung's (iCanStudy) **PACER** technique — Procedural, Analogous, Conceptual,
+Evidence, Reference — each with its own digestion action (practice, build-an-
+analogy, mind-map, verify-and-store, file-for-lookup).
+
+Critiqued before any build. Conclusion: **AI should classify only, never
+digest** — PACER's value comes from the learner doing the analogy-building/
+mind-mapping themselves; an AI that generates that step for them produces a
+passive-consumption tool, which is the exact failure mode the technique
+exists to fix. Also flagged: this is a categorically different product from
+SnipKeep (capture/organize vs. AI classification + guided study workflow), so
+shared branding under one "umbrella" risks diluting both. Recommended
+validating cheaply first — a manual/Google-Form version tested with 5-10 real
+students — before scoping an actual site. No build started.
