@@ -17,7 +17,12 @@
   --accent: #A99CFF;
   --accent-hover: #BCB2FF;
   --accent-dim: rgba(169, 156, 255, 0.10);  /* focus-ring glow / flash fill */
-  --accent-soft: rgba(169, 156, 255, 0.14); /* "active pill" fill — one source for every selected chip/toggle */
+  /* "active pill" fill — one source for every selected chip/toggle. 0.18 is
+     the ceiling here, not an arbitrary bump: computed against --accent text
+     on --card, 0.18 → 4.8:1 (still comfortably past WCAG AA's 4.5:1);
+     0.22 → 4.42:1 (fails). Verified numerically before raising this, not
+     eyeballed — this token is WCAG-locked the same way the text ramp is. */
+  --accent-soft: rgba(169, 156, 255, 0.18);
   --accent-ink: #15121C;  /* text on an accent fill — 7.9:1 */
   --toggle-on: #6F61BE;   /* muted violet — "on" without out-shouting the doc name */
 
@@ -367,8 +372,8 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-2);
   background: none;
   border: none;
-  border-radius: 6px;
-  padding: 8px 9px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
   transition: background 0.1s, color 0.1s;
 }
@@ -741,7 +746,7 @@ a { color: inherit; text-decoration: none; }
   transition: color 0.1s, border-color 0.1s, background 0.1s;
 }
 .btn-ghost:hover { color: var(--text); border-color: var(--border-active); background: var(--card); }
-.btn-ghost.small { padding: 5px 11px; font-size: 11px; }
+.btn-ghost.small { padding: var(--space-2) var(--space-3); font-size: 11px; }
 .btn-ghost.danger:hover { color: var(--danger); border-color: var(--danger); background: rgba(255,107,107,0.06); }
 
 /* ── Add-document trigger — dashed "add a slot" affordance, quiet by default ── */
@@ -819,15 +824,15 @@ a { color: inherit; text-decoration: none; }
 .someday-filter {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   font-family: var(--font);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-2);
   background: transparent;
   border: 1px solid var(--card-edge);
-  border-radius: 6px;
-  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
@@ -925,7 +930,7 @@ a { color: inherit; text-decoration: none; }
   background: var(--accent-soft);
   border: 1px solid var(--accent);
   border-radius: 100px;
-  padding: 4px 8px 4px 10px;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
   cursor: pointer;
   transition: background 0.12s;
 }
@@ -935,7 +940,7 @@ a { color: inherit; text-decoration: none; }
 .hist-action {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
@@ -943,8 +948,8 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-2);
   background: var(--card-edge);
   border: 1px solid var(--card-edge);
-  border-radius: 6px;
-  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
   text-decoration: none;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
@@ -1364,8 +1369,8 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-2);
   background: transparent;
   border: 1px solid var(--card-edge);
-  border-radius: 6px;
-  padding: 5px 11px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
