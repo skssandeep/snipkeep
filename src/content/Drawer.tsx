@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Bookmark } from 'lucide-react'
-import { MdClose, MdKeyboardReturn, MdLock } from 'react-icons/md'
+import { MdClose, MdKeyboardReturn, MdLock, MdLogout } from 'react-icons/md'
 import type { GetUserProfileMessage, GetUserProfileResponse, SignOutMessage, DocDestination } from '../types'
 import { Popup, PrivacyLedger, TrustCard } from '../popup/Popup'
 import { ensureFontLoaded } from '../lib/fonts'
@@ -61,9 +61,16 @@ const BODY_CSS = `
     border: 0;
   }
 
-  /* ── Avatar chip — quiet ghost style, ring not fill ── */
+  /* ── Avatar chip — quiet ghost style, ring not fill ──
+     .cn-avatar-wrap (not .cn-avatar itself) carries position:relative — the
+     dropdown anchors to this wrapper as a SIBLING of the trigger button, not
+     a child of it. A <button> can never contain another <button> (invalid
+     HTML; the parser force-closes the outer one early the moment it hits the
+     first nested one, silently rewriting the DOM so Privacy/Sign out end up
+     outside the dropdown's own positioned box entirely — a real bug, found
+     by diffing the parsed DOM against the JSX, not a hypothetical). ── */
+  .cn-avatar-wrap { position: relative; flex-shrink: 0; }
   .cn-avatar {
-    position: relative;
     width: 24px;
     height: 24px;
     border-radius: 50%;
@@ -77,7 +84,6 @@ const BODY_CSS = `
     justify-content: center;
     cursor: pointer;
     border: 1.5px solid var(--border-active);
-    flex-shrink: 0;
     transition: border-color 0.15s, color 0.15s;
     user-select: none;
   }
@@ -86,14 +92,27 @@ const BODY_CSS = `
 
   /* ── Sign-out dropdown ──
      Three tiers, in order of a Jakob's-Law-familiar account menu:
-       1. Identity (name + email) — who you are, tightly grouped (proximity:
-          same fact about the same person, so minimal gap between them).
+       1. Identity (avatar + name + email) — who you are, one grouped fact.
        2. Privacy — a settings-like, informational action.
        3. Sign out — the one destructive-ish action, visually distinct (danger
           color) and last.
      Each tier shares one padding rhythm (var(--space-3) var(--space-4), the
      same convention documented for content cards elsewhere in this app) so
-     the whole menu reads as one consistent rhythm, not three ad-hoc rows. ── */
+     the whole menu reads as one consistent rhythm, not three ad-hoc rows.
+
+     Gotcha this fixed: this whole dropdown lives inside the <button
+     class="cn-avatar"> that opens it. Browsers' default UA stylesheet puts
+     text-align: center on <button>, and text-align is an inherited property
+     — so any text in here that doesn't set its OWN text-align silently
+     inherits centered alignment from that ancestor button, not from
+     anything written here. .cn-auth-privacy/.cn-auth-signout already
+     escaped it by setting text-align: left explicitly; .cn-auth-identity
+     didn't, which is exactly why only the name/email were rendering
+     centered in the real extension while a standalone test render (not
+     nested in a <button>) looked correctly left-aligned — the bug only
+     exists in the real nesting, not in isolation. Now set explicitly on
+     .cn-auth-identity so it isn't relying on the button's default not
+     changing. ── */
   .cn-auth-dropdown {
     position: absolute;
     top: calc(100% + 10px);
@@ -101,15 +120,42 @@ const BODY_CSS = `
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    min-width: 208px;
+    min-width: 220px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.5);
     overflow: hidden;
     z-index: 10;
   }
 
   .cn-auth-identity {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
     padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--border);
+    text-align: left;
+  }
+  /* Larger sibling of the header's own .cn-avatar — same initial, same idea,
+     given real presence as the profile card's visual anchor. Filled (not the
+     header trigger's quiet ring-only style) since this is its one moment to
+     be the focal point, not compete with everything else in the header row. */
+  .cn-auth-avatar {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    font-family: var(--font);
+    user-select: none;
+  }
+  .cn-auth-text {
+    min-width: 0;  /* lets ellipsis truncation work inside a flex child */
+    flex: 1;
   }
   .cn-auth-name {
     font-size: 13px;
@@ -121,9 +167,6 @@ const BODY_CSS = `
     text-overflow: ellipsis;
   }
   .cn-auth-email {
-    /* Tight, deliberately closer than the identity block's own outer padding —
-       this line and the name above it are one fact, not two. */
-    margin-top: 2px;
     font-size: 11.5px;
     font-family: var(--font);
     color: var(--text-3);
@@ -152,7 +195,9 @@ const BODY_CSS = `
   .cn-auth-privacy:hover { background: var(--card-2); color: var(--text); }
 
   .cn-auth-signout {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     width: 100%;
     padding: var(--space-3) var(--space-4);
     background: none;
@@ -217,7 +262,11 @@ export function Drawer({ container, onClose, closeRef }: Props) {
   type DrawerView = 'main' | 'privacy' | 'trust'
   const [view, setView] = useState<DrawerView>('main')
   const [firstDocId, setFirstDocId] = useState<string | null>(null)
-  const avatarRef = useRef<HTMLButtonElement>(null)
+  // On the wrapper div, not the trigger button — the dropdown is now a
+  // sibling of the button (see .cn-avatar-wrap), so .contains() needs to
+  // cover both for the outside-click check below to recognize a click
+  // inside the dropdown as "inside," not "outside."
+  const avatarRef = useRef<HTMLDivElement>(null)
   // Guards the Trust Card so it only ever auto-triggers once per drawer session,
   // even if the mount check and the 'docs' storage listener both fire.
   const trustShownRef = useRef(false)
@@ -373,23 +422,32 @@ export function Drawer({ container, onClose, closeRef }: Props) {
 
             <div className="cn-header-actions">
               {initial && (
-                <button
-                  ref={avatarRef}
-                  className="cn-avatar"
-                  onClick={() => setShowAuthMenu(v => !v)}
-                  title={userName || userEmail || 'Google Account'}
-                >
-                  {initial}
+                // A <button> can never contain another <button> (invalid HTML —
+                // see the .cn-avatar-wrap comment in BODY_CSS for the bug this
+                // fixed), so the trigger and its dropdown are siblings under one
+                // positioned wrapper, not parent/child.
+                <div className="cn-avatar-wrap" ref={avatarRef}>
+                  <button
+                    className="cn-avatar"
+                    onClick={() => setShowAuthMenu(v => !v)}
+                    title={userName || userEmail || 'Google Account'}
+                  >
+                    {initial}
+                  </button>
                   {showAuthMenu && (
                     <div className="cn-auth-dropdown">
-                      {/* Identity block: name (primary) + email (secondary) sit
-                          tightly together — same person, same fact — then a
-                          divider marks the break into actions (Jakob's Law:
-                          this mirrors the identity-then-actions shape of
-                          Google's own account menu, so it needs no learning). */}
+                      {/* Identity block: a real avatar circle (same initial as the
+                          header trigger, given actual size/presence here) beside
+                          name (primary) + email (secondary) — one grouped fact,
+                          then a divider into actions (Jakob's Law: mirrors the
+                          identity-then-actions shape of Google's own account
+                          menu, so it needs no learning). */}
                       <div className="cn-auth-identity">
-                        {userName && <div className="cn-auth-name">{userName}</div>}
-                        <div className="cn-auth-email">{userEmail}</div>
+                        <div className="cn-auth-avatar">{initial}</div>
+                        <div className="cn-auth-text">
+                          {userName && <div className="cn-auth-name">{userName}</div>}
+                          <div className="cn-auth-email">{userEmail}</div>
+                        </div>
                       </div>
                       <button
                         className="cn-auth-privacy"
@@ -398,11 +456,11 @@ export function Drawer({ container, onClose, closeRef }: Props) {
                         <MdLock size={13} /> Privacy
                       </button>
                       <button className="cn-auth-signout" onClick={handleSignOut}>
-                        Sign out
+                        <MdLogout size={13} /> Sign out
                       </button>
                     </div>
                   )}
-                </button>
+                </div>
               )}
               <button className="cn-sheet-close-btn" onClick={close} title="Close (Esc)">
                 <MdClose size={15} />
