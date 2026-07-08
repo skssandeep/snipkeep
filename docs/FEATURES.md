@@ -245,3 +245,15 @@ Right-click an image → context menu → `CAPTURE_IMAGE` → content reads `nat
 - `fitImageSize(w, h)` scales natural px → PT (×0.75), capped at `MAX_W_PT = 468`, preserving aspect.
 - The image request is pushed **last** in the batch so it doesn't shift heading/caption style indices before it.
 - **The URL must be public** http(s) and ≤ 2000 chars — Docs/Notion fetch it server-side. `data:`/`blob:` and login-gated images are guarded/will fail.
+
+### Add-document form revamp (later session)
+
+User asked to revamp the "Google Doc URL" field and the interaction after pasting a link, applying the same hierarchy/spacing pass already run elsewhere. Three concrete gaps, not just a padding bump:
+
+**A blank gap while fetching the title read as "did this break," not "loading."** `handleDocUrlChange` (`Popup.tsx`) debounces 600ms then calls `getDocTitle` through the background; while `isFetchingTitle` is true, the name-preview row previously rendered `''` — a genuinely empty box with no signal anything was happening. Replaced with `.name-preview-skeleton`, a pulsing bar sized to match `.name-preview`'s own height exactly (`min-height`/`height` both `20px`), so swapping the skeleton for the real name causes no layout jump. Matches this app's established "show progress, never a blank wait" stance (see the Reversible-delete/undo-bar and FLIP-animation sections for the same instinct applied elsewhere).
+
+**The "fetching…" indicator was 9px static text — easy to miss entirely.** Added `.field-spinner`, a small CSS-only rotating ring (`border` + `border-top-color`, animated via `@keyframes cn-spin`, respecting `prefers-reduced-motion`) next to the label. Motion reads as "in progress" far more reliably than static text at that size.
+
+**The name's edit-pencil icon was fully invisible (`opacity: 0`) until hover.** A zero-opacity affordance is undiscoverable — nothing on screen hints the resolved title is editable unless the user happens to mouse over it (violates "affordances must be obvious"). Changed the idle state to `opacity: 0.4` (still clearly secondary to the name text itself), brightening to `1` + a lighter color on hover, same as before.
+
+**Smaller additions:** an `MdLink` icon now sits inside the URL field itself (`.field-input-row`, brightening to `--accent` on `:focus-within` — one more instance of the "every field icon reacts to its input's own state" pattern used elsewhere), and `.field`'s padding moved from a one-off `10px 14px 9px` to `var(--space-3) var(--space-4)`, matching the token-based spacing pass documented above for pills/chips/menu-items.

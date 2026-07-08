@@ -14,6 +14,7 @@ import {
   MdFilterList,
   MdInbox,
   MdLightbulb,
+  MdLink,
   MdMoreHoriz,
   MdOpenInNew,
   MdSchedule,
@@ -431,20 +432,23 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
       <div className="input-group">
         <div className="field">
           <span className="field-label">Google Doc URL</span>
-          <input
-            className="field-input mono"
-            value={newDocId}
-            onChange={e => handleDocUrlChange(e.target.value)}
-            placeholder="Paste URL or Doc ID"
-            spellCheck={false}
-            autoFocus={isAdding}
-          />
+          <div className="field-input-row">
+            <MdLink size={14} className="field-input-icon" />
+            <input
+              className="field-input mono"
+              value={newDocId}
+              onChange={e => handleDocUrlChange(e.target.value)}
+              placeholder="Paste URL or Doc ID"
+              spellCheck={false}
+              autoFocus={isAdding}
+            />
+          </div>
         </div>
 
         {newDocId.trim() && (
           <div className="field name-preview-field">
             <span className="field-label">
-              Name {isFetchingTitle && <span className="field-fetching">fetching…</span>}
+              Name {isFetchingTitle && <span className="field-fetching"><span className="field-spinner" /> Fetching…</span>}
             </span>
             {nameEditMode ? (
               <input
@@ -455,11 +459,13 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
                 autoFocus
                 onBlur={() => { if (!newDocName.trim()) setNameEditMode(false) }}
               />
+            ) : isFetchingTitle ? (
+              // Skeleton, not a blank row — a name is known to be coming
+              // (Performance Perception: show progress, never an empty gap).
+              <div className="name-preview-skeleton" />
             ) : (
               <div className="name-preview" onClick={() => setNameEditMode(true)}>
-                <span className="name-preview-text">
-                  {isFetchingTitle ? '' : (newDocName || 'My Notes')}
-                </span>
+                <span className="name-preview-text">{newDocName || 'My Notes'}</span>
                 <span className="name-preview-edit" title="Edit name"><MdEdit size={12} /></span>
               </div>
             )}

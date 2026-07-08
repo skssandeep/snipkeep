@@ -628,19 +628,31 @@ a { color: inherit; text-decoration: none; }
 .field {
   display: flex;
   flex-direction: column;
-  padding: 10px 14px 9px;
+  padding: var(--space-3) var(--space-4);
 }
 .field + .field { border-top: 1px solid var(--border); }
 
 .field-label {
+  display: flex;
+  align-items: center;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--text-3);
   text-transform: uppercase;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   pointer-events: none;
 }
+
+.field-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Muted at rest, brightens with the input's own focus/content — a URL field
+   reads faster with a affordance icon than from the label text alone. */
+.field-input-icon { color: var(--text-3); flex-shrink: 0; transition: color 0.15s; }
+.input-group:focus-within .field-input-icon { color: var(--accent); }
 
 .field-input {
   background: none;
@@ -658,12 +670,28 @@ a { color: inherit; text-decoration: none; }
 .field-input.mono { font-family: var(--mono); font-size: 12px; }
 
 .field-fetching {
-  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
   font-weight: 500;
   color: var(--accent);
   text-transform: none;
   letter-spacing: 0;
-  margin-left: 5px;
+  margin-left: 6px;
+}
+.field-spinner {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  animation: cn-spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes cn-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .field-spinner { animation: none; }
 }
 
 /* ── Name preview row ── */
@@ -680,12 +708,30 @@ a { color: inherit; text-decoration: none; }
 .name-preview-edit {
   font-size: 12px;
   color: var(--text-3);
-  opacity: 0;
-  transition: opacity 0.15s;
+  opacity: 0.4;
+  transition: opacity 0.15s, color 0.15s;
   flex-shrink: 0;
   padding-left: 6px;
 }
-.name-preview:hover .name-preview-edit { opacity: 1; }
+.name-preview:hover .name-preview-edit { opacity: 1; color: var(--text-2); }
+
+/* Stands in for the name preview while its title is being fetched — a
+   pulsing bar in place of the row, not a blank gap, so the user reads
+   "something's coming" rather than "did this break." */
+.name-preview-skeleton {
+  height: 20px;
+  width: 62%;
+  border-radius: 4px;
+  background: var(--card-edge);
+  animation: cn-skeleton-pulse 1.1s ease-in-out infinite;
+}
+@keyframes cn-skeleton-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .name-preview-skeleton { animation: none; opacity: 0.7; }
+}
 
 /* ── Standalone input (Notion token field) ── */
 .input {
