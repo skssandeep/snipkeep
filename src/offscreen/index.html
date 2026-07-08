@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>SnipKeep — offscreen</title>
+  </head>
+  <body>
+    <!-- No UI: this document exists purely so getUserMedia/SpeechRecognition
+         run under the extension's own stable origin, not whatever website the
+         user happens to be on. See tasks/todo.md's "Voice-note capture" entry. -->
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

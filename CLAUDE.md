@@ -74,6 +74,21 @@ Plus Jakarta Sans is bundled at `public/fonts/plus-jakarta-sans.woff2` (one vari
 
 `chrome.action.onClicked` messages the tab with `TOGGLE_DRAWER`. Tabs opened *before* the extension loaded have no content script, so on failure the background injects `src/content/index.js` via `chrome.scripting.executeScript` and retries. On restricted pages (New Tab, `chrome://`, Web Store, PDF viewer) injection is impossible → a `chrome.notifications` message explains why. The right-click "Save image" context menu uses the same inject-on-demand fallback.
 
+### Offscreen document (`src/offscreen/`) — voice-note capture
+
+The Toolbar's mic button (speak a margin note instead of typing it) runs `SpeechRecognition` inside a **`chrome.offscreen` document**, not directly in the content-script context. Reason: a mic permission requested from a content script is scoped to *whatever website the user is on* ("nytimes.com wants to use your microphone") — asked again per new domain, and silently blocked outright on sites with a restrictive Permissions-Policy header. Requesting it from the extension's own stable origin (`chrome-extension://<id>/src/offscreen/index.html`) instead means it's asked once, ever, attributed to SnipKeep, and works identically on every site after.
+
+`vite.config.ts` needs `additionalInputs: ['src/offscreen/index.html']` — offscreen documents aren't declared anywhere in the manifest schema (`chrome.offscreen.createDocument()` just takes a URL string at runtime), so without this the plugin never bundles it into `dist/`.
+
+**Five message types, one hop each — never reuse a type name across hops.** `chrome.tabs.sendMessage` with an explicit `frameId` goes to exactly one frame; `chrome.runtime.sendMessage` broadcasts to *every* extension context (every tab's content script, the offscreen doc, etc.). Mixing the two up (or reusing one type name on two different hops) risks a listener seeing the same event twice:
+```
+Toolbar --START_VOICE_NOTE/STOP_VOICE_NOTE--> background
+background --OFFSCREEN_START/STOP_RECOGNITION--> offscreen doc (created on demand)
+offscreen doc --VOICE_RECOGNITION_EVENT--> background (rejects any instance carrying a sender.tab — should only ever come from the offscreen doc)
+background --VOICE_NOTE_UPDATE (chrome.tabs.sendMessage, explicit frameId)--> Toolbar
+```
+The background tracks which `{tabId, frameId}` requested the active session in a plain in-memory variable (`voiceNoteTarget`) — fine for a live-streaming interaction, unlike the durable data elsewhere in this file that must survive a service-worker restart; if the SW is killed mid-recording, that one session just stops.
+
 ### Message flow
 
 ```
@@ -84,6 +99,8 @@ Save image   → background contextMenus.onClicked → CAPTURE_IMAGE → content
              → content → SAVE_IMAGE       → background → Google Docs API   (insertInlineImage)
 Add doc note → content → ADD_DOC_NOTE     → background → Google Docs API   (Living Resurface write-back)
 Drawer auth  → content → GET_USER_PROFILE / GET_DOC_TITLE / SIGN_IN / SIGN_OUT → background (chrome.identity)
+Voice note   → content → START/STOP_VOICE_NOTE → background → OFFSCREEN_START/STOP_RECOGNITION → offscreen doc
+             → offscreen doc → VOICE_RECOGNITION_EVENT → background → VOICE_NOTE_UPDATE (explicit frameId) → content
 ```
 All message types are in `src/types.ts`.
 

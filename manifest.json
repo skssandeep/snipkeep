@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Select text on any page and save it instantly to your Google Docs notes.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp3iTOEuycvJTBX3VmwXVmGrF0PRKXx2thAbvjjbLBxBIjLjtWdcYkDlRURhxZRWWCoqoUaKk3OV6CIcsdDWLRPEKH1uzBHdQYNu3lDkKVNuShiXmbClrGxq3zBzuGz5Z4euI6NNUxTipnXpK6yig6yKUaCEsuYPnnOzlGUf786kYuHMAeaMkTT0yGVtJmkK7NSkuVbwMo5AxwtABY/RutdOS12nmCMPM0YJl8qHWC6YqsH2zi/S39b+sFN0hxr3ofRG2vgtChgmBXMvrqSv51BOwl4frCMCFFwmDfPiGHeEgwkiJjV+PXbIisDZNqseW/4gRKJcrNHrZKltLm42UTQIDAQAB",
-  "permissions": ["identity", "identity.email", "storage", "activeTab", "scripting", "notifications", "contextMenus", "clipboardWrite"],
+  "permissions": ["identity", "identity.email", "storage", "activeTab", "scripting", "notifications", "contextMenus", "clipboardWrite", "offscreen"],
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",

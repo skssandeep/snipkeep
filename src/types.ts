@@ -165,3 +165,47 @@ export interface AddDocNoteResponse {
 export interface ToolbarApi {
   handleNavKey: (key: string) => boolean
 }
+
+// ── Voice-note capture (Toolbar's note panel → background → offscreen doc) ──
+// Five distinct types, one hop each — chrome.runtime.sendMessage broadcasts to
+// every extension context (unlike chrome.tabs.sendMessage with an explicit
+// frameId), so reusing a type name across hops risks a listener seeing the
+// same event twice. Each type below is sent on exactly one leg of the chain:
+//   Toolbar --START/STOP_VOICE_NOTE--> background
+//   background --OFFSCREEN_START/STOP_RECOGNITION--> offscreen doc
+//   offscreen doc --VOICE_RECOGNITION_EVENT--> background
+//   background --VOICE_NOTE_UPDATE (chrome.tabs.sendMessage, explicit frameId)--> Toolbar
+
+export type VoiceEvent =
+  | { kind: 'transcript'; text: string }
+  | { kind: 'error'; error: string }
+  | { kind: 'ended' }
+
+export interface StartVoiceNoteMessage {
+  type: 'START_VOICE_NOTE'
+}
+export interface StartVoiceNoteResponse {
+  success: boolean
+  error?: string
+}
+
+export interface StopVoiceNoteMessage {
+  type: 'STOP_VOICE_NOTE'
+}
+
+export interface OffscreenStartRecognitionMessage {
+  type: 'OFFSCREEN_START_RECOGNITION'
+}
+export interface OffscreenStopRecognitionMessage {
+  type: 'OFFSCREEN_STOP_RECOGNITION'
+}
+
+export interface VoiceRecognitionEventMessage {
+  type: 'VOICE_RECOGNITION_EVENT'
+  event: VoiceEvent
+}
+
+export interface VoiceNoteUpdateMessage {
+  type: 'VOICE_NOTE_UPDATE'
+  event: VoiceEvent
+}

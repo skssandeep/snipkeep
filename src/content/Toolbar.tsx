@@ -1,6 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { MdCheck, MdClose, MdEdit, MdKeyboardReturn, MdMoreHoriz } from 'react-icons/md'
-import type { Destination, ToolbarApi } from '../types'
+import { MdCheck, MdClose, MdEdit, MdKeyboardReturn, MdMic, MdMoreHoriz } from 'react-icons/md'
+import type {
+  Destination,
+  ToolbarApi,
+  StartVoiceNoteMessage,
+  StartVoiceNoteResponse,
+  StopVoiceNoteMessage,
+  VoiceNoteUpdateMessage,
+} from '../types'
 
 const STYLES = `
   @keyframes snipkeep-in {
@@ -230,6 +237,42 @@ const STYLES = `
     padding: 0 2px;
   }
   .note-hint { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: #6E6980; }
+  .note-foot-actions { display: flex; align-items: center; gap: 6px; }
+
+  /* ── Mic button (voice-note capture) ── */
+  @keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,107,107,0.35); }
+    50%      { box-shadow: 0 0 0 4px rgba(255,107,107,0); }
+  }
+  .btn-mic {
+    background: transparent;
+    color: #A8A4B5;
+    border: none;
+    border-radius: 6px;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.12s, color 0.12s;
+  }
+  .btn-mic:hover { background: rgba(255,255,255,0.06); color: #F2F1F5; }
+  .btn-mic.recording {
+    color: #FF6B6B;
+    animation: mic-pulse 1.4s ease-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .btn-mic.recording { animation: none; }
+  }
+  .note-voice-error {
+    font-size: 11px;
+    color: #FF8A8A;
+    margin-top: 5px;
+    padding: 0 2px;
+  }
+
   .note-save {
     background: rgba(169,156,255,0.12);
     color: #A99CFF;
@@ -265,6 +308,20 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
   const [showNote, setShowNote] = useState(false)
   const noteRef = useRef<HTMLTextAreaElement>(null)
 
+  // Voice-note capture. Feature-detected directly here (not via a round-trip
+  // to the offscreen doc) — the API's mere existence isn't origin-restricted,
+  // only actually using the microphone is, so checking window here is valid.
+  const [voiceSupported] = useState(() => 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window)
+  const [isRecording, setIsRecording] = useState(false)
+  const [voiceError, setVoiceError] = useState('')
+  const isRecordingRef = useRef(false)
+  useEffect(() => { isRecordingRef.current = isRecording }, [isRecording])
+  // The note's value at the instant recording starts — each transcript update
+  // REPLACES (never appends to) the "this session" portion, since interim
+  // results re-fire with cumulative text each time; naive appending would
+  // duplicate words on every update.
+  const baseNoteRef = useRef('')
+
   // Keyboard-driven highlight across the toolbar's actions (←/→). `navActive`
   // stays false until the first arrow so mouse users never see a stuck ring.
   const [highlight, setHighlight] = useState(0)
@@ -276,6 +333,53 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
   const savingRef = useRef(false)
 
   useEffect(() => { if (showNote) noteRef.current?.focus() }, [showNote])
+
+  // VOICE_NOTE_UPDATE is the one message type used on the background→Toolbar
+  // leg (see types.ts) — the background relays it via chrome.tabs.sendMessage
+  // with this exact tab+frame's id, so this listener only ever sees events
+  // meant for THIS toolbar instance, never another tab's.
+  useEffect(() => {
+    function handleMessage(message: VoiceNoteUpdateMessage) {
+      if (message.type !== 'VOICE_NOTE_UPDATE') return
+      const { event } = message
+      if (event.kind === 'transcript') {
+        setNote(baseNoteRef.current + (baseNoteRef.current ? ' ' : '') + event.text)
+      } else if (event.kind === 'error') {
+        setVoiceError(event.error)
+        setIsRecording(false)
+      } else {
+        setIsRecording(false)
+      }
+    }
+    chrome.runtime.onMessage.addListener(handleMessage)
+    return () => chrome.runtime.onMessage.removeListener(handleMessage)
+  }, [])
+
+  // Stop a forgotten-open mic if the toolbar itself goes away (save/dismiss)
+  // while still recording — otherwise the offscreen doc keeps listening with
+  // nothing left to receive its updates.
+  useEffect(() => {
+    return () => {
+      if (isRecordingRef.current) {
+        chrome.runtime.sendMessage({ type: 'STOP_VOICE_NOTE' } satisfies StopVoiceNoteMessage)
+      }
+    }
+  }, [])
+
+  const handleMicClick = async () => {
+    if (isRecording) {
+      setIsRecording(false)  // optimistic — feels immediate; a late transcript/ended event is a no-op either way
+      chrome.runtime.sendMessage({ type: 'STOP_VOICE_NOTE' } satisfies StopVoiceNoteMessage)
+      return
+    }
+    setVoiceError('')
+    baseNoteRef.current = note
+    const res: StartVoiceNoteResponse = await chrome.runtime.sendMessage(
+      { type: 'START_VOICE_NOTE' } satisfies StartVoiceNoteMessage
+    )
+    if (res?.success) setIsRecording(true)
+    else setVoiceError(res?.error ?? 'Could not start voice input.')
+  }
 
   const activeDest = destinations.find(d => d.id === activeDestId) ?? destinations[0]
   const label = activeDest ? `Save to ${activeDest.name}` : 'Save to Notes'
@@ -409,8 +513,21 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
             />
             <div className="note-foot">
               <span className="note-hint"><MdKeyboardReturn size={11} /> save · ⇧<MdKeyboardReturn size={11} /> newline</span>
-              <button className="note-save" onClick={() => handleSave()}>Save with note</button>
+              <div className="note-foot-actions">
+                {voiceSupported && (
+                  <button
+                    type="button"
+                    className={`btn-mic${isRecording ? ' recording' : ''}`}
+                    onClick={handleMicClick}
+                    title={isRecording ? 'Stop voice input' : 'Speak your note'}
+                  >
+                    <MdMic size={15} />
+                  </button>
+                )}
+                <button className="note-save" onClick={() => handleSave()}>Save with note</button>
+              </div>
             </div>
+            {voiceError && <div className="note-voice-error">{voiceError}</div>}
           </div>
         )}
 

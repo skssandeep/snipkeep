@@ -617,3 +617,91 @@ Confirmed by reading the real CSS:
   History top controls tightly (proximity), drop additive margins.
 - **Tab switching:** instant swap, no motion → keyed entrance animation.
 Verify: tsc + build + real-CSS headless screenshots (Docs, History, switch).
+
+---
+
+# Voice-note capture at clip time (docs/IDEAS.md #1)
+
+Hold/click a mic button in the toolbar's note panel and speak a margin note
+instead of typing it — transcribed via the Web Speech API. Chosen from a
+fresh 5-idea creative brainstorm (docs/IDEAS.md) as the first to build.
+
+## Design
+
+**Why an offscreen document, not a direct content-script call.** Researched
+before building: calling `SpeechRecognition`/`getUserMedia` directly from the
+Toolbar (a content script) would trigger a mic-permission prompt scoped to
+*whatever website the user is currently on* ("nytimes.com wants to use your
+microphone") — asked again per new domain, and silently blocked outright on
+any site with a restrictive Permissions-Policy header. The documented fix:
+request the permission from the extension's own stable origin instead, via
+MV3's `chrome.offscreen` API (`reasons: ['USER_MEDIA']`) — asked once, ever,
+attributed to SnipKeep, works identically on every site afterward.
+
+**Message flow — five distinct types, one hop each, zero ambiguity.**
+`chrome.runtime.sendMessage` broadcasts to *every* extension context (all
+tabs' content scripts, the offscreen doc, etc.), unlike `chrome.tabs.
+sendMessage` with an explicit `frameId`. To avoid any double-delivery, each
+message type is used on exactly one hop, never reused across hops:
+- `START_VOICE_NOTE` / `STOP_VOICE_NOTE` — Toolbar → background.
+- `OFFSCREEN_START_RECOGNITION` / `OFFSCREEN_STOP_RECOGNITION` — background →
+  offscreen doc (created on demand via `chrome.offscreen.createDocument`,
+  `additionalInputs: ['src/offscreen/index.html']` added to `vite.config.ts`
+  since offscreen documents aren't declared in the manifest schema at all).
+- `VOICE_RECOGNITION_EVENT` — offscreen → background (background rejects any
+  instance of this with a `sender.tab` present, as a defensive check — it
+  should only ever come from the offscreen doc).
+- `VOICE_NOTE_UPDATE` — background → Toolbar, via `chrome.tabs.sendMessage`
+  with the exact `{tabId, frameId}` captured when `START_VOICE_NOTE` was
+  handled (in-memory only in the background; a live-streaming interaction,
+  not persisted data — if the service worker is killed mid-recording, that
+  one session just stops, an acceptable degradation).
+
+**Transcript merging.** The note's value at the moment recording starts is
+captured as `baseNote`; every `onresult` event replaces (never appends to)
+the "this session" portion — `baseNote + (baseNote ? ' ' : '') + sessionText`
+— since interim results re-fire with cumulative text each time, naive
+appending would duplicate words on every update.
+
+**Failure modes handled explicitly, not silently:** `SpeechRecognition`
+unsupported in this browser → mic button hidden entirely (feature-detected
+once); permission denied → inline error text, button reverts to idle,
+retriable; recognition ends on its own (silence/timeout) → treated the same
+as an explicit stop. A 90s safety timeout in the offscreen script force-stops
+a forgotten-open mic.
+
+## Tasks
+- [x] types.ts — the 5 message types above (StartVoiceNote*, StopVoiceNote,
+      Offscreen*, VoiceRecognitionEvent, VoiceNoteUpdate) + a shared
+      discriminated VoiceEvent union (transcript/error/ended)
+- [x] vite.config.ts — additionalInputs: ['src/offscreen/index.html']
+- [x] manifest.json — add "offscreen" permission
+- [x] src/offscreen/index.html + index.ts — SpeechRecognition lifecycle,
+      base/session transcript merge is NOT here (offscreen only streams raw
+      transcript text; merging with baseNote happens in the Toolbar, since
+      the offscreen doc has no notion of "what's already in the note field")
+- [x] background/index.ts — ensureOffscreenDocument, START/STOP handlers,
+      voiceNoteTarget in-memory tracking, VOICE_RECOGNITION_EVENT relay
+- [x] Toolbar.tsx — mic button in .note-foot, recording state, baseNote
+      capture + merge on VOICE_NOTE_UPDATE, error text. Feature-detection
+      ended up simpler than planned: checked directly via `'webkitSpeech
+      Recognition' in window` in the Toolbar itself, no message round-trip —
+      the API's mere existence isn't origin-restricted, only actually using
+      the mic is, so this is valid without needing the offscreen doc's context.
+- [x] Toolbar STYLES — hardcoded hex (matches this component's existing
+      convention, not popup.css's CSS-variable system), pulse animation
+      respecting prefers-reduced-motion
+- [x] tsc (clean) + build; verified compiled into all three bundles
+      (background: voiceNoteTarget/ensureOffscreenDocument/USER_MEDIA;
+      content: btn-mic/isRecording/START_VOICE_NOTE; offscreen:
+      webkitSpeechRecognition/MAX_SESSION_MS/VOICE_RECOGNITION_EVENT).
+      Visually verified all 3 UI states (idle/recording/permission-denied)
+      against the real extracted Toolbar STYLES string via headless Chrome.
+- [ ] Live verification in Chrome (mic permission prompt, transcript
+      accuracy, stop/resume, denied-permission path) — needs the real
+      microphone + a real Google account context; not testable via headless
+      automation. FULL reload required (new "offscreen" permission).
+
+## Status: Built, type-checked, and visually verified. NOT yet live-tested —
+this is the one part of this feature that genuinely needs the user's own
+Chrome + microphone, same as OAuth-dependent features elsewhere in this file.

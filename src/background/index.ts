@@ -21,6 +21,13 @@ import type {
   SignOutResponse,
   AddDocNoteMessage,
   AddDocNoteResponse,
+  StartVoiceNoteMessage,
+  StartVoiceNoteResponse,
+  StopVoiceNoteMessage,
+  OffscreenStartRecognitionMessage,
+  OffscreenStopRecognitionMessage,
+  VoiceRecognitionEventMessage,
+  VoiceNoteUpdateMessage,
 } from '../types'
 
 const DOCS_API = 'https://docs.googleapis.com/v1/documents'
@@ -1225,4 +1232,72 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       })
     }
   }
+})
+
+// ── Voice-note capture ─────────────────────────────────────────────────────
+// SpeechRecognition/getUserMedia run in an offscreen document (its own stable
+// chrome-extension:// origin), not directly in the Toolbar's content-script
+// context — a mic permission requested from a content script is scoped to
+// whatever website the user is on ("nytimes.com wants your microphone"),
+// asked again per new domain, and silently blocked outright on sites with a
+// restrictive Permissions-Policy header. Requesting it from the extension's
+// own origin instead means it's asked once, ever, and works identically
+// everywhere after. See tasks/todo.md's "Voice-note capture" entry for the
+// full message-flow design (five distinct types, one hop each).
+
+// In-memory only — a live-streaming interaction, not persisted data. If the
+// service worker is killed mid-recording, that one session just stops.
+let voiceNoteTarget: { tabId: number; frameId: number } | null = null
+
+async function ensureOffscreenDocument(): Promise<void> {
+  const has = await chrome.offscreen.hasDocument()
+  if (has) return
+  await chrome.offscreen.createDocument({
+    url: 'src/offscreen/index.html',
+    reasons: [chrome.offscreen.Reason.USER_MEDIA],
+    justification: 'Transcribes a spoken margin note into text for the clip toolbar\'s note field.',
+  })
+}
+
+chrome.runtime.onMessage.addListener(
+  (message: StartVoiceNoteMessage, sender, sendResponse: (r: StartVoiceNoteResponse) => void) => {
+    if (message.type !== 'START_VOICE_NOTE') return false
+
+    ;(async () => {
+      if (!sender.tab?.id) { sendResponse({ success: false, error: 'No active tab' }); return }
+      try {
+        await ensureOffscreenDocument()
+        voiceNoteTarget = { tabId: sender.tab.id, frameId: sender.frameId ?? 0 }
+        chrome.runtime.sendMessage({ type: 'OFFSCREEN_START_RECOGNITION' } satisfies OffscreenStartRecognitionMessage)
+        sendResponse({ success: true })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Could not start voice input' })
+      }
+    })()
+
+    return true
+  }
+)
+
+chrome.runtime.onMessage.addListener((message: StopVoiceNoteMessage) => {
+  if (message.type !== 'STOP_VOICE_NOTE') return false
+  chrome.runtime.sendMessage({ type: 'OFFSCREEN_STOP_RECOGNITION' } satisfies OffscreenStopRecognitionMessage)
+  return false
+})
+
+// Relays the offscreen doc's transcript/error/ended events to the one tab+
+// frame that actually asked for them — chrome.tabs.sendMessage with an
+// explicit frameId, not a chrome.runtime broadcast, so this can't double-
+// deliver to every open tab's content script.
+chrome.runtime.onMessage.addListener((message: VoiceRecognitionEventMessage, sender) => {
+  if (message.type !== 'VOICE_RECOGNITION_EVENT') return false
+  if (sender.tab) return false  // defensive: this should only ever come from the offscreen doc
+  if (!voiceNoteTarget) return false
+
+  const { tabId, frameId } = voiceNoteTarget
+  const update: VoiceNoteUpdateMessage = { type: 'VOICE_NOTE_UPDATE', event: message.event }
+  chrome.tabs.sendMessage(tabId, update, { frameId }).catch(() => {})
+
+  if (message.event.kind === 'ended' || message.event.kind === 'error') voiceNoteTarget = null
+  return false
 })
