@@ -1143,16 +1143,22 @@ chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) return
   const tabId = tab.id
   const msg: ToggleDrawerMessage = { type: 'TOGGLE_DRAWER' }
+  // frameId: 0 (the main frame) — content scripts now run in every frame
+  // (all_frames: true, so the clip toolbar works inside iframes like Google
+  // Drive's file-preview viewer), and chrome.tabs.sendMessage without an
+  // explicit frameId broadcasts to ALL of them. The drawer must only ever
+  // exist once, at the page level — never duplicated into an iframe.
+  const opts = { frameId: 0 }
 
   try {
-    await chrome.tabs.sendMessage(tabId, msg)
+    await chrome.tabs.sendMessage(tabId, msg, opts)
   } catch {
     try {
       await chrome.scripting.executeScript({
         target: { tabId },
         files: ['src/content/index.js'],
       })
-      await chrome.tabs.sendMessage(tabId, msg)
+      await chrome.tabs.sendMessage(tabId, msg, opts)
     } catch {
       // Restricted page (New Tab, chrome://, Web Store, PDF viewer) — Chrome blocks
       // all extensions here. Tell the user the problem and the fix.
@@ -1198,13 +1204,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== IMAGE_MENU_ID || !info.srcUrl || !tab?.id) return
   const tabId = tab.id
   const msg: CaptureImageMessage = { type: 'CAPTURE_IMAGE', srcUrl: info.srcUrl }
+  // The right-click happened in a specific frame (info.frameId — 0 for the
+  // main frame, present since content scripts now run in every frame via
+  // all_frames: true). Target that exact frame rather than broadcasting to
+  // all of them, since only that frame actually has the clicked image.
+  const frameId = info.frameId ?? 0
 
   try {
-    await chrome.tabs.sendMessage(tabId, msg)
+    await chrome.tabs.sendMessage(tabId, msg, { frameId })
   } catch {
     try {
-      await chrome.scripting.executeScript({ target: { tabId }, files: ['src/content/index.js'] })
-      await chrome.tabs.sendMessage(tabId, msg)
+      await chrome.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, files: ['src/content/index.js'] })
+      await chrome.tabs.sendMessage(tabId, msg, { frameId })
     } catch {
       chrome.notifications.create({
         type: 'basic',

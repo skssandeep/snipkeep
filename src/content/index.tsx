@@ -298,6 +298,15 @@ chrome.runtime.onMessage.addListener((message: ToggleDrawerMessage | TriggerSave
 chrome.runtime.onMessage.addListener((message: TriggerSaveMessage) => {
   if (message.type !== 'TRIGGER_SAVE') return
 
+  // The background can't know which frame the user's selection is actually
+  // in (chrome.commands has no frame info), so this broadcasts to every
+  // frame (content scripts now run in all_frames). document.hasFocus() is
+  // what disambiguates: only the frame the user was last interacting with —
+  // where a selection would actually live — reports true. Every other frame
+  // on the page silently no-ops instead of showing a spurious "no text
+  // selected" toast of its own.
+  if (!document.hasFocus()) return
+
   const selection = window.getSelection()
   const text = normalizeSelectionText(selection?.toString() ?? '')
   if (!text) { showToast('No text selected', 'error'); return }
