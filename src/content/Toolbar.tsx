@@ -321,6 +321,29 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
   // results re-fire with cumulative text each time; naive appending would
   // duplicate words on every update.
   const baseNoteRef = useRef('')
+  // Always the actual current note text, kept in sync at every write site
+  // (both the textarea's own onChange and the transcript handler below) —
+  // not derived from a useEffect, so there's no risk of it lagging behind a
+  // fast-arriving message. This is what lets the transcript handler detect
+  // "did the user just type something manually" without a stale closure.
+  const noteValueRef = useRef('')
+  // The exact string voice itself last wrote. If noteValueRef no longer
+  // matches this, the user edited the box by hand since — see the
+  // transcript handler below for why that matters.
+  const lastVoiceWriteRef = useRef('')
+  // The last raw (combined final+interim) session text seen from the voice
+  // tab, for diffing out just the newly-added part after a manual edit.
+  const lastSessionTextRef = useRef('')
+  // Set when the user hits Enter or clicks "Save with note" while still
+  // recording — the save is deferred until the real 'ended' event confirms
+  // the final transcript has landed, not fired immediately (the transcript
+  // may still be finalizing when the key is pressed).
+  const saveAfterStopRef = useRef(false)
+  // Always the latest handleSave closure — the message-listener effect below
+  // has an empty dependency array (registers once), so calling handleSave()
+  // directly from inside it would use a stale closure over old `note`/
+  // `activeDest`. Refreshed after every render instead.
+  const handleSaveRef = useRef<(dest?: Destination) => void>(() => {})
 
   // Keyboard-driven highlight across the toolbar's actions (←/→). `navActive`
   // stays false until the first arrow so mouse users never see a stuck ring.
@@ -343,12 +366,42 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
       if (message.type !== 'VOICE_NOTE_UPDATE') return
       const { event } = message
       if (event.kind === 'transcript') {
-        setNote(baseNoteRef.current + (baseNoteRef.current ? ' ' : '') + event.text)
+        const prevSession = lastSessionTextRef.current
+        const newSession = event.text
+        lastSessionTextRef.current = newSession
+
+        if (noteValueRef.current === lastVoiceWriteRef.current) {
+          // Nothing changed since our last write — safe to fully replace,
+          // same as before.
+          const next = baseNoteRef.current + (baseNoteRef.current ? ' ' : '') + newSession
+          setNote(next)
+          noteValueRef.current = next
+          lastVoiceWriteRef.current = next
+        } else {
+          // The user typed something in the box since our last write — never
+          // silently overwrite that. Append only the NEW part of the session
+          // text (best-effort prefix diff; an occasional duplicated word from
+          // an interim self-correction is a far smaller cost than erasing an
+          // edit the user just made on purpose).
+          const delta = (newSession.startsWith(prevSession) ? newSession.slice(prevSession.length) : newSession).trim()
+          if (delta) {
+            const current = noteValueRef.current
+            const next = current + (current && !current.endsWith(' ') ? ' ' : '') + delta
+            setNote(next)
+            noteValueRef.current = next
+            lastVoiceWriteRef.current = next
+          }
+        }
       } else if (event.kind === 'error') {
         setVoiceError(event.error)
         setIsRecording(false)
+        saveAfterStopRef.current = false  // don't save on an error path
       } else {
         setIsRecording(false)
+        if (saveAfterStopRef.current) {
+          saveAfterStopRef.current = false
+          handleSaveRef.current()
+        }
       }
     }
     chrome.runtime.onMessage.addListener(handleMessage)
@@ -356,7 +409,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
   }, [])
 
   // Stop a forgotten-open mic if the toolbar itself goes away (save/dismiss)
-  // while still recording — otherwise the offscreen doc keeps listening with
+  // while still recording — otherwise the voice tab keeps listening with
   // nothing left to receive its updates.
   useEffect(() => {
     return () => {
@@ -366,6 +419,18 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
     }
   }, [])
 
+  // Recording should only ever be "a thing" while its own UI (the note
+  // panel) is visible — dismissing the panel any other way (Escape, opening
+  // the destination dropdown) previously left it running invisibly, with no
+  // surface left showing it was still listening. A live recording is always
+  // tied to the panel being open, never allowed to outlive it.
+  useEffect(() => {
+    if (!showNote && isRecordingRef.current) {
+      setIsRecording(false)
+      chrome.runtime.sendMessage({ type: 'STOP_VOICE_NOTE' } satisfies StopVoiceNoteMessage)
+    }
+  }, [showNote])
+
   const handleMicClick = async () => {
     if (isRecording) {
       setIsRecording(false)  // optimistic — feels immediate; a late transcript/ended event is a no-op either way
@@ -374,6 +439,13 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
     }
     setVoiceError('')
     baseNoteRef.current = note
+    // Treat whatever's already in the box as "voice's own last write" for
+    // this fresh session — nothing manual has happened *since* yet, so the
+    // first transcript update should take the normal fast-replace path, not
+    // mistake the pre-existing text for a mid-session edit to preserve
+    // (baseNoteRef already accounts for it as the prefix).
+    lastVoiceWriteRef.current = note
+    lastSessionTextRef.current = ''
     const res: StartVoiceNoteResponse = await chrome.runtime.sendMessage(
       { type: 'START_VOICE_NOTE' } satisfies StartVoiceNoteMessage
     )
@@ -402,10 +474,24 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
     }
   }
 
+  // Shared by the Enter key and the "Save with note" button: if still
+  // recording, the save can't fire immediately — the transcript may still be
+  // finalizing — so it's deferred until the real 'ended' event confirms the
+  // final text has landed (see the VOICE_NOTE_UPDATE handler above).
+  const handleSaveRequest = () => {
+    if (isRecording) {
+      saveAfterStopRef.current = true
+      handleMicClick()
+    } else {
+      handleSave()
+    }
+  }
+  useEffect(() => { handleSaveRef.current = handleSave })
+
   const handleNoteKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSave()
+      handleSaveRequest()
     } else if (e.key === 'Escape') {
       e.preventDefault()
       e.stopPropagation()
@@ -431,7 +517,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
     }
     if (key === 'Enter') {
       const action = actions[highlightRef.current] ?? 'save'
-      if (action === 'save') handleSave()
+      if (action === 'save') handleSaveRequest()
       else if (action === 'note') { setShowDropdown(false); setShowNote(true) }
       else { setShowNote(false); setShowDropdown(true) }
       return true
@@ -479,7 +565,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
         <div className="toolbar idle" role="toolbar" aria-label="SnipKeep">
           <button
             className={`btn-save${navActive && highlight === 0 ? ' kbd-focus' : ''}`}
-            onClick={() => handleSave()}
+            onClick={handleSaveRequest}
           >
             {label}
           </button>
@@ -508,7 +594,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
               className="note-input"
               placeholder="Add your take… (optional)"
               value={note}
-              onChange={e => setNote(e.target.value)}
+              onChange={e => { setNote(e.target.value); noteValueRef.current = e.target.value }}
               onKeyDown={handleNoteKey}
             />
             <div className="note-foot">
@@ -524,7 +610,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
                     <MdMic size={15} />
                   </button>
                 )}
-                <button className="note-save" onClick={() => handleSave()}>Save with note</button>
+                <button className="note-save" onClick={handleSaveRequest}>Save with note</button>
               </div>
             </div>
             {voiceError && <div className="note-voice-error">{voiceError}</div>}

@@ -766,3 +766,72 @@ denial), everything after that is fully invisible.
       direction to err in)
 - [x] tsc clean + build; verified active:false and the new message type
       identifier compiled into the background and voice-tab bundles
+
+## Follow-up: the finishing interaction, researched from psychology first (same session)
+
+User asked to step back before further fixes: research the interaction
+psychology of "user starts speaking, text gets detected... how should
+finishing work?" rather than just patching. Four changes came out of it.
+
+**Auto-stop on a pause, not a second click.** `continuous` stays `true`
+(mid-thought pauses shouldn't cut someone off), but a new silence-timeout
+watcher in the voice tab stops recognition after a pause — matching the
+pause-means-done model every voice assistant already trains people on
+(Jakob's Law), rather than requiring an explicit stop click. Two
+thresholds: `INITIAL_SILENCE_MS` (8s, time to start talking) and the much
+shorter `PAUSE_SILENCE_MS` (1.8s, once they've spoken and gone quiet). A
+`STILL_LISTENING_HINT_MS` timer updates the hint text if the initial window
+drags on, distinguishing "quiet but working" from "broken" for the rare
+case someone does see the tab.
+
+**Auto-stopping the listening ≠ auto-saving.** The transcript sits in the
+note field, editable, until a deliberate Enter/Save — voice transcription
+is never perfectly accurate, and this project's error-prevention stance
+(always leave a review beat before anything irreversible) argues against
+auto-committing a clip on someone's behalf.
+
+**Enter (or any save-triggering control) while still recording now means
+"finish and save."** `handleSaveRequest` — used by the Enter key, "Save
+with note," the main "Save to X" button, and the keyboard-nav Enter action,
+every path that could trigger a save — checks `isRecording` first. If
+still recording: sets `saveAfterStopRef`, stops recognition, and defers the
+actual save until the real `'ended'` event confirms the final transcript
+landed (guaranteed after any last final speech segment, per
+`SpeechRecognition`'s own event ordering) — via `handleSaveRef.current()`,
+a ref kept fresh every render rather than the message listener's stale
+closure. Collapses two required actions into the one keystroke people
+already use for a typed note.
+
+**Real bug this surfaced: editing the note by hand mid-recording could get
+silently overwritten.** The old merge logic replaced the *whole* note value
+on every transcript update, from a snapshot taken at recording-start — so
+manually fixing a mis-heard word would vanish on the next update. Fixed
+with a "did anything change since our own last write" check (`noteValueRef`
+vs `lastVoiceWriteRef`, both updated at every write site — textarea
+`onChange` and the transcript handler — not derived from a `useEffect` that
+could lag). Unchanged case: same fast-replace as before. Manual edit
+detected: switches to *appending* just the new part of the session text
+(best-effort prefix diff) after whatever's currently in the box, rather
+than replacing it.
+
+**Smaller fix, same pass:** dismissing the note panel any other way
+(Escape, opening the destination dropdown) used to leave an active
+recording running invisibly. A recording is now always tied to the panel
+being open — closing it any way at all stops the mic too.
+
+- [x] voice/index.ts — INITIAL_SILENCE_MS/PAUSE_SILENCE_MS/
+      STILL_LISTENING_HINT_MS, resetSilenceTimer wired into onresult/start
+- [x] Toolbar.tsx — noteValueRef/lastVoiceWriteRef/lastSessionTextRef for
+      safe merge; saveAfterStopRef + handleSaveRef for deferred save-while-
+      recording; handleSaveRequest used by every save-triggering control;
+      showNote-watching effect stops a recording if the panel closes any
+      other way
+- [x] tsc clean + build; verified startsWith/endsWith (merge logic) and
+      permissions.query/VOICE_TAB_NEEDS_FOREGROUND compiled into the
+      content and voice-tab bundles respectively
+
+## Status: Interaction redesigned around explicit psychological reasoning,
+not just bug-fixed reactively. Type-checks and builds clean. The 1.8s
+pause threshold is a reasoned starting point, not empirically tuned yet —
+still needs a live pass to confirm it feels right in practice, alongside
+the base feature's still-pending live microphone verification.
