@@ -835,3 +835,27 @@ not just bug-fixed reactively. Type-checks and builds clean. The 1.8s
 pause threshold is a reasoned starting point, not empirically tuned yet —
 still needs a live pass to confirm it feels right in practice, alongside
 the base feature's still-pending live microphone verification.
+
+## Follow-up: Enter-while-recording sometimes didn't save at all (same session)
+
+First live test: pressing Enter mid-speech sometimes did nothing. Real
+race, not a repeat bug — Enter and the silence auto-stop can both be
+triggered by the same "user stopped talking" moment, landing within
+milliseconds of each other. If the background clears `voiceSession` (auto-
+stop's own `'ended'` already processed) before the Toolbar's `isRecording`
+re-renders, `handleSaveRequest` reads a stale `true`, sends a second
+`STOP_VOICE_NOTE` that's now a no-op, and there's no second `'ended'` event
+left to ever resolve `saveAfterStopRef` — the save waits forever.
+
+Fixed with a 1.2s safety-timeout alongside the deferred-save flag, rather
+than trying to perfectly synchronize two independently-timed async
+triggers (the real state only exists behind message-passing, never
+synchronously reachable). If nothing has cleared `saveAfterStopRef` by
+then, save anyway with whatever's in `note` — safe regardless of how the
+race actually resolves, since the last real transcript update always lands
+well before this fires either way.
+
+- [x] Toolbar.tsx — handleSaveRequest's deferred branch now also starts a
+      1.2s fallback timer that force-saves if saveAfterStopRef is still set
+- [x] tsc clean + build; verified the 1200 constant compiled into the
+      content bundle

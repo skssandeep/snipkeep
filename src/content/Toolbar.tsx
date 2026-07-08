@@ -478,10 +478,29 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
   // recording, the save can't fire immediately — the transcript may still be
   // finalizing — so it's deferred until the real 'ended' event confirms the
   // final text has landed (see the VOICE_NOTE_UPDATE handler above).
+  //
+  // Race this has to survive: the silence-based auto-stop and this request
+  // can both be triggered by the same "user stopped talking" moment, so
+  // they can arrive within milliseconds of each other. If auto-stop's
+  // 'ended' event gets handled first (clearing the voice session in the
+  // background) but this function still reads a stale isRecording === true
+  // (React hasn't re-rendered yet), the STOP_VOICE_NOTE sent here lands on
+  // an already-ended session and is silently a no-op — no second 'ended'
+  // event is coming to resolve saveAfterStopRef. The timeout below is the
+  // fallback for exactly that: if nothing has cleared the flag shortly
+  // after, save anyway with whatever's currently in the note field (the
+  // last real transcript update always lands well before this fires,
+  // regardless of which order the race actually settled in).
   const handleSaveRequest = () => {
     if (isRecording) {
       saveAfterStopRef.current = true
       handleMicClick()
+      setTimeout(() => {
+        if (saveAfterStopRef.current) {
+          saveAfterStopRef.current = false
+          handleSaveRef.current()
+        }
+      }, 1200)
     } else {
       handleSave()
     }
