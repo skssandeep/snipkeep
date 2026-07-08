@@ -5,6 +5,8 @@
 // permission granted once, after which the offscreen doc can use it freely
 // (same extension origin). See CLAUDE.md's "Offscreen document" section.
 
+import type { MicPermissionGrantedMessage } from '../types'
+
 const statusEl = document.getElementById('status') as HTMLDivElement
 
 async function requestMicAccess() {
@@ -14,6 +16,11 @@ async function requestMicAccess() {
     stream.getTracks().forEach(track => track.stop())
     statusEl.textContent = '✓ All set — you can close this tab and try the mic button again.'
     statusEl.className = 'status ok'
+    // Tells the background to switch focus back to wherever the user was
+    // working — chrome.tabs.create's own opener-based focus-return isn't
+    // reliable here, since this tab was opened from the background, not a
+    // real click in the origin tab.
+    chrome.runtime.sendMessage({ type: 'MIC_PERMISSION_GRANTED' } satisfies MicPermissionGrantedMessage)
     setTimeout(() => window.close(), 1800)
   } catch {
     // Chrome won't re-show the native prompt after an explicit denial — the

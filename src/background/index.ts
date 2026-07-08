@@ -28,6 +28,7 @@ import type {
   OffscreenStopRecognitionMessage,
   VoiceRecognitionEventMessage,
   VoiceNoteUpdateMessage,
+  MicPermissionGrantedMessage,
 } from '../types'
 
 const DOCS_API = 'https://docs.googleapis.com/v1/documents'
@@ -1249,6 +1250,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // service worker is killed mid-recording, that one session just stops.
 let voiceNoteTarget: { tabId: number; frameId: number } | null = null
 
+// Which tab to return focus to once the mic-permission tab reports success.
+// Captured separately from voiceNoteTarget (which gets cleared the instant
+// the permission-needed event is handled) since the user may take a while
+// to grant it, by which point voiceNoteTarget is long gone.
+let pendingPermissionReturnTabId: number | null = null
+
 async function ensureOffscreenDocument(): Promise<void> {
   const has = await chrome.offscreen.hasDocument()
   if (has) return
@@ -1302,11 +1309,31 @@ chrome.runtime.onMessage.addListener((message: VoiceRecognitionEventMessage, sen
   // the only place that can is a real, visible tab. Open one; the Toolbar
   // just shows a message explaining that (see its VOICE_NOTE_UPDATE handler).
   if (message.event.kind === 'permission-needed') {
-    chrome.tabs.create({ url: 'src/permission/index.html' })
+    pendingPermissionReturnTabId = tabId
+    // openerTabId groups the new tab next to the one the user was working
+    // in and gives Chrome its own "return here" hint — but that's a
+    // heuristic, not a guarantee (this tab was opened from the background,
+    // not a real click in the origin tab, so Chrome has no natural opener
+    // relationship to fall back on). The MIC_PERMISSION_GRANTED handler
+    // below does the actual, deterministic focus-back via chrome.tabs.update.
+    chrome.tabs.create({ url: 'src/permission/index.html', openerTabId: tabId })
   }
 
   if (message.event.kind === 'ended' || message.event.kind === 'error' || message.event.kind === 'permission-needed') {
     voiceNoteTarget = null
+  }
+  return false
+})
+
+// The permission tab sends this once getUserMedia actually succeeds —
+// explicitly switch focus back to wherever the user was working, rather than
+// relying on chrome.tabs.create's opener heuristics (unreliable here, since
+// the tab was opened from the background, not a real click in the origin tab).
+chrome.runtime.onMessage.addListener((message: MicPermissionGrantedMessage) => {
+  if (message.type !== 'MIC_PERMISSION_GRANTED') return false
+  if (pendingPermissionReturnTabId !== null) {
+    chrome.tabs.update(pendingPermissionReturnTabId, { active: true }).catch(() => {})
+    pendingPermissionReturnTabId = null
   }
   return false
 })

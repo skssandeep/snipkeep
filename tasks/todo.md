@@ -752,3 +752,35 @@ permission page itself was rendered via headless Chrome to confirm it reads
 clearly. Still needs the same live-Chrome verification as the base feature —
 this fixes the *mechanism*, but only a real microphone grant confirms the
 full loop end to end.
+
+## Follow-up: tab focus didn't return to the origin tab after granting (same session)
+
+Live test confirmed the permission flow itself works (screenshot showed
+"✓ All set", mic-in-use indicator active) — but after the tab auto-closed,
+Chrome switched focus to some other tab instead of back to the one the user
+was actually working in. Root cause: `chrome.tabs.create({url})` was called
+from the **background service worker**, which has no "current tab" concept —
+so Chrome had no real opener relationship to fall back on when the tab
+closed, and just picked something via its own generic heuristic (unreliable
+with many tabs open, as in the user's screenshot).
+
+Fixed with an explicit, deterministic return rather than relying on Chrome's
+default behavior: `pendingPermissionReturnTabId` (background module state)
+captures the origin tab's id right when the permission tab is opened
+(`voiceNoteTarget.tabId`, before that gets cleared) and is also passed as
+`openerTabId` on `chrome.tabs.create` (cheap to add, helps the tab-strip
+grouping even though it isn't the real fix). The permission page now sends a
+new `MIC_PERMISSION_GRANTED` message the instant `getUserMedia` succeeds
+(before the 1.8s auto-close delay); the background's handler for it calls
+`chrome.tabs.update(pendingPermissionReturnTabId, {active: true})` — an
+explicit, guaranteed focus switch back to the right tab, not a hope that
+Chrome's own heuristic lands there.
+
+- [x] types.ts — MicPermissionGrantedMessage
+- [x] background/index.ts — pendingPermissionReturnTabId state, capture on
+      permission-needed, openerTabId on chrome.tabs.create, new listener
+      calling chrome.tabs.update on MIC_PERMISSION_GRANTED
+- [x] permission/index.ts — send MIC_PERMISSION_GRANTED on success, before
+      the auto-close timeout
+- [x] tsc clean + build; verified both identifiers compiled into background
+      and permission bundles

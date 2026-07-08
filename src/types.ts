@@ -216,3 +216,12 @@ export interface VoiceNoteUpdateMessage {
   type: 'VOICE_NOTE_UPDATE'
   event: VoiceEvent
 }
+
+// Sent by the permission tab (src/permission/) once getUserMedia actually
+// succeeds, so the background can explicitly focus back to the tab the user
+// was working in — chrome.tabs.create's default/opener-based focus-return
+// heuristics aren't reliable here, since this tab was opened from the
+// background, not from a real click in the origin tab.
+export interface MicPermissionGrantedMessage {
+  type: 'MIC_PERMISSION_GRANTED'
+}
