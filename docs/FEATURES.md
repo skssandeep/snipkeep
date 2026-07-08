@@ -257,3 +257,15 @@ User asked to revamp the "Google Doc URL" field and the interaction after pastin
 **The name's edit-pencil icon was fully invisible (`opacity: 0`) until hover.** A zero-opacity affordance is undiscoverable — nothing on screen hints the resolved title is editable unless the user happens to mouse over it (violates "affordances must be obvious"). Changed the idle state to `opacity: 0.4` (still clearly secondary to the name text itself), brightening to `1` + a lighter color on hover, same as before.
 
 **Smaller additions:** an `MdLink` icon now sits inside the URL field itself (`.field-input-row`, brightening to `--accent` on `:focus-within` — one more instance of the "every field icon reacts to its input's own state" pattern used elsewhere), and `.field`'s padding moved from a one-off `10px 14px 9px` to `var(--space-3) var(--space-4)`, matching the token-based spacing pass documented above for pills/chips/menu-items.
+
+### Renaming removed entirely (immediate follow-up, same session)
+
+User asked to disallow renaming a doc on add, and revamp the UI to match. This wasn't just deleting the pencil icon — it also resolved a real, previously-latent inconsistency: `syncDocNames` (`Popup.tsx`) unconditionally overwrites every doc's `name` with its live Google Doc title on every drawer mount. That means a custom name typed into the old rename UI was already living on borrowed time — it would silently revert to the real title the next time the drawer opened, with no explanation. Removing the rename affordance doesn't just simplify the form; it makes the UI stop promising something the app was already quietly undoing.
+
+Removed: `nameEditMode` state, `nameTouchedRef` (the guard that used to stop the auto-fetched title from clobbering a manually-typed name — no longer needed since there's no manual name to protect), `handleNameChange`, and the `.name-preview`/`.name-preview-edit`/`.name-preview-skeleton` CSS.
+
+Replaced with `.doc-name-status`, a plain read-only line between the URL field and the hint — deliberately *not* styled like a field (no border, no input framing, no hover/click affordance) so it doesn't imply an editability that wouldn't stick anyway:
+- Fetching: reuses the `.field-spinner` from the pass above + "Fetching the document's title…"
+- Resolved: an `MdCheckCircle` + `Will be added as "{title}"` — a straightforward confirmation, not a control.
+
+The name is now driven exclusively by the auto-fetched title (falling back to `'My Notes'` if the fetch fails or the doc is inaccessible), same as it always ultimately would settle to via `syncDocNames` — just without the detour through a UI that implied otherwise.

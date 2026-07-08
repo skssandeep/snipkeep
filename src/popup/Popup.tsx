@@ -93,9 +93,13 @@ function GateScreen({ onSignIn }: { onSignIn: () => Promise<void> }) {
 function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => void }) {
   const [docs, setDocs] = useState<DocDestination[]>([])
   const [newDocId, setNewDocId] = useState('')
+  // Always the live Google Doc title (or the 'My Notes' fallback) — never
+  // user-editable. It used to be, but syncDocNames() unconditionally
+  // overwrites doc.name with the real title on every drawer mount anyway, so
+  // a custom name would silently revert the next time the drawer opened —
+  // a confusing inconsistency removed by not offering the rename UI at all.
   const [newDocName, setNewDocName] = useState('')
   const [isFetchingTitle, setIsFetchingTitle] = useState(false)
-  const [nameEditMode, setNameEditMode] = useState(false)
   const [notionToken, setNotionToken] = useState('')
   const [notionPageId, setNotionPageId] = useState('')
   const [notionPageName, setNotionPageName] = useState('')
@@ -109,7 +113,6 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   // Which doc's "···" menu (Mark as done / Remove) is open, if any.
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null)
 
-  const nameTouchedRef = useRef(false)
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // FLIP reorder animation for the doc list: when a toggle moves a card (active
@@ -291,17 +294,11 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
     if (id.length < 20) return
 
     fetchTimerRef.current = setTimeout(async () => {
-      if (nameTouchedRef.current) return
       setIsFetchingTitle(true)
       const title = await getDocTitle(id)
       setIsFetchingTitle(false)
       if (title) setNewDocName(title)
     }, 600)
-  }
-
-  function handleNameChange(value: string) {
-    setNewDocName(value)
-    nameTouchedRef.current = true
   }
 
   function handleAddDoc() {
@@ -318,9 +315,7 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
     setDocs(updated)
     setNewDocId('')
     setNewDocName('')
-    setNameEditMode(false)
     setIsAdding(false)
-    nameTouchedRef.current = false
     showFlash(`"${name}" added.`)
 
     chrome.storage.sync.set({ docs: updated }, () => {
@@ -336,8 +331,6 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
     setIsFetchingTitle(false)
     setNewDocId('')
     setNewDocName('')
-    setNameEditMode(false)
-    nameTouchedRef.current = false
     setIsAdding(false)
   }
 
@@ -445,33 +438,24 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
           </div>
         </div>
 
-        {newDocId.trim() && (
-          <div className="field name-preview-field">
-            <span className="field-label">
-              Name {isFetchingTitle && <span className="field-fetching"><span className="field-spinner" /> Fetching…</span>}
-            </span>
-            {nameEditMode ? (
-              <input
-                className="field-input"
-                value={newDocName}
-                onChange={e => handleNameChange(e.target.value)}
-                placeholder="Enter a name"
-                autoFocus
-                onBlur={() => { if (!newDocName.trim()) setNameEditMode(false) }}
-              />
-            ) : isFetchingTitle ? (
-              // Skeleton, not a blank row — a name is known to be coming
-              // (Performance Perception: show progress, never an empty gap).
-              <div className="name-preview-skeleton" />
-            ) : (
-              <div className="name-preview" onClick={() => setNameEditMode(true)}>
-                <span className="name-preview-text">{newDocName || 'My Notes'}</span>
-                <span className="name-preview-edit" title="Edit name"><MdEdit size={12} /></span>
-              </div>
-            )}
-          </div>
-        )}
       </div>
+
+      {/* Read-only by design — not a truncated feature. The Doc's name always
+          tracks its real Google Doc title; syncDocNames() re-fetches and
+          overwrites it on every drawer mount regardless, so a custom name
+          typed here would silently revert the next time the drawer opened.
+          Showing it as a plain status line (not a field with an edit
+          affordance) makes that truthful up front instead of implying an
+          editability that wouldn't actually stick. */}
+      {newDocId.trim() && (
+        <p className="doc-name-status">
+          {isFetchingTitle ? (
+            <><span className="field-spinner" /> Fetching the document's title…</>
+          ) : (
+            <><MdCheckCircle size={13} className="doc-name-status-icon" /> Will be added as "{newDocName || 'My Notes'}"</>
+          )}
+        </p>
+      )}
 
       <p className="hint">Paste the full URL from your browser — the ID is extracted automatically.</p>
 
