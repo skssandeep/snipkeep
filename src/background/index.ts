@@ -1298,6 +1298,15 @@ chrome.runtime.onMessage.addListener((message: VoiceRecognitionEventMessage, sen
   const update: VoiceNoteUpdateMessage = { type: 'VOICE_NOTE_UPDATE', event: message.event }
   chrome.tabs.sendMessage(tabId, update, { frameId }).catch(() => {})
 
-  if (message.event.kind === 'ended' || message.event.kind === 'error') voiceNoteTarget = null
+  // The offscreen doc can never show Chrome's actual mic permission dialog —
+  // the only place that can is a real, visible tab. Open one; the Toolbar
+  // just shows a message explaining that (see its VOICE_NOTE_UPDATE handler).
+  if (message.event.kind === 'permission-needed') {
+    chrome.tabs.create({ url: 'src/permission/index.html' })
+  }
+
+  if (message.event.kind === 'ended' || message.event.kind === 'error' || message.event.kind === 'permission-needed') {
+    voiceNoteTarget = null
+  }
   return false
 })

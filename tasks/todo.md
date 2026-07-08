@@ -705,3 +705,50 @@ a forgotten-open mic.
 ## Status: Built, type-checked, and visually verified. NOT yet live-tested —
 this is the one part of this feature that genuinely needs the user's own
 Chrome + microphone, same as OAuth-dependent features elsewhere in this file.
+
+## Follow-up: offscreen documents can't show the mic permission dialog at all (same session)
+
+First live test hit "Microphone permission was denied" instantly, with no
+permission prompt ever appearing. Researched rather than guessing again:
+this is a hard, documented Chrome limitation — `chrome.offscreen` documents
+have no visible surface for Chrome to anchor a `getUserMedia` prompt to, so
+they get an immediate `NotAllowedError` regardless of whether the user was
+ever actually asked. Confirmed via the Chromium extensions mailing list and
+multiple independent GitHub issues describing the exact same failure.
+
+**Fix: a new, real, visible tab whose only job is to trigger the actual
+prompt.** `src/permission/index.html` + `index.ts` — calls
+`getUserMedia({audio:true})` immediately on load (a real tab, so Chrome's
+native dialog can actually appear), stops the resulting stream (only the
+grant was needed), shows a friendly status line, and auto-closes after
+~1.8s on success. On failure, since Chrome won't re-show its native prompt
+after an explicit denial, it instead points the user to the site-settings
+icon in the address bar — the only remaining way back.
+
+- `types.ts` — `VoiceEvent` gained a `{ kind: 'permission-needed' }` variant,
+  distinct from a plain `'error'` — this isn't a user decision to surface as
+  an error message, it's "Chrome structurally can't ask here."
+- `offscreen/index.ts` — `recognition.onerror` now special-cases
+  `not-allowed`/`permission-denied`/`service-not-allowed` into
+  `permission-needed` rather than a generic error message, since all three
+  fire identically whether permission was never asked or was previously
+  denied, and this offscreen doc can never meaningfully resolve either case
+  itself.
+- `background/index.ts` — on relaying a `permission-needed` event, also
+  calls `chrome.tabs.create({ url: 'src/permission/index.html' })` before
+  forwarding to the Toolbar.
+- `Toolbar.tsx` — its `VOICE_NOTE_UPDATE` handler shows a specific message
+  for this case ("Opening a tab so you can allow microphone access...")
+  rather than a bare error, since a tab is about to open and the user
+  should know why.
+- `vite.config.ts` — `additionalInputs` gained the new permission page
+  alongside the offscreen doc (same reason: neither is declared in
+  manifest.json's schema, so the build silently drops them without this).
+
+Verified: tsc clean, build confirms `dist/src/permission/` exists alongside
+`dist/src/offscreen/`, and the new `permission-needed` identifier compiled
+into all three affected bundles (offscreen, background, content). The
+permission page itself was rendered via headless Chrome to confirm it reads
+clearly. Still needs the same live-Chrome verification as the base feature —
+this fixes the *mechanism*, but only a real microphone grant confirms the
+full loop end to end.

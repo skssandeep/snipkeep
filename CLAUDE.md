@@ -89,6 +89,8 @@ background --VOICE_NOTE_UPDATE (chrome.tabs.sendMessage, explicit frameId)--> To
 ```
 The background tracks which `{tabId, frameId}` requested the active session in a plain in-memory variable (`voiceNoteTarget`) — fine for a live-streaming interaction, unlike the durable data elsewhere in this file that must survive a service-worker restart; if the SW is killed mid-recording, that one session just stops.
 
+**Gotcha — offscreen documents cannot show the `getUserMedia` permission dialog, ever.** They have no visible surface for Chrome to anchor the prompt to, so `recognition.start()` there fails immediately with `NotAllowedError`/`not-allowed` regardless of whether the user was ever actually asked — confirmed against the Chromium extensions mailing list and multiple independent GitHub issues describing the identical failure, not assumed. The fix is a **second** extra page, `src/permission/index.html` (also in `vite.config.ts`'s `additionalInputs`) — a real, visible tab opened via `chrome.tabs.create`, whose only job is to call `getUserMedia` itself so Chrome's native dialog can actually appear. Once granted there, the offscreen doc can use it freely (same extension origin, no re-prompt). The offscreen script's `onerror` routes all three of `not-allowed`/`permission-denied`/`service-not-allowed` into a distinct `VoiceEvent` kind, `'permission-needed'` — never treated as a plain error, since the fix isn't "show a message," it's "open the one page that can actually resolve this."
+
 ### Message flow
 
 ```

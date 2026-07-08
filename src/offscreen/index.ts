@@ -85,12 +85,20 @@ function startRecognition() {
     sendEvent({ kind: 'transcript', text: (finalText + interim).trim() })
   }
   recognition.onerror = (e) => {
-    const message = e.error === 'not-allowed' || e.error === 'permission-denied' || e.error === 'service-not-allowed'
-      ? 'Microphone permission was denied.'
-      : e.error === 'no-speech'
-        ? 'No speech detected.'
-        : 'Voice input stopped unexpectedly.'
-    sendEvent({ kind: 'error', error: message })
+    // Chrome offscreen documents can never show the actual mic permission
+    // dialog — every one of these three error codes fires immediately, with
+    // no prompt ever shown, whether permission was never asked or was
+    // explicitly denied in the past. Since this document has no visible
+    // surface to explain or resolve that, ALL of them route to the same
+    // recovery path: the background opens a real, visible tab, the only
+    // place Chrome will actually show the prompt (or let the user fix a
+    // past denial via the site-settings icon).
+    if (e.error === 'not-allowed' || e.error === 'permission-denied' || e.error === 'service-not-allowed') {
+      sendEvent({ kind: 'permission-needed' })
+    } else {
+      const message = e.error === 'no-speech' ? 'No speech detected.' : 'Voice input stopped unexpectedly.'
+      sendEvent({ kind: 'error', error: message })
+    }
     recognition = null
     clearMaxDurationTimer()
   }

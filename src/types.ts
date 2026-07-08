@@ -180,6 +180,13 @@ export type VoiceEvent =
   | { kind: 'transcript'; text: string }
   | { kind: 'error'; error: string }
   | { kind: 'ended' }
+  // Chrome's offscreen documents cannot show a getUserMedia permission
+  // prompt at all — they get an immediate NotAllowedError with no dialog
+  // ever shown, a hard platform restriction, not a denial by the user. This
+  // is a distinct outcome from a real denial: the background reacts by
+  // opening a real, visible tab (the only place Chrome will actually show
+  // the prompt) instead of just displaying an error.
+  | { kind: 'permission-needed' }
 
 export interface StartVoiceNoteMessage {
   type: 'START_VOICE_NOTE'
