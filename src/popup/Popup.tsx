@@ -114,6 +114,10 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null)
 
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Lets the visibility-change handler below read the current doc list
+  // without re-subscribing its listener every time docs changes.
+  const docsRef = useRef<DocDestination[]>([])
+  useEffect(() => { docsRef.current = docs }, [docs])
 
   // FLIP reorder animation for the doc list: when a toggle moves a card (active
   // docs sort above inactive), the card slides to its new spot instead of
@@ -246,6 +250,27 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
     }
     chrome.storage.onChanged.addListener(onStatsChange)
     return () => chrome.storage.onChanged.removeListener(onStatsChange)
+  }, [])
+
+  // Doc names always track the real Google Doc title (renaming inside
+  // SnipKeep is intentionally not offered — see the newDocName comment
+  // above). The mount effect above covers most of the ways that's kept
+  // fresh: reopening the drawer (Drawer.tsx fully unmounts on close) and
+  // switching away from/back to this tab (Popup.tsx renders DocsTab via a
+  // ternary, so it unmounts too) both re-run it via a fresh mount. The one
+  // gap: the drawer staying open on this exact tab, uninterrupted, while the
+  // Doc gets renamed in a different browser tab. visibilitychange fires on
+  // *this* page's own document when the user tabs away and back — even
+  // though the drawer is a content-script overlay, it shares the host
+  // page's document, so this fires exactly when it should.
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === 'visible' && docsRef.current.length > 0) {
+        syncDocNames(docsRef.current)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
 
   // Title lookups go through the background — content scripts (the drawer)
