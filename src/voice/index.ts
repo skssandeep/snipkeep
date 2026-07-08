@@ -1,17 +1,27 @@
-// A real, visible tab — the only place Chrome will actually show the
-// getUserMedia permission dialog AND reliably let recognition keep running.
-// chrome.offscreen documents were tried first for this (so no visible tab
-// would need to appear at all); confirmed live that they get an immediate
-// NotAllowedError with no prompt shown, and — critically — granting the
-// permission via a *separate* real tab first didn't make a subsequent
-// offscreen attempt succeed either. A real tab is the one thing proven to
-// work end to end, so recognition itself now happens right here.
+// A real tab — the only place Chrome will actually show the getUserMedia
+// permission dialog AND reliably let recognition keep running. chrome.
+// offscreen documents were tried first (so no tab would need to exist at
+// all); confirmed live that they get an immediate NotAllowedError with no
+// prompt shown, and — critically — granting the permission via a *separate*
+// real tab first didn't make a subsequent offscreen attempt succeed either.
+// A real tab is the one thing proven to work end to end.
+//
+// Opened in the BACKGROUND (background/index.ts's chrome.tabs.create with
+// active: false) — the user should stay on the page they're clipping from
+// and watch the note field fill in live, not have their view yanked to a
+// separate tab. This only asks to be foregrounded the one time it actually
+// needs the user's attention: granting mic permission for the first time,
+// since Chrome's native dialog needs a visible, active tab to appear on at
+// all. Checked via navigator.permissions.query BEFORE calling getUserMedia,
+// so the decision to foreground happens ahead of time, not as a reaction to
+// a prompt that a backgrounded tab might not even be able to show.
 // See CLAUDE.md's "Voice tab" section for the full message-flow design.
 
 import type {
   VoiceEvent,
   VoiceRecognitionEventMessage,
   VoiceTabStopMessage,
+  VoiceTabNeedsForegroundMessage,
 } from '../types'
 
 // Minimal local typing for the Web Speech API — not part of TypeScript's DOM
@@ -139,6 +149,22 @@ function startRecognition() {
 }
 
 async function init() {
+  // Decide BEFORE calling getUserMedia whether the user needs to actually
+  // see this tab — a backgrounded tab may not be able to show Chrome's
+  // native permission dialog at all, so foregrounding has to happen ahead
+  // of the prompt, not as a reaction to one. If the query itself fails for
+  // any reason, foreground defensively — an unnecessary foreground is a
+  // minor annoyance; failing to foreground when it was actually needed
+  // leaves the user stuck looking at a tab they can't interact with.
+  try {
+    const status = await navigator.permissions.query({ name: 'microphone' })
+    if (status.state !== 'granted') {
+      chrome.runtime.sendMessage({ type: 'VOICE_TAB_NEEDS_FOREGROUND' } satisfies VoiceTabNeedsForegroundMessage)
+    }
+  } catch {
+    chrome.runtime.sendMessage({ type: 'VOICE_TAB_NEEDS_FOREGROUND' } satisfies VoiceTabNeedsForegroundMessage)
+  }
+
   try {
     // Requesting this here is what lets Chrome actually show its native
     // dialog (a real tab, unlike an offscreen document) — or resolve

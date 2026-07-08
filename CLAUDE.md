@@ -84,8 +84,11 @@ The Toolbar's mic button (speak a margin note instead of typing it) runs `Speech
 
 **Current design:** one real tab does both jobs — requesting the permission (shows Chrome's native dialog on first use; resolves instantly with no prompt on every use after, since the grant is scoped to the extension's stable origin) and running the recognition itself, live, for as long as the tab stays open. `vite.config.ts` needs `additionalInputs: ['src/voice/index.html']` — like the abandoned offscreen/permission pages, this isn't declared anywhere in the manifest schema (`chrome.tabs.create()` just takes a URL string at runtime), so without this the plugin never bundles it into `dist/`.
 
+**The tab opens in the background (`active: false`), not focused.** The user should watch the note field fill in live on the page they're clipping from, not have their view yanked to a separate tab — a real, visible tab is required for the mic to work at all (see above), but "visible" doesn't have to mean "focused the whole time." The voice tab decides *before* calling `getUserMedia` whether it actually needs the user's attention: it checks `navigator.permissions.query({name: 'microphone'})` first, and only sends `VOICE_TAB_NEEDS_FOREGROUND` (background responds with `chrome.tabs.update(tabId, {active: true})`) if the state isn't already `'granted'` — i.e., the very first grant, or explaining a past denial. Every use after that first grant, the tab does its job silently in the background and the user never needs to look at it. This check has to happen *ahead* of calling `getUserMedia`, not in reaction to it — a backgrounded tab may not even be able to show Chrome's native dialog once it's already trying to appear, so the decision to foreground has to be made first.
+
 ```
-Toolbar --START_VOICE_NOTE--> background --(chrome.tabs.create)--> voice tab
+Toolbar --START_VOICE_NOTE--> background --(chrome.tabs.create, active:false)--> voice tab
+voice tab --VOICE_TAB_NEEDS_FOREGROUND--> background --(chrome.tabs.update, active:true)--> voice tab [only if mic permission isn't already granted]
 voice tab --VOICE_RECOGNITION_EVENT--> background --VOICE_NOTE_UPDATE (explicit frameId)--> Toolbar
 Toolbar --STOP_VOICE_NOTE--> background --VOICE_TAB_STOP (explicit tabId, chrome.tabs.sendMessage)--> voice tab
 ```

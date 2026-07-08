@@ -735,3 +735,34 @@ sends `STOP_VOICE_NOTE`.
 offscreen-document approach. Type-checks, builds, and visually verifies
 correctly. Still needs a full live pass with a real microphone to confirm
 the actual recognition loop end to end — this is now the one open item.
+
+## Follow-up: the voice tab shouldn't take over the user's view (same session)
+
+First live test of the real-tab architecture confirmed transcription
+genuinely works (screenshot showed live text: "my name is Sandeep Kumar
+Singh") — the core mechanism is proven. But direct feedback: the user wants
+to stay on the page they're clipping from and watch the note field fill in
+live, not have their view taken over by a separate tab showing its own copy
+of the transcript.
+
+Fixed by opening the voice tab in the background (`active: false`) instead
+of letting `chrome.tabs.create` default to focusing it. The wrinkle: a
+backgrounded tab may not be able to show Chrome's native mic-permission
+dialog at all, so the decision to foreground has to happen *before* calling
+`getUserMedia`, not as a reaction to a prompt that might not even be able to
+appear. The voice tab now checks `navigator.permissions.query({name:
+'microphone'})` first; only if the state isn't already `'granted'` does it
+ask the background to foreground it (`VOICE_TAB_NEEDS_FOREGROUND` →
+`chrome.tabs.update(tabId, {active:true})`). In practice: one moment ever
+where the user needs to look at this tab (the first grant, or a past
+denial), everything after that is fully invisible.
+
+- [x] types.ts — VoiceTabNeedsForegroundMessage
+- [x] background/index.ts — chrome.tabs.create now passes active:false;
+      new listener foregrounds the sender tab on VOICE_TAB_NEEDS_FOREGROUND
+- [x] voice/index.ts — permissions.query check before getUserMedia, sends
+      VOICE_TAB_NEEDS_FOREGROUND only when not already granted (defaults to
+      foregrounding if the query itself fails, since that's the safer
+      direction to err in)
+- [x] tsc clean + build; verified active:false and the new message type
+      identifier compiled into the background and voice-tab bundles

@@ -202,6 +202,17 @@ export interface VoiceTabStopMessage {
   type: 'VOICE_TAB_STOP'
 }
 
+// voice tab → background. The voice tab is opened in the background
+// (active: false) so the user's focus stays on the page they're clipping
+// from — they should see the note field fill in live, not stare at a
+// separate tab. It only asks to be foregrounded the one time it actually
+// needs the user's attention: granting the mic permission for the first
+// time (or explaining a past denial), since Chrome's native prompt needs a
+// visible, active tab to appear on. Once already granted, this is never sent.
+export interface VoiceTabNeedsForegroundMessage {
+  type: 'VOICE_TAB_NEEDS_FOREGROUND'
+}
+
 // voice tab → background. sender.tab is absent for messages from an
 // offscreen document but IS present for a normal tab, so the background's
 // listener distinguishes this from a stray content-script message by

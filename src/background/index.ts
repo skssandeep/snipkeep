@@ -25,6 +25,7 @@ import type {
   StartVoiceNoteResponse,
   StopVoiceNoteMessage,
   VoiceTabStopMessage,
+  VoiceTabNeedsForegroundMessage,
   VoiceRecognitionEventMessage,
   VoiceNoteUpdateMessage,
 } from '../types'
@@ -1261,7 +1262,12 @@ chrome.runtime.onMessage.addListener(
     ;(async () => {
       if (!sender.tab?.id) { sendResponse({ success: false, error: 'No active tab' }); return }
       try {
-        const voiceTab = await chrome.tabs.create({ url: 'src/voice/index.html', openerTabId: sender.tab.id })
+        // active: false — the user should stay on the page they're
+        // clipping from and watch the note field fill in live, not have
+        // their focus yanked to a separate tab. It brings itself forward
+        // (VOICE_TAB_NEEDS_FOREGROUND, below) only the one time it actually
+        // needs to: granting mic permission for the first time.
+        const voiceTab = await chrome.tabs.create({ url: 'src/voice/index.html', openerTabId: sender.tab.id, active: false })
         if (!voiceTab.id) throw new Error('Could not open the voice-input tab')
         voiceSession = { originTabId: sender.tab.id, originFrameId: sender.frameId ?? 0, voiceTabId: voiceTab.id }
         sendResponse({ success: true })
@@ -1299,6 +1305,17 @@ chrome.runtime.onMessage.addListener((message: VoiceRecognitionEventMessage, sen
   chrome.tabs.sendMessage(originTabId, update, { frameId: originFrameId }).catch(() => {})
 
   if (message.event.kind === 'ended' || message.event.kind === 'error') endVoiceSession(true)
+  return false
+})
+
+// The voice tab asks for this the one time it actually needs the user's
+// attention — granting mic permission for the first time (Chrome's native
+// dialog needs a visible, active tab to appear on at all). Every other time
+// (permission already granted), this never fires, and the tab stays quietly
+// in the background the whole session.
+chrome.runtime.onMessage.addListener((message: VoiceTabNeedsForegroundMessage, sender) => {
+  if (message.type !== 'VOICE_TAB_NEEDS_FOREGROUND') return false
+  if (sender.tab?.id) chrome.tabs.update(sender.tab.id, { active: true }).catch(() => {})
   return false
 })
 
