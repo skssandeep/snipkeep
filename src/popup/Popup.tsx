@@ -33,6 +33,18 @@ import type {
   SignInResponse,
   AddDocNoteMessage,
   AddDocNoteResponse,
+  AIProvider,
+  AIConfig,
+  ConnectAIMessage,
+  ConnectAIResponse,
+  DisconnectAIMessage,
+  DisconnectAIResponse,
+  AskFollowUpMessage,
+  AskFollowUpResponse,
+  SummarizeTopicMessage,
+  SummarizeTopicResponse,
+  UpdateBibliographyMessage,
+  UpdateBibliographyResponse,
 } from '../types'
 
 type Tab = 'docs' | 'completed' | 'history'
@@ -112,6 +124,15 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   const [editingDeadlineFor, setEditingDeadlineFor] = useState<string | null>(null)
   // Which doc's "···" menu (Mark as done / Remove) is open, if any.
   const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null)
+  // Raw clip archive, kept for Summarize (needs each clip's text, not just
+  // the uncited count computeUncited derives from the same data).
+  const [allClips, setAllClips] = useState<HistoryEntry[]>([])
+  // Whether a bring-your-own AI key is connected — gates the "✨ Summarize"
+  // menu item; invisible entirely until one exists, per docs/IDEAS.md #3.
+  const [aiConnected, setAiConnected] = useState(false)
+  const [summaryOpenFor, setSummaryOpenFor] = useState<string | null>(null)
+  const [summaryText, setSummaryText] = useState('')
+  const [summaryStatus, setSummaryStatus] = useState('')
 
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Lets the visibility-change handler below read the current doc list
@@ -160,23 +181,92 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   // inactive flip (opacity 1 ↔ 0.5) can be folded into the SAME animate()
   // call as the position slide — see the opacity note below for why.
   const prevActiveMap = useRef<Map<string, boolean>>(new Map())
+  // Our own in-flight FLIP animation per card — NOT el.getAnimations(), which
+  // would also return the card's CSS hover transitions (box-shadow etc.);
+  // cancelling those on interruption would break unrelated hover feedback.
+  const runningAnims = useRef<Map<string, Animation>>(new Map())
+  // The "Add document" control, tracked separately from cardEls: it's not a
+  // doc card, but it's anchored after the LAST ACTIVE card, so a toggle that
+  // changes which card that is moves it too — and it used to be the one
+  // element in the list that teleported instantly while everything around it
+  // glided. It also REMOUNTS as a new DOM node when it moves (it renders
+  // inside a different card's Fragment), which is fine for FLIP: position
+  // history is keyed by the stable sentinel below, not by element identity.
+  const addControlEl = useRef<HTMLElement | null>(null)
+  const ADD_CONTROL_KEY = '__add-control'
   useLayoutEffect(() => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    // Iterate in the doc's current visual order (not Map insertion order) so
-    // the stagger index below reflects top-to-bottom position, not the id.
+    // Initial-population guard: docs arrive ASYNC from chrome.storage on
+    // every fresh mount (drawer open, tab switch back to Docs), so render 1
+    // is always an empty list and render 2 is the populated one. The add
+    // control exists in BOTH renders — it's the empty state's only content,
+    // sitting at the top — so it alone carries position history across that
+    // transition, and FLIP would dutifully animate it from "top of the empty
+    // list" down to "after the last active card": a lone ghost slide on
+    // every drawer open, over cards that (correctly) don't animate at all.
+    // Data arriving is not movement. If no CARD has position history yet,
+    // this render is a population, not a reorder — record everything's
+    // position, animate nothing.
+    const isInitialPopulation = !activeDocs.some(d => prevTops.current.has(d.id))
+    // Everything that visibly moves on reorder takes part in the FLIP pass —
+    // the doc cards AND the add control. Iterate in current visual order (not
+    // Map insertion order) so the stagger index reflects top-to-bottom
+    // position; the add control slots in right after the last active card,
+    // which is exactly where it renders.
+    type Participant = { key: string; el: HTMLElement; index: number; active: boolean }
+    const participants: Participant[] = []
     activeDocs.forEach((doc, index) => {
       const el = cardEls.current.get(doc.id)
-      if (!el) return
+      if (el) participants.push({ key: doc.id, el, index, active: doc.active })
+    })
+    if (addControlEl.current) {
+      participants.push({ key: ADD_CONTROL_KEY, el: addControlEl.current, index: lastActiveIdx + 1, active: true })
+    }
+
+    participants.forEach(({ key, el, index, active }) => {
       // offsetTop (layout-relative), not getBoundingClientRect (viewport-
       // relative): immune to scroll between renders and ignores in-flight
       // transforms, so we compare true layout positions only.
       const nextTop = el.offsetTop
-      const prevTop = prevTops.current.get(doc.id)
-      const prevWasActive = prevActiveMap.current.get(doc.id)
-      const dy = prevTop !== undefined ? prevTop - nextTop : 0
+      const prevTop = prevTops.current.get(key)
+      const prevWasActive = prevActiveMap.current.get(key)
+      let dy = prevTop !== undefined ? prevTop - nextTop : 0
+
+      // Interruption continuity: if this element is still mid-flight from a
+      // previous toggle (rapid re-toggling), restarting from the stale layout
+      // delta snaps it from wherever it VISUALLY is to a computed start point
+      // — the exact "sudden jerk" shape, just on the second click instead of
+      // the first. offsetTop deliberately ignores transforms (right for
+      // layout truth, wrong for visual truth), so bridge the two: read the
+      // in-flight transform/opacity from computed style, fold the transform
+      // into the new delta (the new slide then begins at the element's
+      // current visual position), carry the in-flight opacity as the new
+      // start opacity, and cancel the old animation. Also skip the hold on
+      // continuation — an element frozen mid-air for 140ms reads as a hang,
+      // not a beat; the hold is for at-rest elements only.
+      const prevAnim = runningAnims.current.get(key)
+      const interrupted = !!prevAnim && prevAnim.playState !== 'finished'
+      let inFlightOpacity: number | null = null
+      if (interrupted) {
+        // The add control remounts when it moves, so a still-running animation
+        // may belong to the DETACHED previous node — its in-flight offset has
+        // no meaning for this fresh element. Fold in-flight state only when
+        // the running animation actually targets this element.
+        const sameEl = (prevAnim.effect as KeyframeEffect | null)?.target === el
+        if (sameEl) {
+          const cs = getComputedStyle(el)
+          if (cs.transform && cs.transform !== 'none') dy += new DOMMatrixReadOnly(cs.transform).m42
+          inFlightOpacity = parseFloat(cs.opacity)
+        }
+        prevAnim.cancel()  // its stale cancel event is ignored — see clearPromotion below
+      }
+
       const positionChanged = prevTop !== undefined && Math.abs(dy) > 1
-      const opacityChanged = prevWasActive !== undefined && prevWasActive !== doc.active
-      if (!reduce && (positionChanged || opacityChanged)) {
+      const opacityChanged = prevWasActive !== undefined && prevWasActive !== active
+      // `interrupted` is a trigger of its own: a quick toggle-back can land on
+      // dy ≈ 0 with the same target opacity, but the element is still visibly
+      // displaced mid-flight — it needs an animation home, not a snap to rest.
+      if (!reduce && !isInitialPopulation && (positionChanged || opacityChanged || interrupted)) {
         // .doc-item.inactive is opacity 0.5 in CSS (see popup.css) — but that
         // CSS transition only ever covered background/box-shadow, never
         // opacity. Toggling active/inactive therefore SNAPPED the dimming
@@ -187,20 +277,80 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
         // animate() call (rather than a separate CSS transition) guarantees
         // it's perfectly synced to the slide's duration/delay/easing — no
         // second timeline that could drift out of step with the first.
-        const fromOpacity = prevWasActive === undefined ? (doc.active ? 1 : 0.5) : (prevWasActive ? 1 : 0.5)
-        const toOpacity = doc.active ? 1 : 0.5
-        const duration = Math.min(780, 460 + Math.abs(dy) * 0.4)
-        const delay = Math.min(150, index * 20)
-        el.animate(
+        const fromOpacity = inFlightOpacity ?? (prevWasActive === undefined ? (active ? 1 : 0.5) : (prevWasActive ? 1 : 0.5))
+        const toOpacity = active ? 1 : 0.5
+        // Extended on request for a gentler, softer, slower feel (was
+        // 460-780ms base/cap, 0.4ms/px, 20ms/index stagger). |dy| here is the
+        // VISUAL distance still to travel (incl. any in-flight offset folded
+        // in above), so an interrupted card that's nearly home gets a
+        // proportionally short remainder, not a full restart duration.
+        const duration = Math.min(1100, 640 + Math.abs(dy) * 0.5)
+        // A flat 140ms HOLD up front, before the per-card stagger — without
+        // it, delay was 0-180ms driven only by stagger position, so the
+        // first card (and often the toggled one) had ~0ms before motion
+        // started: click and slide landed on the same frame, reading as an
+        // instant cut into motion rather than a settled response. The hold
+        // gives every card a genuine still beat at its current position
+        // first, THEN the gentle glide into place — "click, pause, move,"
+        // not "click, move."
+        // KEEP IN SYNC with .doc-list-divider's animation-delay in popup.css
+        // — the divider's entrance is choreographed to start exactly when the
+        // cards' hold ends, so it fades in as the space clears rather than
+        // while a held card still overlaps it.
+        const REORDER_HOLD_MS = 140
+        const delay = interrupted ? 0 : REORDER_HOLD_MS + Math.min(180, index * 25)
+        // Jerk-at-start fix: `el` is the SAME .doc-item that also has a CSS
+        // `transition: background 0.15s, box-shadow 0.15s` on :hover — and
+        // the mouse is necessarily already hovering it (that's how the click
+        // that triggered this happened), so that hover transition kicks off
+        // on the exact same frame this animation starts. box-shadow forces a
+        // main-thread repaint (unlike transform/opacity, which the compositor
+        // handles on its own thread); competing for the same frame is what
+        // reads as a stutter right at the start. `will-change` promotes this
+        // element to its own compositor layer for the animation's duration,
+        // isolating the slide from that concurrent repaint — removed again on
+        // finish/cancel so cards aren't left promoted (and costing memory)
+        // indefinitely.
+        el.style.willChange = 'transform, opacity'
+        const anim = el.animate(
           [
             { transform: `translateY(${dy}px)`, opacity: fromOpacity },
             { transform: 'translateY(0)', opacity: toOpacity },
           ],
-          { duration, delay, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'none' }
+          // fill: 'backwards' — NOT 'none'. This is the actual bug behind the
+          // still-broken hold: a WAAPI animation's keyframes only apply during
+          // its ACTIVE phase, not during `delay`. With 'none', the card had NO
+          // transform/opacity override for the whole delay window — it sat at
+          // its real, final, already-reflowed position from the instant React
+          // re-rendered. Then when the active phase finally started, the FIRST
+          // keyframe (the OLD position) snapped it backward for a frame before
+          // sliding forward. So the actual sequence was click → jump to final
+          // spot → hold → jump BACK to start → slide forward — worse than no
+          // delay at all. 'backwards' makes the effect hold the first
+          // keyframe's values for the entire delay, so the card genuinely
+          // stays at its old position/opacity until the active phase begins.
+          // No 'forwards' needed after — the CSS class already matches the
+          // last keyframe once the animation ends, so that handoff was never
+          // the problem.
+          { duration, delay, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'backwards' }
         )
+        // Guarded cleanup: cancel events fire ASYNC, so when an interruption
+        // above cancels the OLD animation, that old listener runs after this
+        // new animation is already registered and mid-flight — an unguarded
+        // `willChange = ''` there would strip the layer promotion out from
+        // under the new animation. Only the animation currently on record for
+        // this card is allowed to clean up.
+        const clearPromotion = () => {
+          if (runningAnims.current.get(key) !== anim) return
+          runningAnims.current.delete(key)
+          el.style.willChange = ''
+        }
+        anim.addEventListener('finish', clearPromotion)
+        anim.addEventListener('cancel', clearPromotion)
+        runningAnims.current.set(key, anim)
       }
-      prevTops.current.set(doc.id, nextTop)
-      prevActiveMap.current.set(doc.id, doc.active)
+      prevTops.current.set(key, nextTop)
+      prevActiveMap.current.set(key, active)
     })
   })
 
@@ -233,11 +383,13 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
     // durable across drawer close/reopen and browser restarts. Read on mount,
     // then stay in sync so a clip (or a citation) made while the drawer is
     // open updates the counts live.
-    chrome.storage.local.get(['docStats', 'clips', 'history'], (result) => {
+    chrome.storage.local.get(['docStats', 'clips', 'history', 'aiConfig'], (result) => {
       setDocStats((result.docStats as DocStats) ?? {})
       const clips = result.clips as HistoryEntry[] | undefined
       const list = clips && clips.length ? clips : ((result.history as HistoryEntry[]) ?? [])
       setUncitedCounts(computeUncited(list))
+      setAllClips(list)
+      setAiConnected(!!result.aiConfig)
     })
 
     const onStatsChange = (
@@ -246,11 +398,38 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
     ) => {
       if (area !== 'local') return
       if (changes.docStats) setDocStats((changes.docStats.newValue as DocStats) ?? {})
-      if (changes.clips) setUncitedCounts(computeUncited((changes.clips.newValue as HistoryEntry[]) ?? []))
+      if (changes.clips) {
+        const list = (changes.clips.newValue as HistoryEntry[]) ?? []
+        setUncitedCounts(computeUncited(list))
+        setAllClips(list)
+      }
+      if ('aiConfig' in changes) setAiConnected(!!changes.aiConfig.newValue)
     }
     chrome.storage.onChanged.addListener(onStatsChange)
     return () => chrome.storage.onChanged.removeListener(onStatsChange)
   }, [])
+
+  async function handleSummarize(doc: DocDestination) {
+    setSummaryOpenFor(doc.id)
+    setSummaryText('')
+    const docClips = allClips.filter((c) => c.destinationId === doc.id).map((c) => c.text)
+    if (docClips.length === 0) {
+      setSummaryStatus('No clips saved to this doc yet.')
+      return
+    }
+    setSummaryStatus('Summarizing…')
+    const msg: SummarizeTopicMessage = {
+      type: 'SUMMARIZE_TOPIC',
+      payload: { destinationId: doc.id, destinationName: doc.name, clips: docClips },
+    }
+    const res: SummarizeTopicResponse = await chrome.runtime.sendMessage(msg)
+    if (res.success && res.summary) {
+      setSummaryText(res.summary)
+      setSummaryStatus('')
+    } else {
+      setSummaryStatus(res.error ?? 'Could not summarize')
+    }
+  }
 
   // Doc names always track the real Google Doc title (renaming inside
   // SnipKeep is intentionally not offered — see the newDocName comment
@@ -446,7 +625,10 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   // group" position to hook onto, so it falls back to rendering above the
   // (all-inactive) list instead of disappearing.
   const addControl = (isAdding || docs.length === 0) ? (
-    <div className="add-form">
+    // Both variants feed the same FLIP participant ref — whichever one is
+    // mounted is the thing that must glide (not teleport) when a toggle
+    // moves the "after the last active card" anchor position.
+    <div className="add-form" ref={(el) => { addControlEl.current = el }}>
       <div className="input-group">
         <div className="field">
           <span className="field-label">Google Doc URL</span>
@@ -494,11 +676,22 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
       </div>
     </div>
   ) : (
-    <button className="btn-add-trigger" onClick={() => setIsAdding(true)}>
+    <button className="btn-add-trigger" ref={(el) => { addControlEl.current = el }} onClick={() => setIsAdding(true)}>
       <MdAdd size={16} className="btn-add-icon" />
       Add document
     </button>
   )
+
+  // Render-time mirror of the FLIP effect's initial-population guard: the
+  // divider's entrance is a CSS MOUNT animation, and CSS can't know WHY the
+  // element mounted — a toggle crossing the boundary (animate) vs. the docs
+  // simply arriving from storage on drawer open (don't — same ghost-motion
+  // bug the add control had, via a different mechanism). If the cards being
+  // rendered have no position history yet, this render is data arriving, so
+  // the divider mounts without its `entering` class and appears in place.
+  // Reading prevTops during render is safe here — it's only ever written in
+  // the layout effect, after render.
+  const dividerMayAnimate = activeDocs.some(d => prevTops.current.has(d.id))
 
   return (
     <div className="tab-content">
@@ -522,7 +715,7 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
                 <React.Fragment key={doc.id}>
                   {i === 0 && lastActiveIdx === -1 && addControl}
                   {showInactiveDivider && (
-                    <div className="doc-list-divider">
+                    <div className={`doc-list-divider${dividerMayAnimate ? ' entering' : ''}`}>
                       <span className="doc-list-divider-label">Hidden from toolbar</span>
                     </div>
                   )}
@@ -554,6 +747,7 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
                           onSetDeadline={doc.dueDate ? undefined : () => { setEditingDeadlineFor(doc.id); setMenuOpenFor(null) }}
                           onMarkDone={() => { markDone(doc.id); setMenuOpenFor(null) }}
                           onRemove={() => { handleRemoveDoc(doc.id); setMenuOpenFor(null) }}
+                          onSummarize={aiConnected ? () => { handleSummarize(doc); setMenuOpenFor(null) } : undefined}
                           onClose={() => setMenuOpenFor(null)}
                         />
                       )}
@@ -589,6 +783,19 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
                           )}
                         </button>
                       )}
+                    </div>
+                  )}
+
+                  {summaryOpenFor === doc.id && (
+                    <div className="ai-summary-box">
+                      <div className="ai-summary-head">
+                        <span className="ai-summary-label"><MdAutoAwesome size={13} /> Summary</span>
+                        <button className="ai-summary-close" onClick={() => setSummaryOpenFor(null)} title="Close">
+                          <MdClose size={14} />
+                        </button>
+                      </div>
+                      {summaryStatus && <p className="ai-summary-status">{summaryStatus}</p>}
+                      {summaryText && <p className="ai-summary-text">{summaryText}</p>}
                     </div>
                   )}
                   </div>
@@ -779,6 +986,23 @@ function formatCitation(entry: HistoryEntry, style: CitationStyle): string {
   }
 }
 
+// Works Cited list (docs/IDEAS.md #2): one entry per SOURCE PAGE, not per
+// clip — several clips can share a sourceUrl, and the bibliography shouldn't
+// list the same source twice. Alphabetized by the formatted citation text,
+// which starts with the site name — the de facto "author" formatCitation
+// substitutes in, so this sorts the same way a real bibliography would.
+function buildWorksCited(clips: HistoryEntry[], destinationId: string, style: CitationStyle): string[] {
+  const seen = new Set<string>()
+  const citations: string[] = []
+  for (const c of clips) {
+    if (c.destinationId !== destinationId || !c.cited) continue
+    if (seen.has(c.sourceUrl)) continue
+    seen.add(c.sourceUrl)
+    citations.push(formatCitation(c, style))
+  }
+  return citations.sort((a, b) => a.localeCompare(b))
+}
+
 // Copy a string to the clipboard from the content-script context. The textarea +
 // execCommand path goes FIRST on purpose: navigator.clipboard.writeText rejects
 // (or no-ops) whenever the page owns document focus — which it ALWAYS does on top
@@ -871,6 +1095,7 @@ function DocMenu({
   onSetDeadline,
   onMarkDone,
   onRemove,
+  onSummarize,
   onClose,
 }: {
   docName: string
@@ -881,6 +1106,10 @@ function DocMenu({
   onSetDeadline?: () => void
   onMarkDone: () => void
   onRemove: () => void
+  // Undefined entirely (not just disabled) when no AI key is connected —
+  // an inert menu item invites a dead click and needs its own explanation;
+  // omitting it keeps the feature genuinely invisible until opted in.
+  onSummarize?: () => void
   onClose: () => void
 }) {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -923,6 +1152,11 @@ function DocMenu({
           <span className="card-menu-icon"><MdEvent /></span>Set a deadline
         </button>
       )}
+      {onSummarize && (
+        <button className="card-menu-item" onClick={onSummarize}>
+          <span className="card-menu-icon"><MdAutoAwesome /></span>Summarize
+        </button>
+      )}
       <button className="card-menu-item" onClick={onMarkDone}>
         <span className="card-menu-icon"><MdCheck /></span>Mark as done
       </button>
@@ -950,6 +1184,7 @@ function HistoryCardMenu({
   someday,
   onToggleSomeday,
   onRemove,
+  onAskFollowUp,
   onClose,
 }: {
   archiveUrl?: string
@@ -957,6 +1192,9 @@ function HistoryCardMenu({
   someday: boolean
   onToggleSomeday: () => void
   onRemove: () => void
+  // Undefined entirely (not disabled) when no AI key is connected — see the
+  // matching note on DocMenu's onSummarize.
+  onAskFollowUp?: () => void
   onClose: () => void
 }) {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -985,6 +1223,11 @@ function HistoryCardMenu({
       {onAddNote && (
         <button className="card-menu-item" onClick={onAddNote}>
           <span className="card-menu-icon"><MdEdit /></span>Add a note
+        </button>
+      )}
+      {onAskFollowUp && (
+        <button className="card-menu-item" onClick={onAskFollowUp}>
+          <span className="card-menu-icon"><MdAutoAwesome /></span>Follow-up questions
         </button>
       )}
       <button className="card-menu-item" onClick={onToggleSomeday}>
@@ -1236,7 +1479,11 @@ function renderNoteWithTags(note: string, onTag: (tag: string) => void): React.R
 function History({ initialFilter, onFilterConsumed }: { initialFilter: string | null; onFilterConsumed: () => void }) {
   const [entries, setEntries] = useState<HistoryEntry[]>([])
   const [citeStyle, setCiteStyle] = useState<CitationStyle>('apa')
-  const [feedback, setFeedback] = useState<{ key: string; ok: boolean } | null>(null)
+  // `label` overrides the default Copied/Copy failed text — used for the
+  // Works Cited write-back below, which resolves later than the clipboard
+  // copy (a network round-trip vs. an instant local op), so it reuses this
+  // same flash slot rather than adding a second one.
+  const [feedback, setFeedback] = useState<{ key: string; ok: boolean; label?: string } | null>(null)
   // Removal (single or bulk) stages a snapshot so the undo bar can restore it.
   const [undo, setUndo] = useState<{ snapshot: HistoryEntry[]; label: string } | null>(null)
   const undoTimer = useRef<number | null>(null)
@@ -1265,10 +1512,17 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   // shouldn't keep getting surfaced for delight or reflection. The main
   // searchable list is untouched; you can still find and cite old work.
   const [doneDestIds, setDoneDestIds] = useState<Set<string>>(new Set())
+  // Whether a bring-your-own AI key is connected — gates the "✨ Follow-up
+  // questions" menu item; invisible entirely until one exists, per
+  // docs/IDEAS.md #3.
+  const [aiConnected, setAiConnected] = useState(false)
+  const [followUpOpenFor, setFollowUpOpenFor] = useState<number | null>(null)
+  const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([])
+  const [followUpStatus, setFollowUpStatus] = useState('')
 
   useEffect(() => {
     chrome.storage.local.get(
-      ['clips', 'history', 'archivedUrls', 'triageDismissedDay', 'reflectionNudgeDismissed'],
+      ['clips', 'history', 'archivedUrls', 'triageDismissedDay', 'reflectionNudgeDismissed', 'aiConfig'],
       (result) => {
         const clips = result.clips as HistoryEntry[] | undefined
         // Fall back to the legacy recent-10 store until the archive is seeded.
@@ -1276,6 +1530,7 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
         setArchivedUrls((result.archivedUrls as Record<string, string>) ?? {})
         setTriageDismissedDay((result.triageDismissedDay as number | undefined) ?? null)
         setReflectionDismissed((result.reflectionNudgeDismissed as { url: string; count: number } | undefined) ?? null)
+        setAiConnected(!!result.aiConfig)
       }
     )
     chrome.storage.sync.get(['citationStyle', 'docs'], (result) => {
@@ -1293,6 +1548,7 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
         const docs = (changes.docs.newValue as DocDestination[] | undefined) ?? []
         setDoneDestIds(new Set(docs.filter(d => d.done).map(d => d.id)))
       }
+      if ('aiConfig' in changes) setAiConnected(!!changes.aiConfig.newValue)
     }
     chrome.storage.onChanged.addListener(handler)
     return () => chrome.storage.onChanged.removeListener(handler)
@@ -1323,19 +1579,57 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
     const ok = await copyToClipboard(formatCitation(entry, style))
     setFeedback({ key, ok })
     setTimeout(() => setFeedback(prev => (prev?.key === key ? null : prev)), 1400)
+    if (!ok) return
+
+    const result = await chrome.storage.local.get(['clips'])
+    const clips = (result.clips as HistoryEntry[]) ?? []
 
     // Marks the clip as cited so DocsTab's uncited count (Deadline-Aware
     // Citations) drops, and the button switches to "✓ Cited" below. A one-way
-    // ratchet — re-clicking just re-copies, it doesn't "un-cite" anything.
-    if (ok && !entry.cited) {
+    // ratchet — re-citing in a different style (below) doesn't touch this;
+    // it stays cited, it just doesn't get re-marked.
+    if (!entry.cited) {
       setEntries(prev => prev.map(e => e.savedAt === entry.savedAt ? { ...e, cited: true } : e))
-      const result = await chrome.storage.local.get(['clips'])
-      const clips = (result.clips as HistoryEntry[]) ?? []
       const idx = clips.findIndex(c => c.savedAt === entry.savedAt)
       if (idx !== -1) {
         clips[idx] = { ...clips[idx], cited: true }
         await chrome.storage.local.set({ clips })
       }
+    }
+
+    // Works Cited write-back (docs/IDEAS.md #2) — Google Docs only, same
+    // boundary as Living Resurface/archive-link (Notion hidden at MVP).
+    //
+    // Runs on EVERY successful cite, not just the first — re-citing an
+    // already-cited clip in a different style needs to update the Doc too,
+    // not just the clipboard. And since this rebuilds the WHOLE list using
+    // the style just picked (not each entry's own historical style), the
+    // section always ends up in one consistent style after any cite click,
+    // rather than a mix of whatever style happened to be active per entry.
+    //
+    // Silent on success (the "Copied ✓" flash already confirmed the primary
+    // action — a second confirmation would be noise), but NOT silent on
+    // failure: reuses the same flash slot to say so, since a silently failed
+    // Doc write is the one outcome a user can't otherwise tell happened
+    // without opening the Doc and checking. Resolves later than the
+    // clipboard copy (network round-trip vs. instant local op), so this
+    // flash can appear a beat after the first one already cleared.
+    if (entry.destinationId && entry.destinationId !== 'notion') {
+      const citations = buildWorksCited(clips, entry.destinationId, style)
+      const msg: UpdateBibliographyMessage = {
+        type: 'UPDATE_BIBLIOGRAPHY',
+        payload: { destinationId: entry.destinationId, citations },
+      }
+      chrome.runtime.sendMessage(msg)
+        .then((res: UpdateBibliographyResponse) => {
+          if (res?.success) return
+          setFeedback({ key, ok: false, label: 'Doc update failed' })
+          setTimeout(() => setFeedback(prev => (prev?.key === key ? null : prev)), 2000)
+        })
+        .catch(() => {
+          setFeedback({ key, ok: false, label: 'Doc update failed' })
+          setTimeout(() => setFeedback(prev => (prev?.key === key ? null : prev)), 2000)
+        })
     }
   }
 
@@ -1453,11 +1747,28 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
     }
   }
 
+  async function handleAskFollowUp(entry: HistoryEntry) {
+    setFollowUpOpenFor(entry.savedAt)
+    setFollowUpQuestions([])
+    setFollowUpStatus('Thinking…')
+    const msg: AskFollowUpMessage = { type: 'ASK_FOLLOWUP', payload: { text: entry.text } }
+    const res: AskFollowUpResponse = await chrome.runtime.sendMessage(msg)
+    if (res.success && res.questions?.length) {
+      setFollowUpQuestions(res.questions)
+      setFollowUpStatus('')
+    } else {
+      setFollowUpStatus(res.error ?? 'Could not get follow-up questions')
+    }
+  }
+
   function clipCard(entry: HistoryEntry, key: string, resurfaced = false) {
     const doc = docHref(entry)
     const archiveUrl = archivedUrls[entry.sourceUrl]
     return (
-      <div key={key} className={`history-item${resurfaced ? ' resurfaced' : ''}`}>
+      <div
+        key={key}
+        className={`history-item${resurfaced ? ' resurfaced' : ''}${feedback?.key === key ? ' show-actions' : ''}`}
+      >
         <div className="history-text">{entry.text.slice(0, 80)}{entry.text.length > 80 ? '…' : ''}</div>
         {entry.note && (
           <div className="history-note"><MdSubdirectoryArrowRight size={13} /> {renderNoteWithTags(entry.note, setQuery)}</div>
@@ -1498,7 +1809,7 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
                 title="Copy a citation"
               >
                 {feedback?.key === key
-                  ? (feedback.ok ? <><MdCheck size={13} /> Copied</> : 'Copy failed')
+                  ? (feedback.label ?? (feedback.ok ? <><MdCheck size={13} /> Copied</> : 'Copy failed'))
                   : (entry.cited ? <><MdCheck size={13} /> Cited</> : <><MdContentCopy size={13} /> Cite</>)}
               </button>
               <button
@@ -1528,10 +1839,28 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
               someday={!!entry.someday}
               onToggleSomeday={() => { toggleSomeday(entry); setCardMenuOpenFor(null) }}
               onRemove={() => { removeClip(entry); setCardMenuOpenFor(null) }}
+              onAskFollowUp={aiConnected ? () => { handleAskFollowUp(entry); setCardMenuOpenFor(null) } : undefined}
               onClose={() => setCardMenuOpenFor(null)}
             />
           )}
         </div>
+
+        {followUpOpenFor === entry.savedAt && (
+          <div className="ai-summary-box">
+            <div className="ai-summary-head">
+              <span className="ai-summary-label"><MdAutoAwesome size={13} /> Follow-up questions</span>
+              <button className="ai-summary-close" onClick={() => setFollowUpOpenFor(null)} title="Close">
+                <MdClose size={14} />
+              </button>
+            </div>
+            {followUpStatus && <p className="ai-summary-status">{followUpStatus}</p>}
+            {followUpQuestions.length > 0 && (
+              <ul className="ai-followup-list">
+                {followUpQuestions.map((q, i) => <li key={i}>{q}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
 
         {noteOpenFor === entry.savedAt && entry.namedRangeId && (
           <div className="doc-note-box">
@@ -1887,6 +2216,147 @@ export function TrustCard({ firstDocId, onDismiss }: { firstDocId: string | null
         Open your Doc right now &#8599;
       </a>
       <button className="trust-dismiss" onClick={onDismiss}>Got it</button>
+    </div>
+  )
+}
+
+// ── AI Assistant (docs/IDEAS.md #3) ─────────────────────────────────────────────
+// Bring-your-own-key: SnipKeep never sees or relays the key. Connect/manage
+// only — the actual classify/summarize actions aren't built yet (see the
+// idea note). Reached from the Drawer's always-visible "✨ AI" header button
+// (the showcase entry point); this screen is the "hidden inside" detail work,
+// same nested-view pattern as Privacy Ledger.
+
+const AI_PROVIDERS: { id: AIProvider; name: string; keyUrl: string }[] = [
+  { id: 'anthropic', name: 'Claude', keyUrl: 'https://console.anthropic.com/settings/keys' },
+  { id: 'openai', name: 'ChatGPT', keyUrl: 'https://platform.openai.com/api-keys' },
+  { id: 'gemini', name: 'Gemini', keyUrl: 'https://aistudio.google.com/app/apikey' },
+]
+
+function maskKey(key: string): string {
+  if (key.length <= 8) return '••••••••'
+  return `${key.slice(0, 4)}••••${key.slice(-4)}`
+}
+
+export function AIAssistant({ onBack }: { onBack: () => void }) {
+  const [config, setConfig] = useState<AIConfig | null | undefined>(undefined) // undefined = still loading
+  const [selected, setSelected] = useState<(typeof AI_PROVIDERS)[number] | null>(null)
+  const [keyInput, setKeyInput] = useState('')
+  const [status, setStatus] = useState<'idle' | 'connecting' | 'error'>('idle')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    chrome.storage.local.get(['aiConfig'], (result) => {
+      setConfig((result.aiConfig as AIConfig | undefined) ?? null)
+    })
+    const handler = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === 'local' && 'aiConfig' in changes) {
+        setConfig((changes.aiConfig.newValue as AIConfig | undefined) ?? null)
+      }
+    }
+    chrome.storage.onChanged.addListener(handler)
+    return () => chrome.storage.onChanged.removeListener(handler)
+  }, [])
+
+  function selectProvider(p: (typeof AI_PROVIDERS)[number]) {
+    setSelected(p)
+    setKeyInput('')
+    setStatus('idle')
+    setError('')
+    // Standard web API — works directly from the content-script context,
+    // no chrome.tabs messaging (unavailable here) needed.
+    window.open(p.keyUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  async function handleConnect() {
+    if (!selected || !keyInput.trim()) return
+    setStatus('connecting')
+    setError('')
+    const msg: ConnectAIMessage = { type: 'CONNECT_AI', payload: { provider: selected.id, apiKey: keyInput.trim() } }
+    const res: ConnectAIResponse = await chrome.runtime.sendMessage(msg)
+    if (res.success) {
+      setSelected(null)
+      setKeyInput('')
+      setStatus('idle')
+    } else {
+      setStatus('error')
+      setError(res.error ?? 'Connection failed')
+    }
+  }
+
+  async function handleDisconnect() {
+    const msg: DisconnectAIMessage = { type: 'DISCONNECT_AI' }
+    const res: DisconnectAIResponse = await chrome.runtime.sendMessage(msg)
+    if (res.success) setConfig(null)
+  }
+
+  return (
+    <div className="tab-content ai-assistant">
+      <button className="privacy-back" onClick={onBack}>&larr; Back</button>
+
+      <div className="section">
+        <span className="section-label">AI assistant</span>
+        <p className="privacy-lede">
+          Optional, and bring-your-own: SnipKeep never sees or relays your key — requests go straight from
+          your browser to your own account.
+        </p>
+      </div>
+
+      {config === undefined ? null : config ? (
+        <div className="ai-connected">
+          <div className="ai-connected-row">
+            <span className="ai-connected-icon"><MdCheckCircle /></span>
+            <div>
+              <div className="ai-connected-title">
+                Connected to {AI_PROVIDERS.find((p) => p.id === config.provider)?.name ?? config.provider}
+              </div>
+              <div className="ai-connected-key">{maskKey(config.apiKey)}</div>
+            </div>
+          </div>
+          <button className="btn-ghost danger small" onClick={handleDisconnect}>
+            <MdDeleteOutline size={13} /> Disconnect
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="ai-provider-list">
+            {AI_PROVIDERS.map((p) => (
+              <button
+                key={p.id}
+                className={`ai-provider-card ${selected?.id === p.id ? 'active' : ''}`}
+                onClick={() => selectProvider(p)}
+              >
+                <span className="ai-provider-name">{p.name}</span>
+                <span className="ai-provider-open"><MdOpenInNew size={13} /></span>
+              </button>
+            ))}
+          </div>
+
+          {selected && (
+            <div className="ai-key-entry">
+              <p className="hint">
+                Opened {selected.name}'s API key page in a new tab — create a key there, then paste it below.
+              </p>
+              <input
+                className="input mono-input"
+                type="password"
+                placeholder="Paste your API key"
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                autoFocus
+              />
+              {status === 'error' && <p className="ai-key-error">{error}</p>}
+              <button
+                className="btn-primary full-width"
+                disabled={!keyInput.trim() || status === 'connecting'}
+                onClick={handleConnect}
+              >
+                {status === 'connecting' ? 'Connecting…' : `Connect ${selected.name}`}
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

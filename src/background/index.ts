@@ -28,6 +28,18 @@ import type {
   VoiceTabNeedsForegroundMessage,
   VoiceRecognitionEventMessage,
   VoiceNoteUpdateMessage,
+  AIProvider,
+  AIConfig,
+  ConnectAIMessage,
+  ConnectAIResponse,
+  DisconnectAIMessage,
+  DisconnectAIResponse,
+  AskFollowUpMessage,
+  AskFollowUpResponse,
+  SummarizeTopicMessage,
+  SummarizeTopicResponse,
+  UpdateBibliographyMessage,
+  UpdateBibliographyResponse,
 } from '../types'
 
 const DOCS_API = 'https://docs.googleapis.com/v1/documents'
@@ -184,7 +196,7 @@ async function resolveNamedRange(
   docId: string,
   token: string,
   namedRangeId: string
-): Promise<{ endIndex: number } | null> {
+): Promise<{ startIndex: number; endIndex: number } | null> {
   try {
     const res = await fetch(`${DOCS_API}/${docId}?fields=namedRanges`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -192,14 +204,17 @@ async function resolveNamedRange(
     if (!res.ok) return null
     const doc = await res.json()
     const groups = Object.values(doc.namedRanges ?? {}) as Array<{
-      namedRanges?: Array<{ namedRangeId: string; ranges?: Array<{ endIndex: number }> }>
+      namedRanges?: Array<{ namedRangeId: string; ranges?: Array<{ startIndex: number; endIndex: number }> }>
     }>
     for (const group of groups) {
       for (const nr of group.namedRanges ?? []) {
         if (nr.namedRangeId !== namedRangeId) continue
         const ranges = nr.ranges ?? []
-        const last = ranges[ranges.length - 1]
-        return last ? { endIndex: last.endIndex } : null
+        if (!ranges.length) return null
+        // startIndex from the first sub-range, endIndex from the last — these
+        // bookmarks are always created in one batchUpdate as a single
+        // contiguous span, so in practice there's exactly one sub-range.
+        return { startIndex: ranges[0].startIndex, endIndex: ranges[ranges.length - 1].endIndex }
       }
     }
     return null  // range not found — e.g. the user deleted that part of the doc
@@ -543,6 +558,135 @@ async function appendToGoogleDoc(
 
   return { clipNamedRangeId, captionNamedRangeId }
 }
+
+// ── Works Cited (docs/IDEAS.md #2) ──────────────────────────────────────────
+// A single "Works Cited" block, kept at the true end of the Doc, rebuilt
+// fresh from the complete citation list every time one is added — NOT
+// appended to incrementally. Rebuilding is simpler and more robust than
+// tracking per-entry insertion points: it's the only way to keep the whole
+// block both deduplicated/alphabetized (order can change as new sources are
+// added) AND actually at the bottom (any existing copy is deleted first, the
+// new one is inserted at the doc's current end, same as a fresh clip).
+//
+// Known limitation: this only repositions the block at the moment a citation
+// is added. Saving further clips afterward without citing anything new won't
+// move it again — it stays wherever it last landed until the next Cite
+// action pulls it back to the true bottom. Documented, not silently assumed.
+
+async function updateBibliography(destinationId: string, citations: string[]): Promise<void> {
+  const token = await getAuthToken()
+
+  const bookmarks = await chrome.storage.local.get(['worksCitedBookmarks'])
+  const map = (bookmarks.worksCitedBookmarks as Record<string, string>) ?? {}
+  const existingId = map[destinationId]
+
+  // Always remove any existing block first — rebuilding at the end without
+  // deleting the old copy would leave a stale, now-out-of-place duplicate
+  // sitting wherever it used to be.
+  if (existingId) {
+    const pos = await resolveNamedRange(destinationId, token, existingId)
+    if (pos) {
+      await fetch(`${DOCS_API}/${destinationId}:batchUpdate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{ deleteContentRange: { range: { startIndex: pos.startIndex, endIndex: pos.endIndex } } }],
+        }),
+      })
+    }
+  }
+
+  if (citations.length === 0) {
+    // Cite only ever adds, never removes, so this shouldn't normally happen —
+    // stay consistent if it ever does rather than leaving a stale bookmark.
+    delete map[destinationId]
+    await chrome.storage.local.set({ worksCitedBookmarks: map })
+    return
+  }
+
+  // Re-fetch the doc's current end (post-deletion) and append the fresh
+  // block there — same endOfSegmentLocation pattern as a new clip.
+  const docRes = await fetch(`${DOCS_API}/${destinationId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!docRes.ok) throw new Error(`Docs API GET ${docRes.status}: ${await docRes.text()}`)
+  const doc = await docRes.json()
+  const bodyContent = doc.body.content
+  const endIndex: number = bodyContent[bodyContent.length - 1].endIndex
+  const insertionPoint = endIndex - 1
+  const isFirstBlock = insertionPoint <= 1
+
+  const headingLine = 'Works Cited\n'
+  // Blank line between entries reads as a hanging bibliography list. A
+  // multi-line citation (BibTeX) breaks into several real paragraphs here —
+  // a known, accepted quirk of that one style, not specially handled.
+  const listBody = citations.join('\n\n') + '\n'
+  const insertText = `${headingLine}${listBody}`
+
+  const headingStart = insertionPoint
+  const headingEnd = headingStart + headingLine.length
+  const listStart = headingEnd
+  const listEnd = listStart + listBody.length
+
+  const requests: object[] = [
+    { insertText: { endOfSegmentLocation: { segmentId: '' }, text: insertText } },
+    {
+      updateParagraphStyle: {
+        range: { startIndex: headingStart, endIndex: headingEnd },
+        paragraphStyle: {
+          namedStyleType: 'HEADING_2',
+          spaceAbove: { magnitude: isFirstBlock ? 0 : BLOCK_GAP_PT, unit: 'PT' },
+          spaceBelow: { magnitude: HEADING_BELOW_PT, unit: 'PT' },
+        },
+        fields: 'namedStyleType,spaceAbove,spaceBelow',
+      },
+    },
+    {
+      updateTextStyle: {
+        range: { startIndex: listStart, endIndex: listEnd - 1 },
+        textStyle: { fontSize: { magnitude: 10, unit: 'PT' } },
+        fields: 'fontSize',
+      },
+    },
+  ]
+
+  const bookmarkIdx = requests.length
+  requests.push({
+    createNamedRange: { name: 'skworkscited', range: { startIndex: headingStart, endIndex: listEnd - 1 } },
+  })
+
+  const batchRes = await fetch(`${DOCS_API}/${destinationId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests }),
+  })
+  if (!batchRes.ok) throw new Error(`Docs API batchUpdate ${batchRes.status}: ${await batchRes.text()}`)
+
+  const batchJson = await batchRes.json()
+  const replies: Array<{ createNamedRange?: { namedRangeId?: string } }> = batchJson.replies ?? []
+  const newId = replies[bookmarkIdx]?.createNamedRange?.namedRangeId
+  if (newId) {
+    map[destinationId] = newId
+    await chrome.storage.local.set({ worksCitedBookmarks: map })
+  }
+}
+
+chrome.runtime.onMessage.addListener(
+  (message: UpdateBibliographyMessage, _sender, sendResponse: (r: UpdateBibliographyResponse) => void) => {
+    if (message.type !== 'UPDATE_BIBLIOGRAPHY') return false
+
+    ;(async () => {
+      try {
+        await updateBibliography(message.payload.destinationId, message.payload.citations)
+        sendResponse({ success: true })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Bibliography update failed' })
+      }
+    })()
+
+    return true
+  }
+)
 
 // ── Notion ────────────────────────────────────────────────────────────────────
 
@@ -1326,3 +1470,220 @@ chrome.runtime.onMessage.addListener((message: VoiceTabNeedsForegroundMessage, s
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (voiceSession?.voiceTabId === tabId) endVoiceSession(true)
 })
+
+// ── Bring-your-own-AI-key (docs/IDEAS.md #3) ──
+// Validated and stored here, not in the Popup/Drawer content-script context —
+// same reason every other external API call (Google Docs, Notion) lives in
+// the background: content-script fetches are subject to the host page's CSP.
+// A cheap models-list GET confirms the key actually works before it's
+// persisted, so a bad key fails immediately instead of silently on first use.
+
+async function validateAIKey(provider: AIProvider, apiKey: string): Promise<void> {
+  let res: Response
+  if (provider === 'openai') {
+    res = await fetch('https://api.openai.com/v1/models', {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+  } else if (provider === 'anthropic') {
+    res = await fetch('https://api.anthropic.com/v1/models', {
+      // Anthropic blocks direct browser-origin requests by default (CORS) —
+      // this header is the documented, explicit opt-in for exactly this
+      // case: the user's own key, called straight from their own browser
+      // extension, never proxied through a SnipKeep server (there isn't
+      // one). Same flag the official SDK sets under `dangerouslyAllowBrowser`.
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+    })
+  } else {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`)
+  }
+
+  if (!res.ok) throw new Error(await aiErrorMessage(res))
+}
+
+chrome.runtime.onMessage.addListener(
+  (message: ConnectAIMessage, _sender, sendResponse: (r: ConnectAIResponse) => void) => {
+    if (message.type !== 'CONNECT_AI') return false
+
+    ;(async () => {
+      try {
+        const { provider, apiKey } = message.payload
+        await validateAIKey(provider, apiKey)
+        const config: AIConfig = { provider, apiKey }
+        await chrome.storage.local.set({ aiConfig: config })
+        sendResponse({ success: true })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Connection failed' })
+      }
+    })()
+
+    return true
+  }
+)
+
+chrome.runtime.onMessage.addListener(
+  (message: DisconnectAIMessage, _sender, sendResponse: (r: DisconnectAIResponse) => void) => {
+    if (message.type !== 'DISCONNECT_AI') return false
+
+    ;(async () => {
+      await chrome.storage.local.remove('aiConfig')
+      sendResponse({ success: true })
+    })()
+
+    return true
+  }
+)
+
+// ── AI actions (docs/IDEAS.md #3, connection UX + first two actions) ──
+// Both actions below share one adapter across the three providers. Fast/cheap
+// models on purpose — this is a small utility call (a few sentences), not a
+// heavy reasoning task. 'gemini-flash-latest' is a durable alias Google keeps
+// pointed at its current fast model, chosen over a dated snapshot id
+// specifically so this doesn't silently break when Google retires one.
+const OPENAI_MODEL = 'gpt-5-nano'
+const ANTHROPIC_MODEL = 'claude-haiku-4-5'
+const GEMINI_MODEL = 'gemini-flash-latest'
+
+// Reads the provider's own error body rather than guessing from the status
+// code alone — a 401/403 covers several distinct causes (bad key, revoked
+// key, no billing set up, model access not granted on this account) that all
+// need a different fix, and a generic "rejected" message hides which one it
+// actually is. All three providers shape their error body the same way
+// (`{ error: { message: "..." } }`), so one read path covers all of them.
+async function aiErrorMessage(res: Response): Promise<string> {
+  let detail = ''
+  try {
+    const body = await res.json()
+    detail = (body?.error?.message as string | undefined) ?? ''
+  } catch {
+    // Non-JSON error body — fall through to the generic message below.
+  }
+  if (res.status === 401 || res.status === 403) {
+    return detail || 'Your AI key was rejected — reconnect it from the ✨ AI screen.'
+  }
+  if (res.status === 429) {
+    return detail || 'Rate limited by your AI provider — try again in a moment.'
+  }
+  return detail || `AI request failed (status ${res.status}).`
+}
+
+async function callAI(systemPrompt: string, userPrompt: string): Promise<string> {
+  const storage = await chrome.storage.local.get(['aiConfig'])
+  const config = storage.aiConfig as AIConfig | undefined
+  if (!config?.apiKey) throw new Error('Connect an AI provider first — open the ✨ AI screen.')
+
+  if (config.provider === 'openai') {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+      }),
+    })
+    if (!res.ok) throw new Error(await aiErrorMessage(res))
+    const data = await res.json()
+    return (data.choices?.[0]?.message?.content as string | undefined) ?? ''
+  }
+
+  if (config.provider === 'anthropic') {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': config.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 500,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      }),
+    })
+    if (!res.ok) throw new Error(await aiErrorMessage(res))
+    const data = await res.json()
+    return (data.content?.[0]?.text as string | undefined) ?? ''
+  }
+
+  // gemini
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(config.apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ parts: [{ text: userPrompt }] }],
+      }),
+    }
+  )
+  if (!res.ok) throw new Error(await aiErrorMessage(res))
+  const data = await res.json()
+  return (data.candidates?.[0]?.content?.parts?.[0]?.text as string | undefined) ?? ''
+}
+
+// Explicitly asks for exactly 3 questions, not a written reflection — the
+// point (see docs/IDEAS.md #3) is the student does the thinking; the model
+// only points at where to look, never writes the answer for them.
+async function handleAskFollowUp(text: string): Promise<string[]> {
+  const system =
+    'You help a student think more deeply about something they just saved while researching. ' +
+    'Given a short clip of saved text, write exactly 3 short, specific follow-up questions that ' +
+    'would deepen their understanding of it. Reply with ONLY the 3 questions, one per line, no ' +
+    'numbering, no preamble, no closing remarks.'
+  const raw = await callAI(system, text)
+  return raw
+    .split('\n')
+    .map((line) => line.replace(/^[-*\d.)\s]+/, '').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+}
+
+async function handleSummarizeTopic(destinationName: string, clips: string[]): Promise<string> {
+  const system =
+    'Summarize a student\'s saved research clips on one topic into a short, coherent overview ' +
+    '(3-5 sentences). Be concrete — reference what was actually saved, don\'t just say "notes were ' +
+    'saved about X."'
+  const body = clips.map((c, i) => `${i + 1}. ${c}`).join('\n')
+  const user = `Topic: ${destinationName}\n\nSaved clips:\n${body}`
+  return callAI(system, user)
+}
+
+chrome.runtime.onMessage.addListener(
+  (message: AskFollowUpMessage, _sender, sendResponse: (r: AskFollowUpResponse) => void) => {
+    if (message.type !== 'ASK_FOLLOWUP') return false
+
+    ;(async () => {
+      try {
+        const questions = await handleAskFollowUp(message.payload.text)
+        sendResponse({ success: true, questions })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Request failed' })
+      }
+    })()
+
+    return true
+  }
+)
+
+chrome.runtime.onMessage.addListener(
+  (message: SummarizeTopicMessage, _sender, sendResponse: (r: SummarizeTopicResponse) => void) => {
+    if (message.type !== 'SUMMARIZE_TOPIC') return false
+
+    ;(async () => {
+      try {
+        const summary = await handleSummarizeTopic(message.payload.destinationName, message.payload.clips)
+        sendResponse({ success: true, summary })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Request failed' })
+      }
+    })()
+
+    return true
+  }
+)

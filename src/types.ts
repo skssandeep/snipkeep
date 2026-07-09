@@ -227,3 +227,75 @@ export interface VoiceNoteUpdateMessage {
   type: 'VOICE_NOTE_UPDATE'
   event: VoiceEvent
 }
+
+// ── Bring-your-own-AI-key (docs/IDEAS.md #3) ──
+// SnipKeep never sees or relays the key: the background worker validates it
+// directly against the provider, then requests go straight from there to the
+// user's own account. Stored in chrome.storage.local (not sync) — deliberately
+// doesn't leave the device via Google account sync, unlike NotionConfig.
+
+export type AIProvider = 'openai' | 'anthropic' | 'gemini'
+
+export interface AIConfig {
+  provider: AIProvider
+  apiKey: string
+}
+
+export interface ConnectAIMessage {
+  type: 'CONNECT_AI'
+  payload: { provider: AIProvider; apiKey: string }
+}
+
+export interface ConnectAIResponse {
+  success: boolean
+  error?: string
+}
+
+export interface DisconnectAIMessage {
+  type: 'DISCONNECT_AI'
+}
+
+export interface DisconnectAIResponse {
+  success: boolean
+}
+
+// Per-clip: deepen thinking on the ONE thing just saved. Deliberately not
+// auto-triggered — the model never writes the reflection for the user (see
+// docs/IDEAS.md #3's critique), only prompts questions they answer themselves.
+export interface AskFollowUpMessage {
+  type: 'ASK_FOLLOWUP'
+  payload: { text: string }
+}
+
+export interface AskFollowUpResponse {
+  success: boolean
+  questions?: string[]
+  error?: string
+}
+
+// Per-doc: a short overview across every clip saved to one destination.
+export interface SummarizeTopicMessage {
+  type: 'SUMMARIZE_TOPIC'
+  payload: { destinationId: string; destinationName: string; clips: string[] }
+}
+
+export interface SummarizeTopicResponse {
+  success: boolean
+  summary?: string
+  error?: string
+}
+
+// docs/IDEAS.md #2 — a "Works Cited" section, auto-maintained at the true end
+// of the Doc, rebuilt fresh from the full deduplicated + alphabetized set of
+// citations every time one is added (not appended incrementally — see the
+// background handler for why). Google-Docs-only, matching the existing
+// Living Resurface / archive-link write-backs (Notion is hidden at MVP).
+export interface UpdateBibliographyMessage {
+  type: 'UPDATE_BIBLIOGRAPHY'
+  payload: { destinationId: string; citations: string[] }
+}
+
+export interface UpdateBibliographyResponse {
+  success: boolean
+  error?: string
+}

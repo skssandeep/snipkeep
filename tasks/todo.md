@@ -1,3 +1,512 @@
+# Bring-your-own-AI-key connection flow (docs/IDEAS.md #3, connection UX only)
+
+Lets a user connect ChatGPT (OpenAI), Claude (Anthropic), or Gemini (Google)
+by pasting their own API key — SnipKeep never sees or relays it; requests go
+straight from the background worker to the user's own provider. This pass is
+the **connect/manage flow only** — no summarize/follow-up actions yet (those
+were scoped as a later slice in the original idea).
+
+## Design
+- **Storage:** `chrome.storage.local.aiConfig: { provider, apiKey }` — local,
+  not sync, since a raw API key is more sensitive than the Notion token
+  already synced; deliberately doesn't leave the device via Google account
+  sync.
+- **Validation before storing:** background does a lightweight GET against
+  each provider's models-list endpoint (cheap, no completion cost) to confirm
+  the key actually works before persisting it:
+  - OpenAI: `GET https://api.openai.com/v1/models`, `Authorization: Bearer <key>`
+  - Anthropic: `GET https://api.anthropic.com/v1/models`, `x-api-key: <key>` + `anthropic-version: 2023-06-01`
+  - Gemini: `GET https://generativelanguage.googleapis.com/v1beta/models?key=<key>`
+- **Where the call happens:** background only (matches "Background... All API
+  calls" — content-script fetches are subject to the host page's CSP, same
+  reason Google Docs/Notion calls already live there, not in Popup/Drawer).
+- **Raw HTTP, not the Anthropic SDK:** the claude-api skill's default is the
+  official SDK when available, but this codebase has zero SDK dependencies
+  for any external API today — Google Docs and Notion are both called via
+  plain `fetch` from the MV3 service worker (bundle-size- and
+  runtime-conscious). Matched that existing pattern for all three providers
+  rather than introducing an SDK for just one.
+- **UI placement — "showcase outside, hidden inside":** a small always-visible
+  "✨ AI" button sits in the Drawer header (next to the avatar) — the
+  showcase/branding entry point, visible whether or not a key is connected.
+  Clicking it swaps the body into a new `view: 'ai'` state (same
+  `view: 'main'|'privacy'|'trust'|'ai'` pattern as Privacy Ledger/Trust Card
+  — a nested screen, not a 4th tab, so it doesn't add to the Docs/Completed/
+  History tab bar per the Hick's-Law precedent already set for Completed).
+  The avatar dropdown does NOT get a duplicate entry — one path in, to avoid
+  redundant clicks to the same screen.
+- **Provider picker → deep link to the key page:** selecting a provider calls
+  `window.open(url, '_blank')` (works directly from the content-script
+  context — no `chrome.tabs` messaging needed, since `window.open` is a
+  standard web API) pointed at that provider's own API-key page, and reveals
+  a "paste your key" field + Connect button inline.
+  - ChatGPT → `https://platform.openai.com/api-keys`
+  - Claude → `https://console.anthropic.com/settings/keys`
+  - Gemini → `https://aistudio.google.com/app/apikey`
+- **Connected state:** shows which provider + a masked key + Disconnect.
+  Fully invisible unless connected or the user opens the AI screen — no
+  buttons/actions render anywhere else until a key exists (out of scope for
+  now, since the summarize/follow-up actions aren't built yet).
+
+## Tasks
+- [x] manifest.json — host_permissions for api.openai.com, api.anthropic.com, generativelanguage.googleapis.com (FULL reload needed)
+- [x] types.ts — AIProvider, AIConfig, ConnectAIMessage/Response, DisconnectAIMessage/Response
+- [x] background — CONNECT_AI handler (validate via provider's models endpoint, store to storage.local), DISCONNECT_AI handler (remove)
+- [x] Drawer.tsx — 'ai' DrawerView, header showcase button, render AIAssistant
+- [x] Popup.tsx — AIAssistant component (provider picker, key input, connected/disconnect state)
+- [x] popup.css — .ai-* styles reusing existing tokens/card patterns
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified CONNECT_AI/DISCONNECT_AI/aiConfig compiled into the background bundle and the 3 host permissions compiled into dist/manifest.json
+
+## Status: DONE (built). Needs FULL extension reload (new host_permissions).
+Not yet manually click-tested in Chrome — connect flow (window.open to the
+provider's key page, paste key, validate, store) and disconnect were traced
+carefully but not driven live.
+
+## Follow-up: the two consumer actions (same session, user connected a real Claude key)
+
+Added the actions this connect flow was originally scoped to enable.
+
+### Design (per explicit UX/psychology request)
+- **Hick's Law:** neither action is a new always-visible button in a card's
+  action row — both live behind the existing "···" overflow menu, so the
+  primary row (Source/Doc/Cite for clips; toggle/menu for docs) stays exactly
+  as uncluttered as before.
+- **Error prevention / invisible-until-opted-in:** `onAskFollowUp`/
+  `onSummarize` are `undefined` (not just disabled) when no AI key is
+  connected — omitted from the menu entirely rather than shown as a dead,
+  greyed-out click that would need its own explanation.
+- **Jakob's Law / consistency:** both actions reuse ONE new shared panel
+  shape (`.ai-summary-box`), deliberately modeled on the already-shipped
+  "+ Add a note" `.doc-note-box` — reveals below the card, same status-line
+  pattern for loading/error feedback. No new interaction vocabulary invented
+  for "AI stuff."
+- **No silent operations:** every request shows "Thinking…"/"Summarizing…"
+  immediately, then either the result or a real error string (key rejected,
+  rate limited, generic failure) — never a silent no-op.
+- **Follow-up questions stays true to the original critique:** the prompt
+  explicitly asks for 3 QUESTIONS, never a written reflection — the model
+  points at where to look, the student still does the thinking themselves.
+
+### Implementation
+- One shared `callAI(system, prompt)` adapter in background/index.ts,
+  dispatching on `aiConfig.provider`. Fast/cheap models (utility calls, not
+  heavy reasoning): `gpt-5-nano` / `claude-haiku-4-5` / `gemini-flash-latest`
+  (a durable Google alias, not a dated snapshot, so it won't silently break
+  when a specific version is retired).
+- `ASK_FOLLOWUP` (History, per-clip): background asks for exactly 3
+  questions, one per line; parsed client-side, rendered as a list.
+- `SUMMARIZE_TOPIC` (DocsTab, per-doc): DocsTab now keeps the raw `clips`
+  array (previously only derived `uncitedCounts` from it) so it can filter
+  by `destinationId` and send each clip's text; background returns one
+  3-5 sentence overview.
+
+## Tasks
+- [x] types.ts — AskFollowUpMessage/Response, SummarizeTopicMessage/Response
+- [x] background — callAI adapter (3 providers), aiErrorMessage, handleAskFollowUp, handleSummarizeTopic, ASK_FOLLOWUP + SUMMARIZE_TOPIC listeners
+- [x] Popup.tsx — DocsTab: allClips/aiConnected state, handleSummarize, DocMenu.onSummarize + summary panel; History: aiConnected state, handleAskFollowUp, HistoryCardMenu.onAskFollowUp + questions panel
+- [x] popup.css — shared .ai-summary-* panel + .ai-followup-list
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified ASK_FOLLOWUP/SUMMARIZE_TOPIC/model ids compiled into background bundle, UI strings/classes into content bundle
+
+## Status: DONE (built). No manifest change beyond the already-added host
+permissions → plain reload sufficient for this slice.
+
+## Follow-up: live-tested against a real connected key, found + fixed 2 real bugs
+
+### Bug 1 — generic "key was rejected" hid the real cause
+`aiErrorMessage` guessed a message from the HTTP status code alone (401/403
+→ "rejected") instead of reading the provider's own error body. Anthropic's
+actual error was completely different (see Bug 2) but got mislabeled as a
+bad key, sending the user to reconnect a key that was never the problem.
+Fixed: `aiErrorMessage` now reads `body.error.message` from the response
+(all three providers shape their error JSON the same way) and surfaces that
+verbatim, falling back to the generic guess only if the body isn't JSON.
+`validateAIKey` now routes through the same helper instead of its own
+separate (and equally generic) status-code guess.
+
+### Bug 2 — Anthropic blocks direct browser calls without an explicit opt-in
+Real error surfaced once Bug 1 was fixed: "CORS requests must set
+'anthropic-dangerous-direct-browser-access' header." Anthropic's API
+rejects browser-origin requests by default (anti-abuse — stops a site from
+silently draining a visitor's key) unless that header is present; this is
+unrelated to the extension's own `host_permissions` (which bypass the
+*browser's* CORS enforcement, not Anthropic's own server-side check) — both
+layers were needed. Fixed: added `'anthropic-dangerous-direct-browser-access':
+'true'` to both Anthropic fetch calls (validateAIKey's GET /v1/models AND
+callAI's POST /v1/messages) — the same flag the official SDK sets under
+`dangerouslyAllowBrowser`, and the documented, sanctioned opt-in for exactly
+this architecture (user's own key, called straight from their own browser
+extension, never proxied through a server SnipKeep doesn't have).
+
+## Tasks
+- [x] aiErrorMessage — read body.error.message instead of guessing from status code
+- [x] validateAIKey — route through aiErrorMessage instead of its own separate guess
+- [x] both Anthropic fetch calls — anthropic-dangerous-direct-browser-access header
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified header string compiled into both call sites in the background bundle
+
+## Status: DONE (built). Confirmed against a real connected Claude key via
+live user testing — this is the first part of the whole AI feature actually
+verified end-to-end in Chrome, not just traced. OpenAI/Gemini call sites
+untested (no key connected for those yet) — if either misbehaves, check for
+a similar provider-specific browser-auth quirk first.
+
+---
+
+# Auto-generated bibliography (docs/IDEAS.md #2)
+
+A "Works Cited" section, auto-maintained at the end of the Doc — deduplicated
+by source, alphabetized, rebuilt fresh every time a citation is added. Turns
+per-clip citations (already shipped) into an actual finished-paper reference
+list instead of something the user has to manually assemble.
+
+## Design
+- **Trigger: the existing Cite action, not every save.** "Self-updating as
+  citations get added" (the idea's own wording) maps naturally onto the Cite
+  button that already exists — not onto silently citing every single clip.
+  Only fires on the FIRST citation of a clip (already gated by the existing
+  `!entry.cited` one-way-ratchet check) — re-clicking Cite just re-copies,
+  no extra Docs API round-trip.
+- **Rebuilt from scratch every time, not appended to.** The only way to keep
+  the list both correctly ordered (alphabetical, and the sort can change as
+  sources are added) AND actually pinned to the bottom (any stale copy is
+  deleted first, the fresh one goes at the doc's current true end) — same
+  `endOfSegmentLocation` pattern a new clip uses.
+- **Dedup key is the source PAGE, not the clip** — several clips from one
+  article must produce exactly one bibliography entry, not one per clip.
+- **Google Docs only** — same boundary as Living Resurface/archive-link
+  (Notion hidden at MVP); gated on `destinationId !== 'notion'`.
+- **Fire-and-forget from the UI.** The clipboard copy already gives the user
+  their "Copied ✓" confirmation; the Doc write-back is a bonus, so a failure
+  there fails silently rather than surfacing an error for the secondary part
+  of the action.
+- **Known limitation, documented not hidden:** repositioning only happens on
+  a Cite action — clips saved afterward without citing anything new won't
+  push it back down again. And changing citation style after some clips are
+  already cited won't retroactively reformat entries already in the list
+  until each is cited again.
+
+## Implementation
+- `resolveNamedRange` extended to also return `startIndex` (previously only
+  `endIndex`, enough for "insert after" but not for "delete this whole
+  range") — additive, existing call sites (archive-link, add-doc-note) only
+  ever read `.endIndex` and are unaffected.
+- New `worksCitedBookmarks: Record<destinationId, namedRangeId>` in
+  storage.local, same shape/precedent as `docCaptionBookmarks`.
+- `updateBibliography()`: resolve + delete any existing block → re-fetch the
+  doc's current end → insert `Works Cited` (HEADING_2) + the citation list →
+  bookmark the new block's NamedRange → store the new id.
+- `buildWorksCited()` (Popup.tsx): filters `clips` by destinationId + cited,
+  dedupes by sourceUrl, formats via the existing `formatCitation`, sorts.
+
+## Tasks
+- [x] types.ts — UpdateBibliographyMessage/Response
+- [x] background — resolveNamedRange returns startIndex too; updateBibliography (delete-then-rebuild-at-end); UPDATE_BIBLIOGRAPHY listener
+- [x] Popup.tsx — buildWorksCited helper; handleCite sends UPDATE_BIBLIOGRAPHY on first citation of a gdoc clip
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified UPDATE_BIBLIOGRAPHY/worksCitedBookmarks/skworkscited/"Works Cited" compiled into the background bundle, UPDATE_BIBLIOGRAPHY into the content bundle
+
+## Status: DONE (built). No manifest change → plain reload.
+
+## Follow-up: live-tested, found + fixed a real bug (same session)
+
+Live testing surfaced two things:
+
+**Dedup by source page works as designed** — citing two clips from the same
+article correctly collapsed to one Works Cited entry. Not a bug; confirmed
+with the user this is real bibliography convention (one reference entry per
+source, even if quoted multiple times), not data loss.
+
+**Real bug: re-citing an already-cited clip in a different style didn't
+update the Doc.** User cited a clip as APA, then reopened Cite and picked
+BibTeX — clipboard got the BibTeX text, but the Doc's Works Cited section
+still showed the old APA entry. Root cause: the write-back was gated on
+`!entry.cited`, so it only ever fired on a clip's FIRST citation — the
+originally-documented "known limitation" about style changes not
+retroactively updating older entries was actually broader than described:
+it also blocked updating on a deliberate re-cite of the SAME clip.
+
+Fixed by decoupling the two concerns that were sharing one `if`: the
+cited-flag bookkeeping stays a one-way ratchet (`!entry.cited` gate, as
+before), but the Works Cited write-back now runs on EVERY successful cite —
+first time or a re-cite — and always rebuilds the WHOLE list using
+whichever style was just picked. This is strictly better than "fix just
+this clip's entry": the entire section now stays in one consistent style
+after any cite action, fully closing the earlier-documented limitation
+rather than only patching this one symptom of it.
+
+## Tasks (follow-up)
+- [x] Popup.tsx handleCite — split cited-flag bookkeeping (still `!entry.cited`-gated) from the Works Cited write-back (now runs on every successful cite, rebuilding with the just-picked style)
+- [x] tsc clean (only the 3 known pre-existing errors) + build
+
+## Status: DONE (built). No manifest change → plain reload. Confirmed via
+live user testing that dedup-by-source works correctly; the re-cite/
+style-update path is fixed but not yet re-tested live by the user.
+
+## Follow-up: failure feedback for the Doc write-back (same session)
+
+The write-back was fire-and-forget with zero feedback either way — after two
+rounds of "why didn't this work," a silent failure isn't acceptable even for
+a "bonus" action. Reusing the Cite button's existing Copied/Copy-failed
+flash slot rather than adding a new UI element: stays silent on success (the
+clipboard flash already confirms the primary action), shows "Doc update
+failed" in that same slot on failure. Can land a beat after the clipboard
+flash already cleared, since the Doc write is a network round-trip.
+
+## Tasks (follow-up)
+- [x] Popup.tsx — feedback state gains an optional `label` override; handleCite awaits UPDATE_BIBLIOGRAPHY and shows "Doc update failed" on failure/error only
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified "Doc update failed" compiled into the content bundle
+
+## Follow-up: the feedback was invisible in practice — actions row collapsed before it could show (same session)
+
+Real bug, caught by the user with a screenshot: `.history-actions-row` is
+pure reveal-on-hover (`:hover`/`:focus-within`). The Cite style dropdown
+floats down over the NEXT card in the list — the instant you click a style
+and the dropdown closes, the cursor is physically sitting over that next
+card, not the one you clicked from. `:hover` is lost immediately, collapsing
+the row (and the Copied/Doc-update-failed feedback rendered inside it,
+which is exactly what just landed there) before it's ever visible.
+
+Fixed with a third, JS-driven condition alongside the two CSS pseudo-classes:
+`.history-item.show-actions .history-actions-row` stays expanded whenever
+`feedback?.key === key` for that card, regardless of real cursor position.
+Self-clearing — once the feedback's own timeout fires, the class stops being
+applied and the row reverts to normal hover behavior.
+
+## Tasks (follow-up)
+- [x] Popup.tsx — history-item gets `show-actions` class while `feedback?.key === key`
+- [x] popup.css — `.history-item.show-actions .history-actions-row` added alongside the existing :hover/:focus-within selector
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified `show-actions` compiled into the content bundle
+
+## Follow-up: DocsTab's FLIP reorder made gentler on request (same session)
+
+Same "make it gentle/soft/slow" ask, applied to the doc-card reorder
+animation this time (`DocsTab`'s `.animate()` call). Kept the existing
+`cubic-bezier(0.65, 0, 0.35, 1)` easing — already the deliberate, numerically
+verified genuinely-symmetric slow-in/slow-out curve, not something to
+replace — and extended the timing constants instead: base duration
+460ms→640ms, cap 780ms→1100ms, per-pixel distance scaling 0.4→0.5ms/px, and
+the per-card stagger cap 150ms→180ms (25ms/index instead of 20ms) so
+multiple cards moving at once cascade more visibly rather than nearly
+overlapping.
+
+## Tasks (follow-up)
+- [x] Popup.tsx — DocsTab FLIP reorder duration/delay constants extended (same easing curve, kept as-is)
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified new constants compiled into the content bundle
+
+## Follow-up: real jerk bug at animation start, found + fixed (same session)
+
+User reported a sudden jerk right when clicking the toggle — real, not a
+perception issue. Root cause: `el` (the animated `.doc-item`) also has a CSS
+`transition: background 0.15s, box-shadow 0.15s` on `:hover` — and the mouse
+is necessarily already hovering it (that's how the click happened), so that
+hover transition starts on the exact same frame as the JS slide animation.
+`box-shadow` forces a main-thread repaint (unlike `transform`/`opacity`,
+which the compositor handles independently) — both competing for the same
+frame is what read as a stutter right at the start.
+
+Fixed with `will-change: transform, opacity`, applied right before
+`el.animate()` and cleared on the animation's `finish`/`cancel` events —
+promotes the card to its own compositor layer for exactly the animation's
+duration, isolating the slide from the concurrent hover repaint, without
+leaving every card permanently layer-promoted (which costs memory).
+
+## Tasks (follow-up)
+- [x] Popup.tsx — will-change toggle wrapping the FLIP .animate() call, cleared on finish/cancel
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified willChange compiled into the content bundle
+
+## Follow-up: will-change alone didn't fix it — the real ask was choreography, not paint (same session)
+
+User reported the jerk was still there after the will-change fix, then
+described the actually-wanted behavior precisely: "stay at its current
+position for a while, then gently moves and reorders." That's a timing/
+choreography gap, not a rendering-performance one — `delay` was previously
+`Math.min(180, index * 25)`, meaning the first card (often the toggled one)
+had ~0ms before motion started. Click and the start of the slide landed on
+the same frame, reading as an instant cut into motion.
+
+Fixed with a flat 140ms hold added in front of the existing stagger
+(`delay = 140 + Math.min(180, index * 25)`) — every card now genuinely sits
+still at its current position first, then glides into place: "click, pause,
+move," not "click, move." The will-change fix from the previous pass stays
+in place (still a real, valid improvement) — this is additive, not a
+replacement.
+
+## Tasks (follow-up)
+- [x] Popup.tsx — REORDER_HOLD_MS (140ms) flat delay added before the existing per-card stagger
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified compiled into the content bundle
+
+## Follow-up: full interaction audit on request — found the actual root cause (same session)
+
+User asked for a full revamp/analysis of the toggle→reorder interaction
+after the hold-delay pass still didn't fix it. Systematic re-read of every
+piece (toggle button CSS, handleToggleDoc, the full FLIP effect, doc-item
+CSS, and the divider) surfaced the real bug:
+
+**The actual root cause — `fill: 'none'` on the WAAPI animation.** A Web
+Animations API effect's keyframes only apply during its ACTIVE phase, not
+during `delay`. With `fill: 'none'` (what every prior pass had), the card
+had NO transform/opacity override for the entire hold window I'd just
+added — it sat at its real, final, already-reflowed position from the
+instant React re-rendered. Then when the active phase started after the
+delay, the first keyframe (the OLD position) snapped it BACKWARD for a
+frame before sliding forward. Actual sequence: click → jump to final spot →
+sit there → jump BACK to start → slide forward — objectively worse than no
+delay, which explains why the hold-delay pass made it feel more broken
+rather than less. Fixed with `fill: 'backwards'`, which holds the first
+keyframe's values for the entire delay — the card now genuinely stays put
+until the active phase begins.
+
+**Secondary finding — the divider had zero animation.** `.doc-list-divider`
+("Hidden from toolbar") mounts/unmounts entirely (not a class toggle)
+whenever a toggle crosses the active/inactive boundary, and had no
+animation at all — a second, un-tracked source of abruptness on
+boundary-crossing toggles specifically. Fixed by reusing the existing
+`cn-add-reveal` keyframe (already used for `.add-form`'s entrance) rather
+than inventing a new one — CSS `animation` auto-plays on element insertion,
+no JS needed. Exit (removal) still pops instantly; animating that needs a
+JS-driven unmount delay, left out of scope.
+
+**Ruled out, not bugs:** the toggle switch's own knob slide (already
+`transform`-based, compositor-only, correctly smooth); `handleToggleDoc`
+(single `setDocs` call, one render, no double-update); `activeDocs` sort
+stability; the `will-change` fix from the previous pass (still valid,
+unrelated to this bug, left in place).
+
+## Tasks (follow-up)
+- [x] Popup.tsx — animation fill changed from 'none' to 'backwards' (the actual fix)
+- [x] popup.css — .doc-list-divider gets an entrance animation (reused cn-add-reveal)
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified both compiled into the content bundle
+
+## Follow-up: one more polish round — interruption continuity + choreography sync (same session)
+
+Three remaining defects, all in the immediately-after-click window:
+
+**1. Rapid re-toggle snapped the card.** A second toggle while the first
+slide was still mid-flight created a new animation from the stale LAYOUT
+delta — offsetTop deliberately ignores transforms (right for layout truth,
+wrong for visual truth), so the card snapped from wherever it visually was
+to a computed start point. Fixed with interruption continuity: a
+`runningAnims` ref tracks our own FLIP animation per card (deliberately NOT
+`el.getAnimations()`, which would also return — and cancel — the card's CSS
+hover transitions); on interruption, the in-flight transform is read from
+computed style and folded into the new delta (the new slide starts at the
+card's current visual position), in-flight opacity carries over as the new
+start opacity, the old animation is cancelled, and the 140ms hold is
+skipped (a card frozen mid-air reads as a hang, not a beat). `interrupted`
+is also its own animation trigger: a quick toggle-back can land on dy≈0
+with the same target opacity, but the card is still visibly displaced and
+needs an animated path home, not a snap. Duration now scales with the
+VISUAL distance remaining, so a nearly-home interrupted card gets a short
+remainder, not a full restart.
+
+**2. Stale cancel event could strip will-change under the new animation.**
+Animation cancel events fire async — the old animation's cleanup listener
+runs AFTER the new animation is registered and mid-flight. Fixed with
+guarded cleanup (`clearPromotion` only acts if it's still the animation on
+record for that card).
+
+**3. Choreography holes.** (a) The divider faded in immediately on click,
+while held cards were still transformed over its freshly-allocated layout
+slot — it materialized underneath a card that hadn't moved yet. Now enters
+with animation-delay 0.14s (KEEP IN SYNC with REORDER_HOLD_MS), backwards
+fill, and the same easing curve as the slide, so it fades in exactly as the
+space clears. Reduced-motion disable added. (b) Hovering an inactive card
+snapped opacity 0.5→0.85 — opacity was never in .doc-item's transition
+list. Added (0.2s); doesn't fight the FLIP's opacity animation since a
+WAAPI animation outranks a CSS transition for the whole time it's active.
+
+## Tasks (follow-up)
+- [x] Popup.tsx — runningAnims ref, interruption continuity (visual-delta fold-in, opacity carry, hold skip, interrupted-as-trigger), guarded clearPromotion cleanup
+- [x] popup.css — divider entrance delayed/eased to match the hold + reduced-motion; .doc-item transition gains opacity
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified DOMMatrixReadOnly, the divider animation string, and the opacity transition all compiled into the content bundle
+
+## Follow-up: "Add document" control joins the FLIP pass (same session)
+
+User spotted the last teleporting element: the "Add document" control is
+anchored after the LAST ACTIVE card, so any toggle that changes which card
+that is moves it — and it was the one element in the list jumping instantly
+while everything around it glided (it was never measured by the FLIP
+effect, which iterated doc cards only).
+
+Restructured the effect from "iterate activeDocs" to "iterate participants"
+— every doc card plus the add control under a sentinel key
+(`__add-control`), with its stagger index slotted at lastActiveIdx + 1
+(exactly where it renders). Same hold/easing/duration/interruption logic
+applies uniformly. Two wrinkles handled:
+- The control REMOUNTS as a new DOM node when it moves (it renders inside a
+  different card's Fragment). Fine for FLIP — position history is keyed by
+  the sentinel, not element identity — but interruption continuity now
+  checks the running animation's `effect.target === el` before folding
+  in-flight transform/opacity (a still-running animation may belong to the
+  detached previous node, whose offset is meaningless for the fresh one).
+- Both addControl variants (trigger button AND expanded add-form) feed the
+  same ref, so whichever is mounted participates.
+
+## Tasks (follow-up)
+- [x] Popup.tsx — participants restructure (cards + add control), addControlEl ref on both JSX variants, sameEl guard on in-flight fold-in, doc.id→key/doc.active→active throughout the loop
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified __add-control sentinel compiled into the content bundle
+
+## Follow-up: ghost slide of the add control on every drawer open (same session)
+
+Side effect of making the add control a FLIP participant, caught by the
+user with a screenshot: on drawer open, the add control slid from the top
+of the list down to its real spot. Cause: docs arrive ASYNC from
+chrome.storage on every fresh mount, so render 1 is always an empty list —
+where the add control is the only content, at the top — and render 2 is
+populated. The add control exists in both renders, so it alone carried
+position history across the transition; FLIP animated "top → after last
+active card" as if it were a reorder, while the cards (correctly) didn't
+animate at all. Data arriving is not movement.
+
+Fixed with an initial-population guard: if no CARD has position history
+yet (`!activeDocs.some(d => prevTops.current.has(d.id))`), the render is a
+population, not a reorder — every position is recorded, nothing animates.
+Covers drawer open, tab-switch-back remounts, and the delete-all-then-add
+edge; normal toggles are unaffected (cards have history by render 3).
+
+## Tasks (follow-up)
+- [x] Popup.tsx — isInitialPopulation guard added to the FLIP animate condition
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified guard compiled into the content bundle
+
+## Follow-up: same ghost-motion bug on the divider, via CSS instead of FLIP (same session)
+
+User caught the "Hidden from toolbar" divider doing the same thing on
+drawer open. Different mechanism, same root cause: the divider's entrance
+is a CSS MOUNT animation, and CSS can't know WHY the element mounted — a
+toggle crossing the active/inactive boundary (should animate) vs. the docs
+simply arriving from async storage on drawer open (should not). The
+isInitialPopulation guard only covered the FLIP JavaScript path, so the
+divider still played its reveal over a list that was loading, not
+reordering.
+
+Fixed by gating the animation behind an `entering` class: the base
+`.doc-list-divider` has no animation; Popup.tsx adds `entering` only when
+the render is a real reorder, using a render-time mirror of the same test
+(`activeDocs.some(d => prevTops.current.has(d.id))` — cards have position
+history). Reading prevTops during render is safe: it's only written in the
+layout effect, after render. Reduced-motion rule retargeted to `.entering`.
+
+## Tasks (follow-up)
+- [x] Popup.tsx — dividerMayAnimate render-time guard; divider gets `entering` class only on real reorders
+- [x] popup.css — animation moved from .doc-list-divider to .doc-list-divider.entering
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified the .entering selector compiled into the content bundle
+
+## Follow-up: slower, symmetric easing on the actions-row collapse (same session)
+
+User asked for "the slow Ease animation kind of interaction" on the card
+collapse — read as: reuse the genuinely slow-in/slow-out curve already
+established (and numerically verified) for DocsTab's FLIP reorder,
+`cubic-bezier(0.65, 0, 0.35, 1)`, instead of `.history-actions-row`'s
+previous one-sided `cubic-bezier(0.33, 1, 0.68, 1)` (fast start, decelerate
+only — reads as an abrupt snap on collapse). Duration bumped 0.24s → 0.28s
+(and opacity's 0.18s → 0.22s) so the eased ends are actually perceptible on
+a height change this small — a curve this symmetric needs a beat more time
+to read as anything other than linear at a shorter duration.
+
+## Tasks (follow-up)
+- [x] popup.css — .history-actions-row transition swapped to cubic-bezier(0.65, 0, 0.35, 1), duration bumped slightly
+- [x] tsc clean (only the 3 known pre-existing errors, CSS-only change) + build; verified the new curve compiled into the content bundle
+
+---
+
 # Margin Notes
 
 Let users attach an optional personal note ("your take") to a clip at save time.

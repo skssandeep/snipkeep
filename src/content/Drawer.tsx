@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Bookmark } from 'lucide-react'
-import { MdClose, MdKeyboardReturn, MdLock, MdLogout } from 'react-icons/md'
+import { MdAutoAwesome, MdClose, MdKeyboardReturn, MdLock, MdLogout } from 'react-icons/md'
 import type { GetUserProfileMessage, GetUserProfileResponse, SignOutMessage, DocDestination } from '../types'
-import { Popup, PrivacyLedger, TrustCard } from '../popup/Popup'
+import { Popup, PrivacyLedger, TrustCard, AIAssistant } from '../popup/Popup'
 import { ensureFontLoaded } from '../lib/fonts'
 import popupStyles from '../popup/popup.css?inline'
 import {
@@ -89,6 +89,28 @@ const BODY_CSS = `
   }
   .cn-avatar:hover { border-color: var(--accent); color: var(--text); }
   .cn-avatar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ── AI showcase button — always visible, whether or not a key is connected.
+     Deliberately NOT tucked into the avatar dropdown alone: this is the one
+     "outside" entry point advertising the capability; the dropdown stays
+     Privacy/Sign-out only so there's exactly one path into the AI screen. ── */
+  .cn-ai-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1.5px solid var(--border-active);
+    transition: border-color 0.15s, color 0.15s;
+    flex-shrink: 0;
+  }
+  .cn-ai-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .cn-ai-btn.active { border-color: var(--accent); color: var(--accent); }
+  .cn-ai-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   /* ── Sign-out dropdown ──
      Three tiers, in order of a Jakob's-Law-familiar account menu:
@@ -259,7 +281,7 @@ export function Drawer({ container, onClose, closeRef }: Props) {
   const [userEmail, setUserEmail] = useState('')
   const [userName, setUserName] = useState('')
   const [showAuthMenu, setShowAuthMenu] = useState(false)
-  type DrawerView = 'main' | 'privacy' | 'trust'
+  type DrawerView = 'main' | 'privacy' | 'trust' | 'ai'
   const [view, setView] = useState<DrawerView>('main')
   const [firstDocId, setFirstDocId] = useState<string | null>(null)
   // On the wrapper div, not the trigger button — the dropdown is now a
@@ -421,6 +443,15 @@ export function Drawer({ container, onClose, closeRef }: Props) {
             </SheetTitle>
 
             <div className="cn-header-actions">
+              {isSignedIn && (
+                <button
+                  className={`cn-ai-btn ${view === 'ai' ? 'active' : ''}`}
+                  onClick={() => setView(view === 'ai' ? 'main' : 'ai')}
+                  title="AI assistant"
+                >
+                  <MdAutoAwesome size={13} />
+                </button>
+              )}
               {initial && (
                 // A <button> can never contain another <button> (invalid HTML —
                 // see the .cn-avatar-wrap comment in BODY_CSS for the bug this
@@ -474,6 +505,8 @@ export function Drawer({ container, onClose, closeRef }: Props) {
                 <TrustCard firstDocId={firstDocId} onDismiss={handleDismissTrust} />
               ) : view === 'privacy' ? (
                 <PrivacyLedger onBack={() => setView('main')} onShowTrust={() => setView('trust')} />
+              ) : view === 'ai' ? (
+                <AIAssistant onBack={() => setView('main')} />
               ) : (
                 <Popup />
               )}

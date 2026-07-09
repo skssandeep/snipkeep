@@ -201,6 +201,38 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-2);
+  /* This divider mounts/unmounts entirely (not a class toggle on an existing
+     element) whenever a toggle crosses the active/inactive boundary — it was
+     popping in instantly with zero animation, a second, un-tracked source of
+     abruptness alongside the card slide (CSS transitions can't animate a
+     brand-new node's insertion, but CSS `animation` DOES auto-play on mount,
+     no JS needed). Reuses the same reveal already established for .add-form
+     rather than inventing a new one. Exit (removal) still pops instantly —
+     animating that needs a JS-driven unmount delay, out of scope here.
+
+     Choreographed to the cards' hold: the 0.14s delay MATCHES
+     REORDER_HOLD_MS in Popup.tsx (keep in sync). During the hold the cards
+     are still transformed to their OLD positions — one of them can literally
+     overlap the divider's freshly-allocated layout slot — so fading the
+     divider in immediately meant it materialized underneath a card that
+     hadn't moved yet. Delaying its entrance until the hold ends makes it
+     fade in exactly as the space clears. `backwards` fill keeps it at
+     opacity 0 during that delay (same reasoning as the FLIP animation's own
+     fill mode); same easing curve as the slide so the two read as one
+     movement.
+
+     The animation lives on `.entering` (JSX-gated), NOT the base class: a
+     CSS mount animation can't tell WHY the element mounted, and on drawer
+     open the divider mounts because the docs ARRIVED (async storage load),
+     not because anything reordered — playing the reveal there is the same
+     ghost-motion bug the add control had. Popup.tsx adds `entering` only
+     when the render is a real reorder (cards have position history). */
+}
+.doc-list-divider.entering {
+  animation: cn-add-reveal 0.4s cubic-bezier(0.65, 0, 0.35, 1) 0.14s backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-list-divider.entering { animation: none; }
 }
 .doc-list-divider::after {
   content: '';
@@ -227,7 +259,13 @@ a { color: inherit; text-decoration: none; }
      has breathing room and text never crowds it. */
   padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
   box-shadow: inset 0 0 0 0 var(--accent);
-  transition: background 0.15s, box-shadow 0.15s;
+  /* opacity is here for HOVER on a dimmed card (.inactive 0.5 → :hover 0.85
+     used to snap — it was never in this list). It does NOT fight the FLIP
+     reorder's opacity animation: a WAAPI animation outranks a CSS transition
+     in the effect stack for the whole time it's active, and by the time it
+     finishes the underlying transitioned value has long since settled on the
+     same target the animation's last keyframe ends on. */
+  transition: background 0.15s, box-shadow 0.15s, opacity 0.2s;
 }
 /* Hover feedback comes from the accent bar + brighter edge — NOT a lighter fill,
    so the grey meta text never loses contrast against a lightened surface. */
@@ -891,13 +929,27 @@ a { color: inherit; text-decoration: none; }
    the end of the transition (that overshoot was the "jerky" tail, worst on
    collapse). The gap to the meta lives as padding-top on the inner, so it
    grows as part of the same animated height rather than as a separate margin.
-   Buttons stay in the tab order while collapsed, so :focus-within reveals them. */
+   Buttons stay in the tab order while collapsed, so :focus-within reveals them.
+   .show-actions (JS-driven, not a pseudo-class) covers a real gap in the
+   other two: the Cite style dropdown floats down over the NEXT card, so the
+   instant it closes on click, the cursor is physically over that next card,
+   not this one — :hover is lost immediately, collapsing this row before the
+   Copied/Doc-update-failed feedback (rendered on the Cite button, inside
+   this same row) can ever be seen. Applied for exactly as long as feedback
+   is showing for this card, regardless of where the mouse actually is. */
 .history-actions-row {
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows 0.24s cubic-bezier(0.33, 1, 0.68, 1),
-              opacity 0.18s ease;
+  /* Same genuinely-symmetric slow-in/slow-out curve as DocsTab's FLIP reorder
+     (verified numerically there, not eyeballed — see the comment at that
+     .animate() call). The previous cubic-bezier(0.33,1,0.68,1) is one-sided
+     (fast start, decelerate only), which reads as an abrupt snap on collapse
+     — this one eases at both ends. Duration extended further (0.28s → 0.4s)
+     on request for a gentler feel — the eased shoulders need real time to
+     read as soft rather than just "slightly less linear." */
+  transition: grid-template-rows 0.4s cubic-bezier(0.65, 0, 0.35, 1),
+              opacity 0.32s cubic-bezier(0.65, 0, 0.35, 1);
 }
 .history-actions-inner {
   display: flex;
@@ -910,7 +962,8 @@ a { color: inherit; text-decoration: none; }
   padding: var(--space-4) 0 2px;
 }
 .history-item:hover .history-actions-row,
-.history-item:focus-within .history-actions-row {
+.history-item:focus-within .history-actions-row,
+.history-item.show-actions .history-actions-row {
   grid-template-rows: 1fr;
   opacity: 1;
 }
@@ -1271,6 +1324,77 @@ a { color: inherit; text-decoration: none; }
 }
 .privacy-trust-link:hover { color: var(--accent); }
 
+/* ── AI Assistant (bring-your-own-key connect/manage screen) ── */
+.ai-provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ai-provider-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ai-provider-card:hover { border-color: var(--border-active); background: var(--card-2); }
+.ai-provider-card.active { border-color: var(--accent); }
+.ai-provider-name { font-size: 13px; font-weight: 600; }
+.ai-provider-open { color: var(--text-3); display: flex; }
+
+.ai-key-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.ai-key-error { font-size: 12px; color: var(--danger); margin: 0; }
+
+.ai-connected {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.ai-connected-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius);
+}
+.ai-connected-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(111, 97, 190, 0.18);
+  color: var(--accent);
+}
+.ai-connected-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.ai-connected-key { font-family: var(--mono); font-size: 12px; color: var(--text-3); margin-top: 2px; }
+/* .btn-ghost has no internal flex layout of its own (fine everywhere else,
+   where its parent is a row) — but .ai-connected's column stretch (no
+   align-items set) was pulling it to full width, with the icon+text just
+   centered as plain inline content inside that wide box. Scoped here rather
+   than changed on .btn-ghost itself, which other full-row contexts rely on. */
+.ai-connected .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+}
+
 /* ── Trust Card ── */
 .trust-card { align-items: flex-start; text-align: left; }
 .trust-badge {
@@ -1360,6 +1484,50 @@ a { color: inherit; text-decoration: none; }
   transition: background 0.12s;
 }
 .doc-note-save:hover { background: var(--accent-hover); }
+
+/* ── AI result panel — shared by Summarize (DocsTab) and Follow-up questions
+   (History) — same "reveal below the card" shape as doc-note-box, so the
+   whole card family reads as one consistent pattern (Jakob's Law) rather
+   than introducing a new interaction vocabulary for AI-specific actions. ── */
+.ai-summary-box {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--card-edge);
+}
+.ai-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ai-summary-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.ai-summary-close {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  display: flex;
+  padding: 2px;
+}
+.ai-summary-close:hover { color: var(--text); }
+.ai-summary-status { font-size: 12px; color: var(--text-3); margin: 6px 0 0; }
+.ai-summary-text { font-size: 12.5px; color: var(--text-2); line-height: 1.5; margin: 6px 0 0; }
+.ai-followup-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ai-followup-list li { font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
 
 /* ── Soft Triage — calm on purpose: dashed border, no accent color, nothing
    here is urgent and ignoring it costs literally nothing. ── */
