@@ -489,6 +489,33 @@ layout effect, after render. Reduced-motion rule retargeted to `.entering`.
 - [x] popup.css — animation moved from .doc-list-divider to .doc-list-divider.entering
 - [x] tsc clean (only the 3 known pre-existing errors) + build; verified the .entering selector compiled into the content bundle
 
+## Follow-up: History-card hover expansion given the same choreography (same session)
+
+User: the hover expansion of History cards is sudden — wants it gentle like
+the doc reorder. Two distinct abruptnesses found:
+
+1. **No hover intent.** Expansion fired on the first frame the pointer
+   touched a card, so merely moving the mouse ACROSS the list churned every
+   grazed card open/closed. Added a 0.14s expand delay via
+   `transition-delay` on the hover/focus/show-actions rule — deliberately
+   EQUAL to REORDER_HOLD_MS so every motion in the drawer shares one
+   "pause, then move" rhythm. Grazed cards now never move at all (a delayed
+   CSS transition is cancelled outright if the value reverts before the
+   delay elapses). Collapse got a shorter 0.1s forgiveness delay on the
+   base rule, so grazing off the card edge and straight back doesn't flap.
+
+2. **Border snap at onset.** `:hover` changes border-color on both
+   .history-item AND .doc-item, but border-color was in neither card's
+   transition list — the outline popped to full brightness on the same
+   frame the smooth expansion began (the same "sharp change at the start of
+   gentle motion" shape as the earlier opacity/box-shadow findings). Added
+   border-color 0.2s to both.
+
+## Tasks (follow-up)
+- [x] popup.css — expand delay 0.14s (= REORDER_HOLD_MS) on the expanded-state rule, collapse delay 0.1s on the base rule
+- [x] popup.css — border-color added to .history-item and .doc-item transitions
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified all three compiled into the content bundle
+
 ## Follow-up: slower, symmetric easing on the actions-row collapse (same session)
 
 User asked for "the slow Ease animation kind of interaction" on the card
@@ -504,6 +531,156 @@ to read as anything other than linear at a shorter duration.
 ## Tasks (follow-up)
 - [x] popup.css — .history-actions-row transition swapped to cubic-bezier(0.65, 0, 0.35, 1), duration bumped slightly
 - [x] tsc clean (only the 3 known pre-existing errors, CSS-only change) + build; verified the new curve compiled into the content bundle
+
+---
+
+# Lecture-timestamp clipping (2026-07-10)
+
+Clips saved on a YouTube watch page carry the video moment they came from:
+History's Source link reopens the lecture already playing at that moment,
+and the Doc bullet gets a small caption-styled " · 43:21" link doing the
+same — the Doc becomes a clickable index of the lecture.
+
+## Design decisions
+- **`videoTime` is its own field, never baked into sourceUrl.** sourceUrl
+  doubles as the page's IDENTITY in five places (isNewArticle grouping,
+  Works Cited dedup-by-source, archivedUrls keying, docCaptionBookmarks
+  keying, reflection-nudge streaks) — a per-clip `t=` param would make every
+  clip from one lecture look like a different page (heading re-emitted per
+  clip, one bibliography entry per clip, etc.). The content script also
+  CANONICALIZES the url on watch pages (strips t/start — a shared timed link
+  would otherwise poison the identity too).
+- **Transcript line beats playback time.** Each transcript segment carries
+  its own timestamp in the DOM (`ytd-transcript-segment-renderer` →
+  `.segment-timestamp`) — precise to the sentence and independent of where
+  playback is paused while the student reads. Fallback: `video.currentTime`
+  floored, ignored below 1s (a never-played video says nothing). Everything
+  best-effort in try/catch — YouTube's DOM is theirs to change; failed
+  detection = a normal untimed clip.
+- **Captured when the toolbar appears, not when Save is clicked** — the
+  selection (and its transcript line) may be gone by then. Quick-save
+  (Cmd+Shift+S) captures at save time (selection is alive by definition).
+- **Doc rendering:** clip line becomes `${text} · 43:21`; the suffix is
+  styled like the caption (9pt, LINK_FG, no underline) and linked via
+  `timedVideoUrl`. LinkSpan offsets are relative to the original text and
+  the suffix sits after it — no adjustment needed; note/bookmark ranges all
+  derive from clipEnd, which now uses clipText.length.
+- **Source link:** timed URL replaces the text fragment for video clips (a
+  fragment can't match a collapsed transcript panel).
+- Scope: text clips only (images skipped); Notion untouched (hidden at MVP);
+  youtube.com/watch only for now.
+
+## Tasks
+- [x] src/lib/video.ts — formatVideoTime, timedVideoUrl (shared by content/background/popup)
+- [x] types.ts — SaveNoteMessage.payload.videoTime?, HistoryEntry.videoTime?
+- [x] content/index.tsx — getVideoClipContext(range); threaded through toolbar save (captured at showToolbar) + quick save
+- [x] background — videoStampRequest, appendToGoogleDoc clipText/suffix in both branches, handleSave threading + archive entry
+- [x] Popup.tsx — sourceHref returns timed URL for video clips
+- [x] CLAUDE.md — product description + HistoryEntry fields updated
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified transcript selectors + videoTime in content bundle, formatter + t-param builder in background bundle
+
+## Status: DONE. Tested live by the user on a real YouTube page (2026-07-10)
+— confirmed working. (The transcript-segment DOM selectors
+`ytd-transcript-segment-renderer`/`.segment-timestamp` are YouTube's markup
+and could still break if YouTube changes it; the failure mode is a silent
+fall back to playback time, then to a normal untimed clip.)
+
+---
+
+# Add-document open/close now animates as height growth (2026-07-10)
+
+User: cards under "Hidden from toolbar" jump instead of shifting smoothly
+when the add-form opens. Diagnosis: three elements were on three different
+clocks — the form popped in at FULL height on one frame (a conditionally-
+mounted element can't be CSS-transitioned open; no "before" state exists),
+the divider teleported (never a FLIP participant), and the cards held 140ms
+then slid, briefly overlapping the already-full-size form. FLIP was the
+wrong tool for an INSERTION.
+
+Fix: the trigger button and the form are now permanently co-mounted inside
+one `.add-control` wrapper, each in a reciprocal 0fr↔1fr grid collapse
+(History's action-row trick) on the same 0.4s/house-curve clock — the button
+shrinks as the form grows, producing ONE smooth net height change that the
+divider and cards below simply ride via ordinary layout. Works in both
+directions (Cancel animates closed for free). FLIP stays out of it: at
+measurement time the transition hasn't progressed, dy≈0, correctly no-op.
+Details: `visibility` flips hidden 0.4s AFTER collapse (tab-order/a11y
+without vanishing mid-animation); inner grid items carry no padding
+(border-box floor, same as .history-actions-inner); `autoFocus` replaced
+with an explicit focus-on-open effect (the input never remounts now);
+cn-add-reveal keyframes kept only for the divider's `.entering`; the FLIP
+participant ref moved to the never-remounting-on-open wrapper.
+
+- [x] Popup.tsx — addControl restructure, addInputRef + focus effect
+- [x] popup.css — .add-collapse/.add-collapse-inner + reduced-motion; .add-form mount animation removed
+- [x] CLAUDE.md — "insertions animate as height growth, not FLIP" invariant added
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified add-collapse/add-control compiled into the bundle
+
+## Follow-up: morph re-timed after user feedback — "keep it simple and minimal"
+
+The 0.4s slow-in/slow-out double-morph felt heavy for a form-open. Lesson
+captured as a CLAUDE.md invariant: two motion registers — the slow
+symmetric curve + hold is for SYSTEM-initiated rearrangement (reorders);
+direct user commands respond fast. The co-mounted-collapse plumbing stays
+(that's what keeps content below smooth); only the timing changed: 0.22s
+`cubic-bezier(0.16, 1, 0.3, 1)` ease-out (the curve cn-add-reveal already
+used), opacity 0.15s, no delays.
+
+- [x] popup.css — .add-collapse timing swapped to fast ease-out
+- [x] CLAUDE.md — "two motion registers" invariant added
+- [x] build; verified 0.22s compiled into the bundle
+
+---
+
+# CLAUDE.md brought current + History-card padding fix (2026-07-09)
+
+**CLAUDE.md update (on request):** manifest note now lists the 3 AI host
+permissions; product description covers Works Cited + BYO-AI + Someday
+removal; Background lists AI provider calls; drawer view state machine
+documented ('main'|'privacy'|'trust'|'ai' + the ✨ AI header button);
+message-flow diagram gains UPDATE_BIBLIOGRAPHY / CONNECT_AI / DISCONNECT_AI /
+ASK_FOLLOWUP / SUMMARIZE_TOPIC; storage table gains worksCitedBookmarks +
+aiConfig (with the local-not-sync reasoning); two new sections (BYO-AI layer
+with the anthropic-dangerous-direct-browser-access + error-body + Claude-Pro≠API
+gotchas; Works Cited delete-then-rebuild pattern); FLIP section rewritten as
+an invariants list (fill:'backwards', interruption continuity, guarded
+cleanup, participants incl. add control, data-arriving-is-not-movement,
+will-change, shared hover rhythm).
+
+**Padding fix (user screenshot: card bottom padding > top).** Root cause:
+the 0fr-grid collapse trick can't collapse PADDING — with the global
+border-box, an element's height never shrinks below its own padding, so
+.history-actions-inner's at-rest `padding: 16px 0 2px` left an invisible
+~18px band under every card's meta. Card padding was symmetrical (12px) all
+along; the band made the bottom read as ~30px. Fixed: inner padding is 0 at
+rest, applied only in the expanded state, transitioned on the same
+clock/curve/delays as the row (and disabled under reduced motion). Gotcha
+added to CLAUDE.md's motion invariants.
+
+- [x] CLAUDE.md — all sections above
+- [x] popup.css — inner padding state-switched + reduced-motion + comments
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified padding:0 compiled into the bundle
+
+---
+
+# Soft Triage / Someday — REMOVED (2026-07-09, user: "I don't like it")
+
+Full deletion, not a pause: Someday header filter + count, per-card "Mark as
+Someday" menu item, the "still relevant?" triage check-in card,
+toggleSomeday/pickTriageCandidate/dismissTriageForToday/TRIAGE_MIN_AGE_MS,
+HistoryEntry.someday, triageDismissedDay storage read/write, all .triage-*
+CSS, and someday exclusions inside pickResurfaced/suppression conditions.
+The .someday-filter pill CSS survives renamed as the general .header-pill
+(the Filter trigger was already reusing it). MdSchedule import dropped
+(unused). Stored data untouched: stale `someday: true` fields and
+`triageDismissedDay` may linger, simply unread — previously-hidden Someday
+clips reappear in the main History list. CLAUDE.md + docs/ROADMAP.md updated
+to match.
+
+- [x] Popup.tsx / types.ts / popup.css — all of the above
+- [x] CLAUDE.md storage table + HistoryEntry fields + card-padding list updated
+- [x] docs/ROADMAP.md — #4 struck through with a removal note; Resurfaced re-enable snippet updated (no more showSomedayOnly)
+- [x] tsc clean (only the 3 known pre-existing errors) + build; verified zero someday/triage strings and 2 header-pill occurrences in the content bundle
 
 ---
 

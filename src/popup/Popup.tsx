@@ -17,7 +17,6 @@ import {
   MdLink,
   MdMoreHoriz,
   MdOpenInNew,
-  MdSchedule,
   MdSubdirectoryArrowRight,
   MdUndo,
 } from 'react-icons/md'
@@ -46,6 +45,7 @@ import type {
   UpdateBibliographyMessage,
   UpdateBibliographyResponse,
 } from '../types'
+import { timedVideoUrl } from '../lib/video'
 
 type Tab = 'docs' | 'completed' | 'history'
 
@@ -194,6 +194,13 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   // history is keyed by the stable sentinel below, not by element identity.
   const addControlEl = useRef<HTMLElement | null>(null)
   const ADD_CONTROL_KEY = '__add-control'
+  // The add-form's input is permanently mounted now (see the addControl
+  // comment below), so `autoFocus` — which only fires on mount — is dead;
+  // focus explicitly when the form opens instead.
+  const addInputRef = useRef<HTMLInputElement | null>(null)
+  useEffect(() => {
+    if (isAdding) addInputRef.current?.focus()
+  }, [isAdding])
   useLayoutEffect(() => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     // Initial-population guard: docs arrive ASYNC from chrome.storage on
@@ -566,7 +573,7 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   }
 
   // Deadline-Aware Citations — a due date is purely local archive metadata on
-  // the destination, like Someday; it never touches the Doc itself. The
+  // the destination; it never touches the Doc itself. The
   // calendar commits immediately on click, so there's no separate draft/save
   // step — just "open the picker" and "apply what was picked."
   function selectDeadline(id: string, date: string) {
@@ -624,62 +631,80 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   // card, but if literally no doc is active, there's no "after the active
   // group" position to hook onto, so it falls back to rendering above the
   // (all-inactive) list instead of disappearing.
-  const addControl = (isAdding || docs.length === 0) ? (
-    // Both variants feed the same FLIP participant ref — whichever one is
-    // mounted is the thing that must glide (not teleport) when a toggle
-    // moves the "after the last active card" anchor position.
-    <div className="add-form" ref={(el) => { addControlEl.current = el }}>
-      <div className="input-group">
-        <div className="field">
-          <span className="field-label">Google Doc URL</span>
-          <div className="field-input-row">
-            <MdLink size={14} className="field-input-icon" />
-            <input
-              className="field-input mono"
-              value={newDocId}
-              onChange={e => handleDocUrlChange(e.target.value)}
-              placeholder="Paste URL or Doc ID"
-              spellCheck={false}
-              autoFocus={isAdding}
-            />
+  // Opening the form is an INSERTION of ~200px of content mid-list. A
+  // conditionally-mounted form can never animate open (CSS transitions need a
+  // "before" state on the same element), so the old ternary — button OR form
+  // — made the form pop in at full height on one frame while everything below
+  // (the "Hidden from toolbar" divider, the inactive cards) teleported down.
+  // Instead, BOTH variants stay mounted inside one wrapper, each in a
+  // reciprocal 0fr↔1fr grid collapse (same trick as History's action row):
+  // the button shrinks as the form grows on the same clock/curve, and the
+  // divider + cards below simply ride the single smooth layout change — no
+  // FLIP needed for them, and Cancel animates closed for free. The wrapper is
+  // also the (now never-remounting-on-open) FLIP participant for toggles.
+  const addFormOpen = isAdding || docs.length === 0
+  const addControl = (
+    <div className="add-control" ref={(el) => { addControlEl.current = el }}>
+      <div className={`add-collapse${addFormOpen ? '' : ' open'}`}>
+        <div className="add-collapse-inner">
+          <button className="btn-add-trigger" onClick={() => setIsAdding(true)}>
+            <MdAdd size={16} className="btn-add-icon" />
+            Add document
+          </button>
+        </div>
+      </div>
+      <div className={`add-collapse${addFormOpen ? ' open' : ''}`}>
+        <div className="add-collapse-inner">
+          <div className="add-form">
+            <div className="input-group">
+              <div className="field">
+                <span className="field-label">Google Doc URL</span>
+                <div className="field-input-row">
+                  <MdLink size={14} className="field-input-icon" />
+                  <input
+                    ref={addInputRef}
+                    className="field-input mono"
+                    value={newDocId}
+                    onChange={e => handleDocUrlChange(e.target.value)}
+                    placeholder="Paste URL or Doc ID"
+                    spellCheck={false}
+                  />
+                </div>
+              </div>
+
+            </div>
+
+            {/* Read-only by design — not a truncated feature. The Doc's name always
+                tracks its real Google Doc title; syncDocNames() re-fetches and
+                overwrites it on every drawer mount regardless, so a custom name
+                typed here would silently revert the next time the drawer opened.
+                Showing it as a plain status line (not a field with an edit
+                affordance) makes that truthful up front instead of implying an
+                editability that wouldn't actually stick. */}
+            {newDocId.trim() && (
+              <p className="doc-name-status">
+                {isFetchingTitle ? (
+                  <><span className="field-spinner" /> Fetching the document's title…</>
+                ) : (
+                  <><MdCheckCircle size={13} className="doc-name-status-icon" /> Will be added as "{newDocName || 'My Notes'}"</>
+                )}
+              </p>
+            )}
+
+            <p className="hint">Paste the full URL from your browser — the ID is extracted automatically.</p>
+
+            <div className="add-actions">
+              {docs.length > 0 && (
+                <button className="btn-ghost" onClick={handleCancelAdd}>Cancel</button>
+              )}
+              <button className="btn-primary add-submit" onClick={handleAddDoc} disabled={!newDocId.trim()}>
+                Add Document
+              </button>
+            </div>
           </div>
         </div>
-
-      </div>
-
-      {/* Read-only by design — not a truncated feature. The Doc's name always
-          tracks its real Google Doc title; syncDocNames() re-fetches and
-          overwrites it on every drawer mount regardless, so a custom name
-          typed here would silently revert the next time the drawer opened.
-          Showing it as a plain status line (not a field with an edit
-          affordance) makes that truthful up front instead of implying an
-          editability that wouldn't actually stick. */}
-      {newDocId.trim() && (
-        <p className="doc-name-status">
-          {isFetchingTitle ? (
-            <><span className="field-spinner" /> Fetching the document's title…</>
-          ) : (
-            <><MdCheckCircle size={13} className="doc-name-status-icon" /> Will be added as "{newDocName || 'My Notes'}"</>
-          )}
-        </p>
-      )}
-
-      <p className="hint">Paste the full URL from your browser — the ID is extracted automatically.</p>
-
-      <div className="add-actions">
-        {docs.length > 0 && (
-          <button className="btn-ghost" onClick={handleCancelAdd}>Cancel</button>
-        )}
-        <button className="btn-primary add-submit" onClick={handleAddDoc} disabled={!newDocId.trim()}>
-          Add Document
-        </button>
       </div>
     </div>
-  ) : (
-    <button className="btn-add-trigger" ref={(el) => { addControlEl.current = el }} onClick={() => setIsAdding(true)}>
-      <MdAdd size={16} className="btn-add-icon" />
-      Add document
-    </button>
   )
 
   // Render-time mirror of the FLIP effect's initial-population guard: the
@@ -924,6 +949,10 @@ function buildTextFragment(text: string): string {
 function sourceHref(entry: HistoryEntry): string {
   const base = entry.sourceUrl
   if (entry.kind === 'image') return base   // nothing to highlight for an image
+  // Lecture-timestamp clip: the moment IS the deep link — reopen the video
+  // already playing there. A text fragment is useless on a video page (the
+  // transcript panel is collapsed by default, so there's nothing to match).
+  if (entry.videoTime !== undefined) return timedVideoUrl(base, entry.videoTime)
   const frag = buildTextFragment(entry.text)
   if (!frag) return base
   // The text directive must be the last part of the fragment, after ":~:".
@@ -1174,23 +1203,19 @@ function DocMenu({
 
 // History card actions split the same way as the Doc card: Source/Doc/Cite
 // are frequent "do something with this content" actions and stay visible;
-// Archived/Add-a-note/Someday are occasional or fallback actions (you don't
-// triage or annotate a clip on every visit — the Reflection Nudge already
-// exists to prompt notes at the right moment, this menu doesn't need to)
-// and move behind "···", reusing the same .card-menu styling for consistency.
+// Archived/Add-a-note are occasional or fallback actions (you don't annotate
+// a clip on every visit — the Reflection Nudge already exists to prompt notes
+// at the right moment, this menu doesn't need to) and move behind "···",
+// reusing the same .card-menu styling for consistency.
 function HistoryCardMenu({
   archiveUrl,
   onAddNote,
-  someday,
-  onToggleSomeday,
   onRemove,
   onAskFollowUp,
   onClose,
 }: {
   archiveUrl?: string
   onAddNote?: () => void
-  someday: boolean
-  onToggleSomeday: () => void
   onRemove: () => void
   // Undefined entirely (not disabled) when no AI key is connected — see the
   // matching note on DocMenu's onSummarize.
@@ -1230,10 +1255,6 @@ function HistoryCardMenu({
           <span className="card-menu-icon"><MdAutoAwesome /></span>Follow-up questions
         </button>
       )}
-      <button className="card-menu-item" onClick={onToggleSomeday}>
-        <span className="card-menu-icon">{someday ? <MdCheck /> : <MdSchedule />}</span>
-        {someday ? 'Remove from Someday' : 'Mark as Someday'}
-      </button>
       {/* Destructive, so divider-separated (distance from the safe actions) and
           labelled "history" — it only drops SnipKeep's local record; the Doc
           keeps the text. Undo (below) is the safety net, so no blocking dialog. */}
@@ -1415,35 +1436,13 @@ function DeadlineCalendar({
 
 // Deterministically pick one clip to "resurface" per day, preferring clips older
 // than a day so it feels like revisiting, not re-reading what you just saved.
-// Someday-tagged clips are excluded — they've already been triaged once.
 function pickResurfaced(clips: HistoryEntry[]): HistoryEntry | null {
-  const pool = clips.filter(c => !c.someday)
-  if (pool.length < 3) return null
+  if (clips.length < 3) return null
   const now = Date.now()
-  const eligible = pool.filter(c => now - c.savedAt > DAY_MS)
-  const finalPool = eligible.length ? eligible : pool
+  const eligible = clips.filter(c => now - c.savedAt > DAY_MS)
+  const finalPool = eligible.length ? eligible : clips
   const daySeed = Math.floor(now / DAY_MS)
   return finalPool[daySeed % finalPool.length]
-}
-
-// Soft Triage — the calm alternative to a Burn-451-style delete-if-unread
-// countdown. Old, never-revisited, not-yet-triaged clips occasionally surface
-// a "still relevant?" check-in with zero consequence for ignoring it: nothing
-// is ever deleted, and skipping just means asking again some other day.
-const TRIAGE_MIN_AGE_MS = 14 * DAY_MS
-
-function pickTriageCandidate(clips: HistoryEntry[], excludeSavedAt: number | null): HistoryEntry | null {
-  const now = Date.now()
-  const pool = clips.filter(c =>
-    !c.someday &&
-    c.savedAt !== excludeSavedAt &&
-    now - c.savedAt > TRIAGE_MIN_AGE_MS
-  )
-  if (pool.length < 3) return null  // too small an archive to bother triaging yet
-  const daySeed = Math.floor(now / DAY_MS)
-  // Offset from pickResurfaced's index so the two picks don't usually coincide
-  // even when the pools happen to be the same size.
-  return pool[(daySeed + 7) % pool.length]
 }
 
 // Gentle Reflection Nudge — targets the collector's fallacy (saving feels like
@@ -1494,23 +1493,17 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   // link-rot insurance a few seconds after a save; listened for live so the
   // "🏛 Archived" link can appear without reopening the drawer.
   const [archivedUrls, setArchivedUrls] = useState<Record<string, string>>({})
-  // Soft Triage: hide Someday clips from the main list by default (an escape
-  // hatch, not a filter you have to remember to apply); and the day-seed of
-  // the last time a triage check-in was answered/skipped, so it doesn't nag
-  // again until a new day rotates the pick.
-  const [showSomedayOnly, setShowSomedayOnly] = useState(false)
   // Filter History to a single destination doc (by id), or null for all.
   const [docFilter, setDocFilter] = useState<string | null>(null)
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
-  const [triageDismissedDay, setTriageDismissedDay] = useState<number | null>(null)
   // Reflection Nudge: remembers the last {url, count} streak that was
   // dismissed, so it only reappears if the SAME article's note-less streak
   // grows further — not every time the drawer reopens unchanged.
   const [reflectionDismissed, setReflectionDismissed] = useState<{ url: string; count: number } | null>(null)
   // Assignment/Project Mode: destinations marked done are excluded from the
-  // proactive pickers (Resurfaced/Triage/Reflection) — a finished project
-  // shouldn't keep getting surfaced for delight or reflection. The main
-  // searchable list is untouched; you can still find and cite old work.
+  // proactive pickers (Resurfaced/Reflection) — a finished project shouldn't
+  // keep getting surfaced for delight or reflection. The main searchable
+  // list is untouched; you can still find and cite old work.
   const [doneDestIds, setDoneDestIds] = useState<Set<string>>(new Set())
   // Whether a bring-your-own AI key is connected — gates the "✨ Follow-up
   // questions" menu item; invisible entirely until one exists, per
@@ -1522,13 +1515,12 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
 
   useEffect(() => {
     chrome.storage.local.get(
-      ['clips', 'history', 'archivedUrls', 'triageDismissedDay', 'reflectionNudgeDismissed', 'aiConfig'],
+      ['clips', 'history', 'archivedUrls', 'reflectionNudgeDismissed', 'aiConfig'],
       (result) => {
         const clips = result.clips as HistoryEntry[] | undefined
         // Fall back to the legacy recent-10 store until the archive is seeded.
         setEntries(clips && clips.length ? clips : ((result.history as HistoryEntry[]) ?? []))
         setArchivedUrls((result.archivedUrls as Record<string, string>) ?? {})
-        setTriageDismissedDay((result.triageDismissedDay as number | undefined) ?? null)
         setReflectionDismissed((result.reflectionNudgeDismissed as { url: string; count: number } | undefined) ?? null)
         setAiConnected(!!result.aiConfig)
       }
@@ -1674,29 +1666,6 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
     setUndo(null)
   }
 
-  // Someday is purely local archive metadata — never touches the Doc, so no
-  // background round-trip or bookmark is needed; it works on every clip,
-  // including ones saved before this feature existed.
-  async function toggleSomeday(entry: HistoryEntry) {
-    const next = !entry.someday
-    setEntries(prev => prev.map(e => e.savedAt === entry.savedAt ? { ...e, someday: next } : e))
-    const result = await chrome.storage.local.get(['clips'])
-    const clips = (result.clips as HistoryEntry[]) ?? []
-    const idx = clips.findIndex(c => c.savedAt === entry.savedAt)
-    if (idx !== -1) {
-      clips[idx] = { ...clips[idx], someday: next }
-      await chrome.storage.local.set({ clips })
-    }
-  }
-
-  // Answering OR skipping a triage check-in both just mean "don't ask again
-  // today" — skipping has no other consequence, by design.
-  function dismissTriageForToday() {
-    const day = Math.floor(Date.now() / DAY_MS)
-    setTriageDismissedDay(day)
-    chrome.storage.local.set({ triageDismissedDay: day })
-  }
-
   function dismissReflectionNudge(url: string, count: number) {
     const dismissed = { url, count }
     setReflectionDismissed(dismissed)
@@ -1709,8 +1678,8 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   const [noteOpenFor, setNoteOpenFor] = useState<number | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
   const [noteStatus, setNoteStatus] = useState('')
-  // Which card's "···" menu (Archived / Add a note / Someday) is open, if
-  // any — same savedAt-keyed shape as noteOpenFor, for the same reason.
+  // Which card's "···" menu (Archived / Add a note / …) is open, if any —
+  // same savedAt-keyed shape as noteOpenFor, for the same reason.
   const [cardMenuOpenFor, setCardMenuOpenFor] = useState<number | null>(null)
   // Which card's Cite style menu is open, if any (same keying).
   const [citeMenuOpenFor, setCiteMenuOpenFor] = useState<number | null>(null)
@@ -1836,8 +1805,6 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
                 setNoteOpenFor(prev => prev === entry.savedAt ? null : entry.savedAt)
                 setCardMenuOpenFor(null)
               } : undefined}
-              someday={!!entry.someday}
-              onToggleSomeday={() => { toggleSomeday(entry); setCardMenuOpenFor(null) }}
               onRemove={() => { removeClip(entry); setCardMenuOpenFor(null) }}
               onAskFollowUp={aiConnected ? () => { handleAskFollowUp(entry); setCardMenuOpenFor(null) } : undefined}
               onClose={() => setCardMenuOpenFor(null)}
@@ -1883,32 +1850,6 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
     )
   }
 
-  // Deliberately calm and low-stakes: dashed border, no accent color, and every
-  // action (including doing nothing) just moves on — nothing is ever destroyed.
-  function triageCard(entry: HistoryEntry) {
-    return (
-      <div className="triage-card">
-        <div className="triage-label"><MdSchedule size={13} /> Still relevant?</div>
-        <div className="history-text">{entry.text.slice(0, 80)}{entry.text.length > 80 ? '…' : ''}</div>
-        <div className="history-meta">
-          <span className="history-source">{entry.sourceTitle}</span>
-          <span className="history-dot">·</span>
-          <span className="history-time">{timeAgo(entry.savedAt)}</span>
-        </div>
-        <div className="triage-actions">
-          <button className="triage-btn-keep" onClick={dismissTriageForToday}>Yes, still relevant</button>
-          <button
-            className="triage-btn-someday"
-            onClick={() => { toggleSomeday(entry); dismissTriageForToday() }}
-          >
-            Mark as Someday
-          </button>
-          <button className="triage-skip" onClick={dismissTriageForToday}>Not now</button>
-        </div>
-      </div>
-    )
-  }
-
   if (entries.length === 0) {
     return (
       <div className="tab-content empty-state">
@@ -1920,14 +1861,10 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   }
 
   const q = query.trim().toLowerCase()
-  const somedayCount = entries.filter(e => e.someday).length
-  // Someday clips are hidden from the main list by default (the actual point —
-  // fewer things staring at you — not just a filter you have to remember to
-  // apply) but never further away than one click via the header toggle.
-  const base = entries.filter(e => (showSomedayOnly ? e.someday : !e.someday))
-  // Docs available to filter by, from the current (someday-split) population —
-  // count each so the menu shows how many clips land in each doc. Only clips
-  // that carry a destinationId are filterable (legacy clips without one aren't).
+  const base = entries
+  // Docs available to filter by — count each so the menu shows how many clips
+  // land in each doc. Only clips that carry a destinationId are filterable
+  // (legacy clips without one aren't).
   const docCounts = new Map<string, DocOption>()
   for (const e of base) {
     if (!e.destinationId) continue
@@ -1955,10 +1892,9 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   })
   const visible = filtered.slice(0, MAX_VISIBLE)
   // The bottom clear control acts on "whatever you're looking at": if the view
-  // is narrowed (search / doc filter / Someday-only) it clears just that subset
-  // ("Clear these N"); otherwise it clears the whole archive ("Clear all
-  // history", including any hidden Someday clips).
-  const isNarrowed = !!q || !!effectiveDocFilter || showSomedayOnly
+  // is narrowed (search / doc filter) it clears just that subset ("Clear
+  // these N"); otherwise it clears the whole archive ("Clear all history").
+  const isNarrowed = !!q || !!effectiveDocFilter
   const clearTarget = isNarrowed ? filtered : entries
   // Clips saved to a done project are excluded from the proactive pickers —
   // the main list above is untouched, so old work is still findable/citable.
@@ -1966,13 +1902,9 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   // Resurfaced is paused for now (kept, not deleted — see pickResurfaced
   // below) — hardcoding null both skips the JSX block (it's gated on
   // `resurfaced &&`) and skips computing it at all. Re-enable by restoring
-  // `(q || showSomedayOnly) ? null : pickResurfaced(activeEntries)`.
+  // `q ? null : pickResurfaced(activeEntries)`.
   const resurfaced = null as ReturnType<typeof pickResurfaced>
-  const todaySeed = Math.floor(Date.now() / DAY_MS)
-  const triageCandidate = (q || showSomedayOnly || triageDismissedDay === todaySeed)
-    ? null
-    : pickTriageCandidate(activeEntries, resurfaced?.savedAt ?? null)
-  const reflectionRaw = (q || showSomedayOnly) ? null : pickReflectionNudge(activeEntries)
+  const reflectionRaw = q ? null : pickReflectionNudge(activeEntries)
   // Suppressed once dismissed at this exact streak length or longer — but a
   // streak that keeps growing after dismissal surfaces again, since the
   // pattern it's flagging is getting more pronounced, not less.
@@ -1995,7 +1927,7 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
             {canFilterByDoc && (
               <div className="filter-wrap">
                 <button
-                  className={`someday-filter${activeDocName ? ' active' : ''}`}
+                  className={`header-pill${activeDocName ? ' active' : ''}`}
                   onClick={() => setFilterMenuOpen(v => !v)}
                   title={activeDocName ? `Filtering by ${activeDocName}` : 'Filter by document'}
                 >
@@ -2010,14 +1942,6 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
                   />
                 )}
               </div>
-            )}
-            {somedayCount > 0 && (
-              <button
-                className={`someday-filter${showSomedayOnly ? ' active' : ''}`}
-                onClick={() => setShowSomedayOnly(v => !v)}
-              >
-                <MdSchedule size={13} /> Someday ({somedayCount})
-              </button>
             )}
             {/* "Clear" is NOT here anymore — a destructive, rare action doesn't
                 belong in the prime top-right zone next to the safe filters
@@ -2072,15 +1996,11 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
         </div>
       )}
 
-      {triageCandidate && triageCard(triageCandidate)}
-
       {filtered.length === 0 ? (
         <div className="muted history-empty-search">
           {activeDocName
             ? (q ? `No clips in ${activeDocName} match "${query}".` : `No clips in ${activeDocName}.`)
-            : showSomedayOnly
-              ? (q ? `No Someday clips match "${query}".` : 'Nothing in Someday yet.')
-              : (q ? `No clips match "${query}".` : 'Everything is tagged Someday — nice job triaging.')}
+            : `No clips match "${query}".`}
         </div>
       ) : (
         <div className="history-list">

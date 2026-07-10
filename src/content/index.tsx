@@ -76,6 +76,52 @@ async function loadDestinations(): Promise<{ destinations: Destination[]; defaul
   return { destinations, defaultDestId }
 }
 
+// ── Lecture-timestamp clipping (YouTube) ─────────────────────────────────────
+// On a YouTube watch page, a clip carries the video moment it came from, so
+// the Source link (and the timestamp written into the Doc) reopens the
+// lecture at that exact minute. The returned url is CANONICALIZED (t/start
+// stripped) — sourceUrl doubles as the page's identity for article-grouping,
+// Works Cited dedup, and archiving, so per-clip time params must never live
+// in it; the moment travels separately as `videoTime`.
+//
+// The moment itself, best first:
+//  1. The transcript line the selection sits in — each transcript segment
+//     carries its own timestamp in the DOM, precise to the sentence, and
+//     independent of where playback happens to be paused.
+//  2. The player's current playback time, floored (ignored when < 1s — a
+//     video that was never played says nothing about the clip).
+// Everything is best-effort behind try/catch: YouTube's DOM is theirs to
+// change, and a failed detection just means a normal, untimed clip.
+function getVideoClipContext(range: Range | null): { url: string; videoTime?: number } {
+  const href = window.location.href
+  try {
+    const u = new URL(href)
+    const isWatch = /(^|\.)youtube\.com$/.test(u.hostname) && u.pathname === '/watch'
+    if (!isWatch) return { url: href }
+    u.searchParams.delete('t')
+    u.searchParams.delete('start')
+    const url = u.toString()
+
+    const anchor = range?.startContainer
+    const el = anchor
+      ? (anchor.nodeType === Node.ELEMENT_NODE ? (anchor as Element) : anchor.parentElement)
+      : null
+    const stampText = el
+      ?.closest('ytd-transcript-segment-renderer')
+      ?.querySelector('.segment-timestamp')
+      ?.textContent?.trim()
+    if (stampText && /^\d+(:\d{1,2})+$/.test(stampText)) {
+      const seconds = stampText.split(':').reduce((acc, p) => acc * 60 + Number(p), 0)
+      return { url, videoTime: seconds }
+    }
+
+    const t = document.querySelector('video')?.currentTime ?? 0
+    return t >= 1 ? { url, videoTime: Math.floor(t) } : { url }
+  } catch {
+    return { url: href }
+  }
+}
+
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
 function removeToolbar() {
@@ -84,7 +130,7 @@ function removeToolbar() {
   toolbarApiRef.current = null
 }
 
-async function showToolbar(rect: DOMRect, text: string, links: LinkSpan[]) {
+async function showToolbar(rect: DOMRect, text: string, links: LinkSpan[], videoCtx: { url: string; videoTime?: number }) {
   removeToolbar()
 
   const { destinations, defaultDestId } = await loadDestinations()
@@ -124,7 +170,13 @@ async function showToolbar(rect: DOMRect, text: string, links: LinkSpan[]) {
       onSave={async (destId, destType, note) => {
         const msg: SaveNoteMessage = {
           type: 'SAVE_NOTE',
-          payload: { text, url: window.location.href, title: document.title, destinationId: destId, destinationType: destType, note, links },
+          // videoCtx was captured when the toolbar appeared — the selection
+          // (and its transcript line) may be gone by the time Save is clicked.
+          payload: {
+            text, url: videoCtx.url, title: document.title,
+            destinationId: destId, destinationType: destType, note, links,
+            ...(videoCtx.videoTime !== undefined ? { videoTime: videoCtx.videoTime } : {}),
+          },
         }
         const res: SaveNoteResponse = await chrome.runtime.sendMessage(msg)
         if (!res.success) throw new Error(res.error ?? 'Save failed')
@@ -234,7 +286,7 @@ function onMouseUp(e: MouseEvent) {
     const rect = range.getBoundingClientRect()
     if (rect.width === 0 && rect.height === 0) return
 
-    await showToolbar(rect, text, extractLinkSpans(range, text))
+    await showToolbar(rect, text, extractLinkSpans(range, text), getVideoClipContext(range))
   }, DEBOUNCE_MS)
 }
 
@@ -311,9 +363,9 @@ chrome.runtime.onMessage.addListener((message: TriggerSaveMessage) => {
   const text = normalizeSelectionText(selection?.toString() ?? '')
   if (!text) { showToast('No text selected', 'error'); return }
 
-  const links = selection && selection.rangeCount > 0
-    ? extractLinkSpans(selection.getRangeAt(0), text)
-    : []
+  const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+  const links = range ? extractLinkSpans(range, text) : []
+  const videoCtx = getVideoClipContext(range)
 
   loadDestinations().then(({ destinations, defaultDestId }) => {
     const dest = destinations.find(d => d.id === defaultDestId) ?? destinations[0]
@@ -321,7 +373,11 @@ chrome.runtime.onMessage.addListener((message: TriggerSaveMessage) => {
 
     const msg: SaveNoteMessage = {
       type: 'SAVE_NOTE',
-      payload: { text, url: window.location.href, title: document.title, destinationId: dest.id, destinationType: dest.type, links },
+      payload: {
+        text, url: videoCtx.url, title: document.title,
+        destinationId: dest.id, destinationType: dest.type, links,
+        ...(videoCtx.videoTime !== undefined ? { videoTime: videoCtx.videoTime } : {}),
+      },
     }
 
     chrome.runtime.sendMessage(msg, (res: SaveNoteResponse) => {

@@ -41,6 +41,7 @@ import type {
   UpdateBibliographyMessage,
   UpdateBibliographyResponse,
 } from '../types'
+import { formatVideoTime, timedVideoUrl } from '../lib/video'
 
 const DOCS_API = 'https://docs.googleapis.com/v1/documents'
 const NOTION_API = 'https://api.notion.com/v1'
@@ -352,6 +353,24 @@ function linkStyleRequests(clipStart: number, links: LinkSpan[]): object[] {
   }))
 }
 
+// Lecture-timestamp clipping: a small caption-styled " · 43:21" suffix at the
+// end of a video clip's bullet, deep-linking to the exact moment in the
+// lecture. textLen..clipTextLen is the suffix's range inside the clip line.
+function videoStampRequest(clipStart: number, textLen: number, clipTextLen: number, pageUrl: string, videoTime: number): object {
+  return {
+    updateTextStyle: {
+      range: { startIndex: clipStart + textLen, endIndex: clipStart + clipTextLen },
+      textStyle: {
+        link: { url: timedVideoUrl(pageUrl, videoTime) },
+        fontSize: { magnitude: 9, unit: 'PT' },
+        foregroundColor: { color: { rgbColor: LINK_FG } },
+        underline: false,
+      },
+      fields: 'link,fontSize,foregroundColor,underline',
+    },
+  }
+}
+
 // Reply index of each createNamedRange request we push, so we can pull the
 // resulting namedRangeId back out of the (parallel) batchUpdate replies array
 // once it resolves. -1 means "we didn't ask for one in this save."
@@ -365,8 +384,14 @@ async function appendToGoogleDoc(
   pageUrl: string,
   isNewArticle: boolean,
   note: string,
-  links: LinkSpan[]
+  links: LinkSpan[],
+  videoTime?: number
 ): Promise<{ clipNamedRangeId: string | null; captionNamedRangeId: string | null }> {
+  // Lecture-timestamp clipping: the clip line carries a " · 43:21" suffix
+  // linking to the exact video moment. LinkSpan offsets are relative to the
+  // ORIGINAL text and the suffix sits after it, so they need no adjustment.
+  const stamp = videoTime !== undefined ? ` · ${formatVideoTime(videoTime)}` : ''
+  const clipText = `${text}${stamp}`
   const docRes = await fetch(`${DOCS_API}/${docId}`, {
     headers: { Authorization: `Bearer ${token}` },
   })
@@ -391,7 +416,7 @@ async function appendToGoogleDoc(
 
     const headingLine = `${pageTitle}\n`
     const captionLine = `${domain} · ${dateStr}\n`
-    const clipLine    = `${text}\n`
+    const clipLine    = `${clipText}\n`
     const noteLine    = note ? `↳ ${note}\n` : ''
     const insertText  = `${headingLine}${captionLine}${clipLine}${noteLine}`
 
@@ -401,7 +426,7 @@ async function appendToGoogleDoc(
     const domainEnd    = captionStart + domain.length
     const captionEnd   = captionStart + captionLine.length      // includes trailing \n
     const clipStart    = captionEnd
-    const clipEnd      = clipStart + text.length + 1             // include \n for the bullet range
+    const clipEnd      = clipStart + clipText.length + 1         // include \n for the bullet range
     const noteStart    = clipEnd                                // note paragraph begins right after the clip
     const noteEnd      = noteStart + noteLine.length            // includes trailing \n
 
@@ -474,6 +499,8 @@ async function appendToGoogleDoc(
     )
     // Preserve any hyperlinks inside the clip text
     if (links.length) requests.push(...linkStyleRequests(clipStart, links))
+    // Lecture-timestamp suffix → small link back to the exact video moment
+    if (stamp) requests.push(videoStampRequest(clipStart, text.length, clipText.length, pageUrl, videoTime!))
     // Margin note (if any) → indented italic sub-line under the first clip
     if (note) requests.push(...noteStyleRequests(noteStart, noteEnd - 1))
 
@@ -496,10 +523,10 @@ async function appendToGoogleDoc(
     }
   } else {
     // Same article as the last clip → just append another bullet, no heading
-    const clipLine  = `${text}\n`
+    const clipLine  = `${clipText}\n`
     const noteLine  = note ? `↳ ${note}\n` : ''
     const clipStart = insertionPoint
-    const clipEnd   = clipStart + text.length + 1
+    const clipEnd   = clipStart + clipText.length + 1
     const noteStart = clipEnd
     const noteEnd   = noteStart + noteLine.length
 
@@ -525,6 +552,8 @@ async function appendToGoogleDoc(
     )
     // Preserve any hyperlinks inside the clip text
     if (links.length) requests.push(...linkStyleRequests(clipStart, links))
+    // Lecture-timestamp suffix → small link back to the exact video moment
+    if (stamp) requests.push(videoStampRequest(clipStart, text.length, clipText.length, pageUrl, videoTime!))
     // Margin note (if any) → indented italic sub-line under this clip
     if (note) requests.push(...noteStyleRequests(noteStart, noteEnd - 1))
 
@@ -952,7 +981,7 @@ async function appendImageToNotion(
 // ── Main save handler ─────────────────────────────────────────────────────────
 
 async function handleSave(payload: SaveNoteMessage['payload']) {
-  const { text, url, title, destinationId, destinationType, note, links } = payload
+  const { text, url, title, destinationId, destinationType, note, links, videoTime } = payload
   const trimmedNote = note?.trim() ?? ''
   const linkSpans = links ?? []
 
@@ -976,7 +1005,7 @@ async function handleSave(payload: SaveNoteMessage['payload']) {
 
     const token = await getAuthToken()
     const result = await withRetry(() =>
-      appendToGoogleDoc(doc.id, token, text, title, url, isNewArticle, trimmedNote, linkSpans)
+      appendToGoogleDoc(doc.id, token, text, title, url, isNewArticle, trimmedNote, linkSpans, videoTime)
     )
     clipNamedRangeId = result.clipNamedRangeId
     captionNamedRangeId = result.captionNamedRangeId
@@ -1013,6 +1042,8 @@ async function handleSave(payload: SaveNoteMessage['payload']) {
     // Bookmark for Living Resurface — lets it find this exact clip again later
     // and add a freshly dated note right after it, even as the doc grows.
     ...(clipNamedRangeId ? { namedRangeId: clipNamedRangeId } : {}),
+    // Lecture-timestamp clipping — drives the History card's Source deep link.
+    ...(videoTime !== undefined ? { videoTime } : {}),
   })
 
   await bumpDocStats(destinationId)

@@ -13,7 +13,7 @@ Every read-later/clipper competitor (Pocket, Omnivore) stores your archive in a 
 | 1 | **Privacy Ledger** | Honest, literal account of what leaves the device (drawer → avatar → 🔒 Privacy) |
 | 2 | **Trust Card** | "Your Doc is the real thing" — shown once, right after the first doc is added, with a real link to it |
 | 3 | **Link-Rot Insurance** | Best-effort Wayback Machine snapshot at save time, written back into the Doc next to the caption |
-| 4 | **Soft Triage** | Optional "Someday" tag + a zero-consequence "still relevant?" check-in — not Burn 451's delete-if-unread |
+| 4 | **Soft Triage** | ~~Optional "Someday" tag + "still relevant?" check-in~~ — **removed 2026-07-09** (user: "I don't like it"; see note below) |
 | 5 | **Gentle Reflection Nudge** | Soft one-liner after several note-less clips from the same article — targets the collector's fallacy |
 | 6 | **Deadline-Aware Citations** | A Doc can carry a due date; calm→warn→danger countdown + uncited count; custom calendar picker |
 | 7 | **Assignment/Project Mode** | Mark a Doc "done" → moves to its own **Completed** tab; excluded from proactive pickers, still findable |
@@ -23,7 +23,9 @@ Every read-later/clipper competitor (Pocket, Omnivore) stores your archive in a 
 
 Plus, pre-roadmap (built earlier the same session, before the research pass): the **ClipNote → SnipKeep rebrand**, **margin notes**, **keyboard-first toolbar**, **link preservation**, **right-click image capture**, **living archive + full-text search**, **history navigation** (↗ Source / 📄 Doc / ⧉ Cite), **auto-citation**, and a **sign-out bug fix** + **#tag filtering**.
 
-**✨ Resurfaced is paused, not removed** (2026-07-06, user request — "keep it for future, not required for now"). `pickResurfaced` in `Popup.tsx` is fully intact and documented; `History()` just hardcodes `const resurfaced = null` instead of calling it, which skips both the computation and the JSX (gated on `resurfaced &&`) in one line. To re-enable: restore `const resurfaced = (q || showSomedayOnly) ? null : pickResurfaced(activeEntries)`. Everything downstream (Triage's dedup-by-savedAt, Living Resurface's "add a note" on any bookmarked clip) already tolerates `resurfaced` being `null` — nothing else needs to change.
+**#4 — Soft Triage was removed** (2026-07-09, user decision — "I don't like it"). Fully deleted, not paused: the Someday header filter, the per-card "Mark as Someday" menu item, the "still relevant?" triage check-in card, `toggleSomeday`/`pickTriageCandidate`/`dismissTriageForToday`, the `HistoryEntry.someday` field, and all `.triage-*`/`.someday-filter` CSS (the pill style survives as the general `.header-pill`, used by the Filter trigger). Stored data was left untouched: old clips may still carry a stale `someday: true` and `triageDismissedDay` may linger in storage.local — both simply unread now, so previously-hidden Someday clips reappear in the main History list.
+
+**✨ Resurfaced is paused, not removed** (2026-07-06, user request — "keep it for future, not required for now"). `pickResurfaced` in `Popup.tsx` is fully intact and documented; `History()` just hardcodes `const resurfaced = null` instead of calling it, which skips both the computation and the JSX (gated on `resurfaced &&`) in one line. To re-enable: restore `const resurfaced = q ? null : pickResurfaced(activeEntries)`. Everything downstream (Living Resurface's "add a note" on any bookmarked clip) already tolerates `resurfaced` being `null` — nothing else needs to change.
 
 ## Not yet built (2 remaining — both explicitly deferred by user choice, not skipped for cause)
 

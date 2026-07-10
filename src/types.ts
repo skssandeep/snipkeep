@@ -36,8 +36,12 @@ export interface HistoryEntry {
   savedAt: number        // Date.now()
   note?: string          // optional personal annotation, if one was added
   namedRangeId?: string  // Docs NamedRange bookmark over this clip's block, for Living Resurface
-  someday?: boolean      // soft triage: deprioritized without being deleted or hidden from the Doc
   cited?: boolean        // set once "⧉ Cite" successfully copies a citation for this clip
+  // Lecture-timestamp clipping: the video moment (seconds) this clip came
+  // from, for clips saved on a YouTube watch page. Kept SEPARATE from
+  // sourceUrl on purpose — sourceUrl is also the page's identity for
+  // grouping/dedup/archiving, and a baked-in t= param would break all three.
+  videoTime?: number
 }
 
 // A hyperlink found inside the selected text — character range into the clip's
@@ -58,6 +62,7 @@ export interface SaveNoteMessage {
     destinationType: 'gdoc' | 'notion'
     note?: string          // optional personal annotation ("your take")
     links?: LinkSpan[]      // hyperlinks to preserve inside the clip text
+    videoTime?: number      // lecture-timestamp clipping — see HistoryEntry.videoTime
   }
 }
 
