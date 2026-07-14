@@ -1,37 +1,44 @@
 :root {
-  /* ── Base surfaces: one violet-tinted near-black family. Every step shares the
-        same hue (~264°) as the accent and the cards; elevation reads through
-        LIGHTNESS alone, so a lifted card never looks like a different material. ── */
-  --bg: #0E0C14;          /* panel base — darkest */
-  --surface: #16131F;     /* elevated — drawer header */
-  --card: #232030;        /* list items, inputs — clear step above bg */
-  --card-2: #2E2A3E;      /* hover / nested */
+  /* ── Base surfaces: one warm ink-black family ("Ink & Highlighter" palette,
+        2026-07-14 — was violet-tinted; see docs for the study). Every step is
+        an even OKLCH lightness increment (L 0.16 → 0.29) at hue ~75°, so
+        elevation reads through LIGHTNESS alone and a lifted card never looks
+        like a different material. ── */
+  --bg: #100D08;          /* panel base — darkest */
+  --surface: #18140F;     /* elevated — drawer header */
+  --card: #24201A;        /* list items, inputs — clear step above bg */
+  --card-2: #2F2B25;      /* hover / nested */
   --card-edge: rgba(255, 255, 255, 0.05);  /* hairline so cards read as objects */
-  --border: #2A2635;      /* hairlines */
-  --border-active: #3D3860;
+  --border: #2A2620;      /* hairlines */
+  --border-active: #463F31;
 
-  /* ── Accent: electric violet — the one color in the system.
-        Desaturated + lightened for dark surfaces: saturated violet "vibrates"
-        against near-black; this hue reads calmer and lifts every dark-UI
-        contrast (7.6:1 on --surface, was 5.5:1). Hover always lightens. ── */
-  --accent: #A99CFF;
-  --accent-hover: #BCB2FF;
-  --accent-dim: rgba(169, 156, 255, 0.10);  /* focus-ring glow / flash fill */
-  /* "active pill" fill — one source for every selected chip/toggle. 0.18 is
-     the ceiling here, not an arbitrary bump: computed against --accent text
-     on --card, 0.18 → 4.8:1 (still comfortably past WCAG AA's 4.5:1);
-     0.22 → 4.42:1 (fails). Verified numerically before raising this, not
-     eyeballed — this token is WCAG-locked the same way the text ramp is. */
-  --accent-soft: rgba(169, 156, 255, 0.18);
-  --accent-ink: #15121C;  /* text on an accent fill — 7.9:1 */
-  --toggle-on: #6F61BE;   /* muted violet — "on" without out-shouting the doc name */
+  /* ── Accent: highlighter gold — the one color in the system.
+        Semantically motivated (the product IS a highlighter), and gold is an
+        intrinsically bright hue: 10.5:1 on --surface, 9.3:1 on --card — the
+        accent works harder than the old violet (7.3:1) at equal restraint.
+        Hover always lightens. ── */
+  --accent: #E4C05B;
+  --accent-hover: #EFD278;
+  --accent-dim: rgba(228, 192, 91, 0.10);  /* focus-ring glow / flash fill */
+  /* "active pill" fill — one source for every selected chip/toggle. Recomputed
+     for the gold accent: --accent text on --card+0.18 gold overlay → 6.11:1;
+     the alpha ceiling is now 0.30 (4.50:1, the exact AA floor) — far more
+     headroom than violet had (which failed at 0.22). Still WCAG-locked:
+     re-run the numbers before raising past 0.30. */
+  --accent-soft: rgba(228, 192, 91, 0.18);
+  --accent-ink: #1C1608;  /* text on an accent fill — 10.3:1 */
+  --toggle-on: #957D41;   /* muted gold — "on" without out-shouting the doc name */
 
   /* ── Text: warm-neutral ramp, all WCAG AA on --card ── */
-  --text: #E7E8EF;        /* primary — 13:1 on card */
-  --text-2: #A8A4B5;      /* secondary — 6.5:1 on card */
-  --text-3: #948FA1;      /* tertiary — 5.1:1 on card, 6.1:1 on bg (WCAG AA) */
+  --text: #EAE8E3;        /* primary — 13.2:1 on card */
+  --text-2: #ADA9A1;      /* secondary — 6.9:1 on card */
+  --text-3: #979189;      /* tertiary — 5.2:1 on card, 6.2:1 on bg (WCAG AA) */
   --danger: #FF6B6B;
-  --warn: #E8B34D;  /* mid-urgency amber for deadline escalation — semantic, not the accent */
+  /* Re-hued amber → orange (6.3:1 on card) when the accent became gold: the
+     old #E8B34D warn was nearly the accent's hue, which would have made every
+     deadline chip read as "selected." Orange keeps warn semantically distinct
+     from both the gold accent and the red danger. */
+  --warn: #E78A45;
 
   --radius: 10px;         /* buttons, inputs */
   --radius-sm: 7px;       /* cards, small controls */
@@ -1080,7 +1087,7 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
   transition: background 0.12s;
 }
-.filter-active-chip:hover { background: rgba(169, 156, 255, 0.22); }
+.filter-active-chip:hover { background: rgba(228, 192, 91, 0.22); }
 .filter-active-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .hist-action {
@@ -1207,8 +1214,8 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.2px;
 }
 .history-item.resurfaced {
-  border-color: rgba(169, 156, 255, 0.45);
-  background: rgba(169, 156, 255, 0.07);
+  border-color: rgba(228, 192, 91, 0.45);
+  background: rgba(228, 192, 91, 0.07);
 }
 
 /* Card vertical rhythm is grouped by relatedness (Law of Proximity), not spaced
@@ -1349,7 +1356,7 @@ a { color: inherit; text-decoration: none; }
   font-weight: 700;
   margin-top: 1px;
 }
-.privacy-item.ok .privacy-icon { background: rgba(111, 97, 190, 0.18); color: var(--accent); }
+.privacy-item.ok .privacy-icon { background: rgba(149, 125, 65, 0.18); color: var(--accent); }
 .privacy-item.no .privacy-icon { background: rgba(255, 107, 107, 0.14); color: var(--danger); }
 .privacy-item-title {
   font-size: 14px;
@@ -1449,7 +1456,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: rgba(111, 97, 190, 0.18);
+  background: rgba(149, 125, 65, 0.18);
   color: var(--accent);
 }
 .ai-connected-title { font-size: 14px; font-weight: 600; color: var(--text); }

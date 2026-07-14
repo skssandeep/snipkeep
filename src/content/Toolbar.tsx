@@ -38,15 +38,15 @@ const STYLES = `
     box-shadow: 0 6px 20px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.2);
   }
 
-  /* Warm dark surface — recedes from any page, violet accent carries the action */
+  /* Warm ink surface — recedes from any page, gold accent carries the action */
   .toolbar.idle {
-    background: #17151D;
-    border: 1px solid #2A2635;
+    background: #18140F;
+    border: 1px solid #2A2620;
   }
 
   .toolbar.feedback {
-    background: #17151D;
-    border: 1px solid #2A2635;
+    background: #18140F;
+    border: 1px solid #2A2620;
     padding: 0 16px;
     gap: 8px;
     align-items: center;
@@ -55,7 +55,7 @@ const STYLES = `
   /* Save button: white label, transparent bg so the dark shell shows */
   .btn-save {
     background: transparent;
-    color: #E7E8EF;
+    color: #EAE8E3;
     border: none;
     padding: 0 16px;
     font-size: 14px;
@@ -66,7 +66,7 @@ const STYLES = `
     transition: background 0.12s, color 0.12s;
     height: 100%;
   }
-  .btn-save:hover { background: rgba(169,156,255,0.12); color: #E7E8EF; }
+  .btn-save:hover { background: rgba(228,192,91,0.12); color: #EAE8E3; }
 
   /* Round the pill's end buttons to match its 8px inner radius (9px outer − 1px
      border), so the keyboard highlight ring follows the curve instead of being
@@ -81,17 +81,17 @@ const STYLES = `
   }
 
   /* Keyboard highlight (←/→). Inset ring follows the button's rounded corners. */
-  .btn-save.kbd-focus  { background: rgba(169,156,255,0.14); color: #E7E8EF; }
-  .btn-note.kbd-focus  { background: rgba(169,156,255,0.14); color: #A99CFF; }
-  .btn-menu.kbd-focus  { background: rgba(255,255,255,0.06); color: #E7E8EF; }
-  .kbd-focus { box-shadow: inset 0 0 0 1.5px rgba(169,156,255,0.6); }
+  .btn-save.kbd-focus  { background: rgba(228,192,91,0.14); color: #EAE8E3; }
+  .btn-note.kbd-focus  { background: rgba(228,192,91,0.14); color: #E4C05B; }
+  .btn-menu.kbd-focus  { background: rgba(255,255,255,0.06); color: #EAE8E3; }
+  .kbd-focus { box-shadow: inset 0 0 0 1.5px rgba(228,192,91,0.6); }
 
   /* 3-dot menu trigger */
   .btn-menu {
     background: transparent;
-    color: #E7E8EF;
+    color: #EAE8E3;
     border: none;
-    border-left: 1px solid #2A2635;
+    border-left: 1px solid #2A2620;
     padding: 0 11px;
     font-size: 16px;
     line-height: 1;
@@ -103,8 +103,8 @@ const STYLES = `
     align-items: center;
     height: 100%;
   }
-  .btn-menu:hover { background: rgba(255,255,255,0.05); color: #E7E8EF; }
-  .btn-menu.active { background: rgba(255,255,255,0.05); color: #E7E8EF; }
+  .btn-menu:hover { background: rgba(255,255,255,0.05); color: #EAE8E3; }
+  .btn-menu.active { background: rgba(255,255,255,0.05); color: #EAE8E3; }
 
   /* ── Feedback states ── */
   .status {
@@ -115,14 +115,14 @@ const STYLES = `
     font-weight: 600;
     letter-spacing: -0.1px;
   }
-  .status.saving { color: #948FA1; }
-  .status.saved  { color: #A99CFF; }
+  .status.saving { color: #979189; }
+  .status.saved  { color: #E4C05B; }
   .status.error  { color: #FF8A8A; }
 
   .btn-close {
     background: none;
     border: none;
-    color: #948FA1;
+    color: #979189;
     cursor: pointer;
     padding: 0 2px;
     font-size: 12px;
@@ -132,7 +132,7 @@ const STYLES = `
     align-items: center;
     transition: color 0.1s;
   }
-  .btn-close:hover { color: #E7E8EF; }
+  .btn-close:hover { color: #EAE8E3; }
 
   /* ── Destination menu ── */
   .dropdown {
@@ -140,8 +140,8 @@ const STYLES = `
     top: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
-    background: #232030;
-    border: 1px solid #2A2635;
+    background: #24201A;
+    border: 1px solid #2A2620;
     border-radius: 10px;
     padding: 4px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.3);
@@ -157,7 +157,7 @@ const STYLES = `
     border-radius: 7px;
     cursor: pointer;
     font-size: 14px;
-    color: #E7E8EF;
+    color: #EAE8E3;
     border: none;
     background: none;
     font-family: inherit;
@@ -165,8 +165,8 @@ const STYLES = `
     text-align: left;
     transition: background 0.1s;
   }
-  .dropdown-item:hover { background: #2E2A3E; }
-  .dropdown-item .check { display: inline-flex; align-items: center; justify-content: center; color: #A99CFF; width: 14px; flex-shrink: 0; }
+  .dropdown-item:hover { background: #2F2B25; }
+  .dropdown-item .check { display: inline-flex; align-items: center; justify-content: center; color: #E4C05B; width: 14px; flex-shrink: 0; }
   .dropdown-item .dest-name {
     flex: 1;
     white-space: nowrap;
@@ -178,9 +178,9 @@ const STYLES = `
   /* ── Note affordance (pencil toggle) ── */
   .btn-note {
     background: transparent;
-    color: #E7E8EF;
+    color: #EAE8E3;
     border: none;
-    border-left: 1px solid #2A2635;
+    border-left: 1px solid #2A2620;
     padding: 0 11px;
     font-size: 14px;
     line-height: 1;
@@ -191,8 +191,8 @@ const STYLES = `
     height: 100%;
     transition: background 0.12s, color 0.12s;
   }
-  .btn-note:hover { background: rgba(255,255,255,0.05); color: #E7E8EF; }
-  .btn-note.active { color: #A99CFF; background: rgba(169,156,255,0.12); }
+  .btn-note:hover { background: rgba(255,255,255,0.05); color: #EAE8E3; }
+  .btn-note.active { color: #E4C05B; background: rgba(228,192,91,0.12); }
 
   /* ── Note panel ── */
   .note-panel {
@@ -200,8 +200,8 @@ const STYLES = `
     top: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
-    background: #232030;
-    border: 1px solid #2A2635;
+    background: #24201A;
+    border: 1px solid #2A2620;
     border-radius: 10px;
     padding: 12px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.3);
@@ -215,11 +215,11 @@ const STYLES = `
     min-height: 52px;
     max-height: 140px;
     resize: none;
-    background: #17151D;
-    border: 1px solid #2A2635;
+    background: #18140F;
+    border: 1px solid #2A2620;
     border-radius: 8px;
     padding: 10px 12px;
-    color: #E7E8EF;
+    color: #EAE8E3;
     font-family: inherit;
     font-size: 14px;
     line-height: 1.45;
@@ -227,8 +227,8 @@ const STYLES = `
     outline: none;
     transition: border-color 0.12s;
   }
-  .note-input:focus { border-color: #4A4360; }
-  .note-input::placeholder { color: #6E6980; }
+  .note-input:focus { border-color: #463F31; }
+  .note-input::placeholder { color: #6D6860; }
   .note-foot {
     display: flex;
     align-items: center;
@@ -236,7 +236,7 @@ const STYLES = `
     margin-top: 8px;
     padding: 0 2px;
   }
-  .note-hint { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: #6E6980; }
+  .note-hint { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: #6D6860; }
   .note-foot-actions { display: flex; align-items: center; gap: 8px; }
 
   /* ── Mic button (voice-note capture) ── */
@@ -246,7 +246,7 @@ const STYLES = `
   }
   .btn-mic {
     background: transparent;
-    color: #E7E8EF;
+    color: #EAE8E3;
     border: none;
     border-radius: 7px;
     width: 28px;
@@ -274,8 +274,8 @@ const STYLES = `
   }
 
   .note-save {
-    background: rgba(169,156,255,0.12);
-    color: #E7E8EF;
+    background: rgba(228,192,91,0.12);
+    color: #EAE8E3;
     border: none;
     border-radius: 7px;
     padding: 7px 16px;
@@ -286,7 +286,7 @@ const STYLES = `
     font-family: inherit;
     transition: background 0.12s;
   }
-  .note-save:hover { background: rgba(169,156,255,0.2); }
+  .note-save:hover { background: rgba(228,192,91,0.2); }
 `
 
 type State = 'idle' | 'saving' | 'saved' | 'error'

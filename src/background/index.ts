@@ -47,7 +47,7 @@ const DOCS_API = 'https://docs.googleapis.com/v1/documents'
 const NOTION_API = 'https://api.notion.com/v1'
 const LINK_FG    = { red: 0.20, green: 0.46, blue: 0.80 }  // domain hyperlink
 const CAPTION_FG = { red: 0.50, green: 0.50, blue: 0.50 }  // grey source caption
-const NOTE_FG    = { red: 0.42, green: 0.38, blue: 0.58 }  // muted violet — the reader's own voice
+const NOTE_FG    = { red: 0.463, green: 0.376, blue: 0.196 }  // muted gold-brown — the reader's own voice (6.0:1 on the Doc's white page)
 const NOTE_INDENT_PT = 18  // margin note sits indented under its clip
 
 // Vertical rhythm (pt). Proximity: the between-block gap must dwarf every
@@ -306,7 +306,7 @@ async function bumpDocStats(destId: string) {
 
 // ── Google Docs ───────────────────────────────────────────────────────────────
 
-// Style requests for a margin note paragraph: italic + muted violet ("your voice",
+// Style requests for a margin note paragraph: italic + muted gold-brown ("your voice",
 // distinct from the verbatim quote) + left indent so it reads as a sub-line.
 // Range excludes the trailing newline. No bullet — the note is a plain indented line.
 function noteStyleRequests(startIndex: number, endIndex: number): object[] {
