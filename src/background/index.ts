@@ -59,26 +59,25 @@ const BULLET_BELOW_PT  = 2   // bullet → bullet (snug)
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
-function getAuthToken(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    chrome.identity.getAuthToken({ interactive: true }, (token) => {
-      if (chrome.runtime.lastError || !token) {
-        reject(new Error(chrome.runtime.lastError?.message ?? 'Authentication failed'))
-        return
-      }
-      resolve(token)
-    })
-  })
+// Promise form on purpose: Chrome's CALLBACK form passes the token as a plain
+// string (verified against the official docs), but @types/chrome mis-types the
+// callback parameter as GetAuthTokenResult — the object only the promise form
+// actually returns. Using the promise form is the one shape where the runtime
+// and the types agree.
+async function getAuthToken(): Promise<string> {
+  const result = await chrome.identity.getAuthToken({ interactive: true })
+  if (!result.token) throw new Error('Authentication failed: no token returned')
+  return result.token
 }
 
 // Non-interactive — for background lookups that must never pop a sign-in prompt.
-function getAuthTokenSilent(): Promise<string | null> {
-  return new Promise((resolve) => {
-    chrome.identity.getAuthToken({ interactive: false }, (token) => {
-      if (chrome.runtime.lastError || !token) { resolve(null); return }
-      resolve(token)
-    })
-  })
+async function getAuthTokenSilent(): Promise<string | null> {
+  try {
+    const result = await chrome.identity.getAuthToken({ interactive: false })
+    return result.token ?? null
+  } catch {
+    return null
+  }
 }
 
 // Display name — chrome.identity.getProfileUserInfo only ever returns

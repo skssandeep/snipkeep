@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite build --watch",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "zip": "cd dist && zip -r ../snipkeep.zip ."
   },
   "dependencies": {
