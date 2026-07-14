@@ -200,7 +200,7 @@ const TOAST_STYLES = `
     position: fixed; bottom: 24px; right: 24px;
     background: #1C1A24; border: 1px solid #2A2635; border-radius: 10px;
     padding: 11px 16px; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 13px; font-weight: 600; letter-spacing: -0.1px;
+    font-size: 14px; font-weight: 600; letter-spacing: -0.1px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.5);
     animation: cn-toast-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     pointer-events: none;

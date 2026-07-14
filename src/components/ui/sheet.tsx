@@ -28,7 +28,7 @@ export const SHEET_CSS = `
     background: var(--bg);
     color: var(--text);
     font-family: var(--font);
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.5;
     box-shadow: -20px 0 60px rgba(0,0,0,0.6);
     border-radius: 16px 0 0 16px;

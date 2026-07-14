@@ -29,7 +29,7 @@ const STYLES = `
   .toolbar {
     display: inline-flex;
     align-items: stretch;
-    height: 36px;
+    height: 38px;
     border-radius: 9px;
     overflow: hidden;
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -47,18 +47,18 @@ const STYLES = `
   .toolbar.feedback {
     background: #17151D;
     border: 1px solid #2A2635;
-    padding: 0 14px;
+    padding: 0 16px;
     gap: 8px;
     align-items: center;
   }
 
-  /* Save button: violet accent label, transparent bg so the dark shell shows */
+  /* Save button: white label, transparent bg so the dark shell shows */
   .btn-save {
     background: transparent;
-    color: #A99CFF;
+    color: #E7E8EF;
     border: none;
     padding: 0 16px;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     letter-spacing: -0.1px;
     cursor: pointer;
@@ -66,7 +66,7 @@ const STYLES = `
     transition: background 0.12s, color 0.12s;
     height: 100%;
   }
-  .btn-save:hover { background: rgba(169,156,255,0.12); color: #BCB2FF; }
+  .btn-save:hover { background: rgba(169,156,255,0.12); color: #E7E8EF; }
 
   /* Round the pill's end buttons to match its 8px inner radius (9px outer − 1px
      border), so the keyboard highlight ring follows the curve instead of being
@@ -81,15 +81,15 @@ const STYLES = `
   }
 
   /* Keyboard highlight (←/→). Inset ring follows the button's rounded corners. */
-  .btn-save.kbd-focus  { background: rgba(169,156,255,0.14); color: #BCB2FF; }
+  .btn-save.kbd-focus  { background: rgba(169,156,255,0.14); color: #E7E8EF; }
   .btn-note.kbd-focus  { background: rgba(169,156,255,0.14); color: #A99CFF; }
-  .btn-menu.kbd-focus  { background: rgba(255,255,255,0.06); color: #F2F1F5; }
+  .btn-menu.kbd-focus  { background: rgba(255,255,255,0.06); color: #E7E8EF; }
   .kbd-focus { box-shadow: inset 0 0 0 1.5px rgba(169,156,255,0.6); }
 
-  /* 3-dot menu trigger — brightened to text-2 so the destination switcher is discoverable */
+  /* 3-dot menu trigger */
   .btn-menu {
     background: transparent;
-    color: #A8A4B5;
+    color: #E7E8EF;
     border: none;
     border-left: 1px solid #2A2635;
     padding: 0 11px;
@@ -103,21 +103,21 @@ const STYLES = `
     align-items: center;
     height: 100%;
   }
-  .btn-menu:hover { background: rgba(255,255,255,0.05); color: #F2F1F5; }
-  .btn-menu.active { background: rgba(255,255,255,0.05); color: #F2F1F5; }
+  .btn-menu:hover { background: rgba(255,255,255,0.05); color: #E7E8EF; }
+  .btn-menu.active { background: rgba(255,255,255,0.05); color: #E7E8EF; }
 
   /* ── Feedback states ── */
   .status {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     letter-spacing: -0.1px;
   }
   .status.saving { color: #948FA1; }
   .status.saved  { color: #A99CFF; }
-  .status.error  { color: #FF8A8A; font-size: 12px; }
+  .status.error  { color: #FF8A8A; }
 
   .btn-close {
     background: none;
@@ -132,7 +132,7 @@ const STYLES = `
     align-items: center;
     transition: color 0.1s;
   }
-  .btn-close:hover { color: #F2F1F5; }
+  .btn-close:hover { color: #E7E8EF; }
 
   /* ── Destination menu ── */
   .dropdown {
@@ -156,17 +156,17 @@ const STYLES = `
     padding: 8px 10px;
     border-radius: 7px;
     cursor: pointer;
-    font-size: 13px;
-    color: #A8A4B5;
+    font-size: 14px;
+    color: #E7E8EF;
     border: none;
     background: none;
     font-family: inherit;
     width: 100%;
     text-align: left;
-    transition: background 0.1s, color 0.1s;
+    transition: background 0.1s;
   }
-  .dropdown-item:hover { background: #2E2A3E; color: #F2F1F5; }
-  .dropdown-item .check { display: inline-flex; align-items: center; justify-content: center; color: #A99CFF; width: 14px; flex-shrink: 0; font-size: 11px; }
+  .dropdown-item:hover { background: #2E2A3E; }
+  .dropdown-item .check { display: inline-flex; align-items: center; justify-content: center; color: #A99CFF; width: 14px; flex-shrink: 0; }
   .dropdown-item .dest-name {
     flex: 1;
     white-space: nowrap;
@@ -178,7 +178,7 @@ const STYLES = `
   /* ── Note affordance (pencil toggle) ── */
   .btn-note {
     background: transparent;
-    color: #A8A4B5;
+    color: #E7E8EF;
     border: none;
     border-left: 1px solid #2A2635;
     padding: 0 11px;
@@ -191,7 +191,7 @@ const STYLES = `
     height: 100%;
     transition: background 0.12s, color 0.12s;
   }
-  .btn-note:hover { background: rgba(255,255,255,0.05); color: #F2F1F5; }
+  .btn-note:hover { background: rgba(255,255,255,0.05); color: #E7E8EF; }
   .btn-note.active { color: #A99CFF; background: rgba(169,156,255,0.12); }
 
   /* ── Note panel ── */
@@ -203,7 +203,7 @@ const STYLES = `
     background: #232030;
     border: 1px solid #2A2635;
     border-radius: 10px;
-    padding: 8px;
+    padding: 12px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.3);
     width: 300px;
     z-index: 1;
@@ -217,11 +217,11 @@ const STYLES = `
     resize: none;
     background: #17151D;
     border: 1px solid #2A2635;
-    border-radius: 7px;
-    padding: 8px 10px;
-    color: #F2F1F5;
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #E7E8EF;
     font-family: inherit;
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.45;
     letter-spacing: -0.1px;
     outline: none;
@@ -233,11 +233,11 @@ const STYLES = `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 7px;
+    margin-top: 8px;
     padding: 0 2px;
   }
-  .note-hint { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: #6E6980; }
-  .note-foot-actions { display: flex; align-items: center; gap: 6px; }
+  .note-hint { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: #6E6980; }
+  .note-foot-actions { display: flex; align-items: center; gap: 8px; }
 
   /* ── Mic button (voice-note capture) ── */
   @keyframes mic-pulse {
@@ -246,19 +246,19 @@ const STYLES = `
   }
   .btn-mic {
     background: transparent;
-    color: #A8A4B5;
+    color: #E7E8EF;
     border: none;
-    border-radius: 6px;
-    width: 26px;
-    height: 26px;
+    border-radius: 7px;
+    width: 28px;
+    height: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     font-family: inherit;
-    transition: background 0.12s, color 0.12s;
+    transition: background 0.12s;
   }
-  .btn-mic:hover { background: rgba(255,255,255,0.06); color: #F2F1F5; }
+  .btn-mic:hover { background: rgba(255,255,255,0.06); }
   .btn-mic.recording {
     color: #FF6B6B;
     animation: mic-pulse 1.4s ease-out infinite;
@@ -267,7 +267,7 @@ const STYLES = `
     .btn-mic.recording { animation: none; }
   }
   .note-voice-error {
-    font-size: 11px;
+    font-size: 12px;
     color: #FF8A8A;
     margin-top: 5px;
     padding: 0 2px;
@@ -275,18 +275,18 @@ const STYLES = `
 
   .note-save {
     background: rgba(169,156,255,0.12);
-    color: #A99CFF;
+    color: #E7E8EF;
     border: none;
-    border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 12px;
+    border-radius: 7px;
+    padding: 7px 16px;
+    font-size: 14px;
     font-weight: 600;
     letter-spacing: -0.1px;
     cursor: pointer;
     font-family: inherit;
-    transition: background 0.12s, color 0.12s;
+    transition: background 0.12s;
   }
-  .note-save:hover { background: rgba(169,156,255,0.2); color: #BCB2FF; }
+  .note-save:hover { background: rgba(169,156,255,0.2); }
 `
 
 type State = 'idle' | 'saving' | 'saved' | 'error'
@@ -602,7 +602,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
             onClick={() => { setShowNote(v => !v); setShowDropdown(false) }}
             title="Add your take"
           >
-            <MdEdit size={14} />
+            <MdEdit size={15} />
           </button>
           {destinations.length > 1 && (
             <button
@@ -653,7 +653,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
                 className="dropdown-item"
                 onClick={() => handlePickDest(dest)}
               >
-                <span className="check">{dest.id === activeDestId ? <MdCheck /> : null}</span>
+                <span className="check">{dest.id === activeDestId ? <MdCheck size={13} /> : null}</span>
                 <span className="dest-name">{dest.name}</span>
               </button>
             ))}

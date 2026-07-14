@@ -663,7 +663,7 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
                   <MdLink size={14} className="field-input-icon" />
                   <input
                     ref={addInputRef}
-                    className="field-input mono"
+                    className="field-input"
                     value={newDocId}
                     onChange={e => handleDocUrlChange(e.target.value)}
                     placeholder="Paste URL or Doc ID"

@@ -27,7 +27,7 @@
   --toggle-on: #6F61BE;   /* muted violet — "on" without out-shouting the doc name */
 
   /* ── Text: warm-neutral ramp, all WCAG AA on --card ── */
-  --text: #F2F1F5;        /* primary — 14:1 on card */
+  --text: #E7E8EF;        /* primary — 13:1 on card */
   --text-2: #A8A4B5;      /* secondary — 6.5:1 on card */
   --text-3: #948FA1;      /* tertiary — 5.1:1 on card, 6.1:1 on bg (WCAG AA) */
   --danger: #FF6B6B;
@@ -56,7 +56,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
   width: 340px;
   -webkit-font-smoothing: antialiased;
@@ -167,10 +167,10 @@ a { color: inherit; text-decoration: none; }
 .section { display: flex; flex-direction: column; gap: var(--space-3); }
 
 .section-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-3);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
@@ -183,7 +183,7 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius-sm);
   padding: var(--space-3) var(--space-4);
 }
-.account-status { font-size: 13px; color: var(--text); font-weight: 500; }
+.account-status { font-size: 14px; color: var(--text); font-weight: 500; }
 
 /* ── Doc list — borderless cards, depth from bg lift alone ── */
 .doc-list { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -238,7 +238,7 @@ a { color: inherit; text-decoration: none; }
   background: var(--border);
 }
 .doc-list-divider-label {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-3);
   letter-spacing: 0.05em;
@@ -276,7 +276,7 @@ a { color: inherit; text-decoration: none; }
 .doc-info { flex: 1; min-width: 0; }
 .doc-name { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
 .doc-meta {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-3);
   margin-top: 3px;
   white-space: nowrap;
@@ -362,16 +362,16 @@ a { color: inherit; text-decoration: none; }
 .card-menu-btn {
   background: none;
   border: 1px solid var(--card-edge);
-  color: var(--text-3);
+  color: var(--text-2);
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
@@ -402,7 +402,7 @@ a { color: inherit; text-decoration: none; }
                            of wrapping; the filter menu's doc names truncate via
                            their own .filter-menu-name rule + the menu's max-width */
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-2);
   background: none;
@@ -444,7 +444,7 @@ a { color: inherit; text-decoration: none; }
 }
 .card-menu-confirm-text {
   margin: 0 0 14px;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.55;
   color: var(--text-2);
 }
@@ -454,7 +454,7 @@ a { color: inherit; text-decoration: none; }
 .card-menu-cancel,
 .card-menu-confirm-remove {
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   border-radius: 7px;
   padding: 8px 14px;
@@ -484,7 +484,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 4px;
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--accent);
   background: none;
@@ -524,7 +524,7 @@ a { color: inherit; text-decoration: none; }
   justify-content: space-between;
   margin-bottom: 8px;
 }
-.cal-month { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.cal-month { font-size: 14px; font-weight: 700; color: var(--text); }
 .cal-nav {
   width: 22px;
   height: 22px;
@@ -547,7 +547,7 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: 3px;
 }
 .cal-weekdays span {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-3);
   text-align: center;
@@ -561,7 +561,7 @@ a { color: inherit; text-decoration: none; }
 }
 .cal-cell {
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-2);
   background: none;
   border: none;
@@ -585,7 +585,7 @@ a { color: inherit; text-decoration: none; }
 }
 .cal-clear {
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--danger);
   background: none;
@@ -603,7 +603,7 @@ a { color: inherit; text-decoration: none; }
   row-gap: 4px;
   width: 100%;
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   padding: 7px 10px;
   border-radius: 6px;
@@ -670,7 +670,7 @@ a { color: inherit; text-decoration: none; }
 .field-label {
   display: flex;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--text-3);
@@ -694,21 +694,18 @@ a { color: inherit; text-decoration: none; }
   border: none;
   color: var(--text);
   font-family: var(--font);
-  font-size: 13px;
+  font-size: 14px;
   outline: none;
   width: 100%;
   padding: 0;
 }
 .field-input::placeholder { color: var(--text-3); }
 
-/* URL field: monospace only when typing an ID-like string */
-.field-input.mono { font-family: var(--mono); font-size: 12px; }
-
 .field-fetching {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--accent);
   text-transform: none;
@@ -753,7 +750,7 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius);
   color: var(--text);
   font-family: var(--font);
-  font-size: 13px;
+  font-size: 14px;
   padding: 10px 14px;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -764,7 +761,7 @@ a { color: inherit; text-decoration: none; }
 
 /* ── Hint ── */
 .hint {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-3);
   line-height: 1.6;
 }
@@ -776,7 +773,7 @@ a { color: inherit; text-decoration: none; }
   border: none;
   border-radius: var(--radius);
   padding: 10px 16px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   font-family: var(--font);
   letter-spacing: -0.1px;
@@ -804,7 +801,7 @@ a { color: inherit; text-decoration: none; }
   transition: color 0.1s, border-color 0.1s, background 0.1s;
 }
 .btn-ghost:hover { color: var(--text); border-color: var(--border-active); background: var(--card); }
-.btn-ghost.small { padding: var(--space-2) var(--space-3); font-size: 11px; }
+.btn-ghost.small { padding: var(--space-2) var(--space-3); font-size: 12px; }
 .btn-ghost.danger:hover { color: var(--danger); border-color: var(--danger); background: rgba(255,107,107,0.06); }
 
 /* ── Add-document trigger — dashed "add a slot" affordance, quiet by default ── */
@@ -819,7 +816,7 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius-sm);
   color: var(--text-2);
   font-family: var(--font);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.1px;
   padding: 12px;
@@ -903,7 +900,7 @@ a { color: inherit; text-decoration: none; }
 
 /* ── Row ── */
 .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.muted { color: var(--text-2); font-size: 13px; }
+.muted { color: var(--text-2); font-size: 14px; }
 
 /* ── History ── */
 /* Top-of-tab controls (count/filter, cite style, search) grouped tightly as
@@ -927,7 +924,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 6px;
   font-family: var(--font);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-2);
   background: transparent;
@@ -1073,7 +1070,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 6px;
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--accent);
   background: var(--accent-soft);
@@ -1091,7 +1088,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 6px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: -0.1px;
   color: var(--text-2);
@@ -1121,10 +1118,10 @@ a { color: inherit; text-decoration: none; }
   background: var(--card);
   border: 1px solid var(--card-edge);
   border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
+  padding: 10px 14px;
   color: var(--text);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 14px;
   outline: none;
   transition: border-color 0.12s;
 }
@@ -1132,7 +1129,7 @@ a { color: inherit; text-decoration: none; }
 .history-search:focus { border-color: var(--border-active); }
 
 .history-empty-search,
-.history-more { font-size: 11px; }
+.history-more { font-size: 12px; }
 
 /* ── Clear control (bottom of list) — quiet by default, danger only on hover.
    Deliberately low-emphasis and centered: it's destructive + rare, so it earns
@@ -1164,7 +1161,7 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid rgba(255, 107, 107, 0.3);
   border-radius: var(--radius-sm);
 }
-.clear-confirm-text { font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.clear-confirm-text { font-size: 14px; line-height: 1.5; color: var(--text-2); }
 .clear-confirm-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 
 /* ── Undo bar — a sticky snackbar so it stays visible whether the delete
@@ -1183,11 +1180,11 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius-sm);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
-.undo-bar-label { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.undo-bar-label { font-size: 14px; font-weight: 600; color: var(--text); }
 .undo-btn {
   flex-shrink: 0;
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--accent);
   background: none;
@@ -1204,7 +1201,7 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--accent);
   letter-spacing: 0.2px;
@@ -1224,7 +1221,7 @@ a { color: inherit; text-decoration: none; }
    The 4px-tight info cluster vs the 16px action break is a 4× ratio — proximity
    reads them as two groups instead of one flat, "illogical" even column. */
 .history-text {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
   line-height: 1.55;
 }
@@ -1254,10 +1251,10 @@ a { color: inherit; text-decoration: none; }
 .note-tag:hover { text-decoration: underline; }
 
 .history-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: var(--space-1); }
-.history-source { font-size: 11px; color: var(--text-2); font-weight: 600; }
-.history-dot    { font-size: 11px; color: var(--text-3); }
-.history-dest   { font-size: 11px; color: var(--accent); font-weight: 500; }
-.history-time   { font-size: 11px; color: var(--text-3); }
+.history-source { font-size: 12px; color: var(--text-2); font-weight: 600; }
+.history-dot    { font-size: 12px; color: var(--text-3); }
+.history-dest   { font-size: 12px; color: var(--accent); font-weight: 500; }
+.history-time   { font-size: 12px; color: var(--text-3); }
 
 /* ── Empty state ── */
 .empty-state {
@@ -1270,8 +1267,8 @@ a { color: inherit; text-decoration: none; }
   text-align: center;
 }
 .empty-icon { font-size: 30px; opacity: 0.3; }
-.empty-text { font-size: 13px; font-weight: 600; color: var(--text-2); }
-.empty-sub  { font-size: 11px; color: var(--text-3); line-height: 1.5; max-width: 220px; }
+.empty-text { font-size: 14px; font-weight: 600; color: var(--text-2); }
+.empty-sub  { font-size: 12px; color: var(--text-3); line-height: 1.5; max-width: 220px; }
 
 /* ── Notion section divider ── */
 .section-divider { height: 1px; background: var(--border); margin: 0 -20px; }
@@ -1302,7 +1299,7 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: 10px;
 }
 .gate-note {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-3);
   line-height: 1.6;
   max-width: 230px;
@@ -1348,20 +1345,20 @@ a { color: inherit; text-decoration: none; }
   width: 18px; height: 18px;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   margin-top: 1px;
 }
 .privacy-item.ok .privacy-icon { background: rgba(111, 97, 190, 0.18); color: var(--accent); }
 .privacy-item.no .privacy-icon { background: rgba(255, 107, 107, 0.14); color: var(--danger); }
 .privacy-item-title {
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text);
   margin-bottom: 2px;
 }
 .privacy-item-body {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-2);
   line-height: 1.55;
 }
@@ -1377,7 +1374,7 @@ a { color: inherit; text-decoration: none; }
 
 .privacy-open-docs {
   align-self: flex-start;
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--accent);
   transition: color 0.12s;
@@ -1420,7 +1417,7 @@ a { color: inherit; text-decoration: none; }
 }
 .ai-provider-card:hover { border-color: var(--border-active); background: var(--card-2); }
 .ai-provider-card.active { border-color: var(--accent); }
-.ai-provider-name { font-size: 13px; font-weight: 600; }
+.ai-provider-name { font-size: 14px; font-weight: 600; }
 .ai-provider-open { color: var(--text-3); display: flex; }
 
 .ai-key-entry {
@@ -1455,7 +1452,7 @@ a { color: inherit; text-decoration: none; }
   background: rgba(111, 97, 190, 0.18);
   color: var(--accent);
 }
-.ai-connected-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.ai-connected-title { font-size: 14px; font-weight: 600; color: var(--text); }
 .ai-connected-key { font-family: var(--mono); font-size: 12px; color: var(--text-3); margin-top: 2px; }
 /* .btn-ghost has no internal flex layout of its own (fine everywhere else,
    where its parent is a row) — but .ai-connected's column stretch (no
@@ -1485,7 +1482,7 @@ a { color: inherit; text-decoration: none; }
   line-height: 1.4;
 }
 .trust-body {
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--text-2);
   line-height: 1.6;
 }
@@ -1494,7 +1491,7 @@ a { color: inherit; text-decoration: none; }
   text-align: center;
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   padding: 10px 16px;
   border-radius: var(--radius-sm);
@@ -1504,7 +1501,7 @@ a { color: inherit; text-decoration: none; }
 .trust-dismiss {
   align-self: center;
   font-family: var(--font);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-3);
   background: none;
@@ -1531,7 +1528,7 @@ a { color: inherit; text-decoration: none; }
   padding: 8px 10px;
   color: var(--text);
   font-family: var(--font);
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.5;
   outline: none;
   transition: border-color 0.12s;
@@ -1544,7 +1541,7 @@ a { color: inherit; text-decoration: none; }
   justify-content: space-between;
   margin-top: 7px;
 }
-.doc-note-status { font-size: 11px; color: var(--text-3); }
+.doc-note-status { font-size: 12px; color: var(--text-3); }
 .doc-note-save {
   font-family: var(--font);
   font-size: 12px;
@@ -1577,7 +1574,7 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1593,7 +1590,7 @@ a { color: inherit; text-decoration: none; }
 }
 .ai-summary-close:hover { color: var(--text); }
 .ai-summary-status { font-size: 12px; color: var(--text-3); margin: 6px 0 0; }
-.ai-summary-text { font-size: 12.5px; color: var(--text-2); line-height: 1.5; margin: 6px 0 0; }
+.ai-summary-text { font-size: 14px; color: var(--text-2); line-height: 1.5; margin: 6px 0 0; }
 .ai-followup-list {
   margin: 6px 0 0;
   padding-left: 18px;
@@ -1601,7 +1598,7 @@ a { color: inherit; text-decoration: none; }
   flex-direction: column;
   gap: 5px;
 }
-.ai-followup-list li { font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
+.ai-followup-list li { font-size: 14px; color: var(--text-2); line-height: 1.45; }
 
 /* ── Gentle Reflection Nudge — the lightest-weight element in the tab on
    purpose: no card box, no border, just a quiet line. A suggestion, not a
@@ -1629,7 +1626,7 @@ a { color: inherit; text-decoration: none; }
 .reflection-nudge-look,
 .reflection-nudge-dismiss {
   font-family: var(--font);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   background: none;
   border: none;

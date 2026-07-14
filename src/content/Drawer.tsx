@@ -76,7 +76,7 @@ const BODY_CSS = `
     border-radius: 50%;
     background: transparent;
     color: var(--text-2);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     font-family: var(--font);
     display: flex;
@@ -180,7 +180,7 @@ const BODY_CSS = `
     flex: 1;
   }
   .cn-auth-name {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     color: var(--text);
     line-height: 1.3;
@@ -189,7 +189,7 @@ const BODY_CSS = `
     text-overflow: ellipsis;
   }
   .cn-auth-email {
-    font-size: 11.5px;
+    font-size: 12px;
     font-family: var(--font);
     color: var(--text-3);
     white-space: nowrap;
@@ -207,7 +207,7 @@ const BODY_CSS = `
     border: none;
     border-bottom: 1px solid var(--border);
     color: var(--text-2);
-    font-size: 13px;
+    font-size: 14px;
     font-family: var(--font);
     font-weight: 500;
     text-align: left;
@@ -225,7 +225,7 @@ const BODY_CSS = `
     background: none;
     border: none;
     color: var(--danger);
-    font-size: 13px;
+    font-size: 14px;
     font-family: var(--font);
     font-weight: 500;
     text-align: left;
@@ -258,12 +258,12 @@ const BODY_CSS = `
     background: var(--card-2);
     color: var(--text-2);
     font-family: var(--font);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
   }
   .cn-footer-text {
     margin-left: 4px;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text-3);
     font-family: var(--font);
   }
