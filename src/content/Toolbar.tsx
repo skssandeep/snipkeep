@@ -66,7 +66,7 @@ const STYLES = `
     transition: background 0.12s, color 0.12s;
     height: 100%;
   }
-  .btn-save:hover { background: rgba(228,192,91,0.12); color: #EAE8E3; }
+  .btn-save:hover { background: rgba(246,225,43,0.12); color: #EAE8E3; }
 
   /* Round the pill's end buttons to match its 8px inner radius (9px outer − 1px
      border), so the keyboard highlight ring follows the curve instead of being
@@ -81,10 +81,10 @@ const STYLES = `
   }
 
   /* Keyboard highlight (←/→). Inset ring follows the button's rounded corners. */
-  .btn-save.kbd-focus  { background: rgba(228,192,91,0.14); color: #EAE8E3; }
-  .btn-note.kbd-focus  { background: rgba(228,192,91,0.14); color: #E4C05B; }
+  .btn-save.kbd-focus  { background: rgba(246,225,43,0.14); color: #EAE8E3; }
+  .btn-note.kbd-focus  { background: rgba(246,225,43,0.14); color: #F6E12B; }
   .btn-menu.kbd-focus  { background: rgba(255,255,255,0.06); color: #EAE8E3; }
-  .kbd-focus { box-shadow: inset 0 0 0 1.5px rgba(228,192,91,0.6); }
+  .kbd-focus { box-shadow: inset 0 0 0 1.5px rgba(246,225,43,0.6); }
 
   /* 3-dot menu trigger */
   .btn-menu {
@@ -116,7 +116,7 @@ const STYLES = `
     letter-spacing: -0.1px;
   }
   .status.saving { color: #979189; }
-  .status.saved  { color: #E4C05B; }
+  .status.saved  { color: #F6E12B; }
   .status.error  { color: #FF8A8A; }
 
   .btn-close {
@@ -166,7 +166,7 @@ const STYLES = `
     transition: background 0.1s;
   }
   .dropdown-item:hover { background: #2F2B25; }
-  .dropdown-item .check { display: inline-flex; align-items: center; justify-content: center; color: #E4C05B; width: 14px; flex-shrink: 0; }
+  .dropdown-item .check { display: inline-flex; align-items: center; justify-content: center; color: #F6E12B; width: 14px; flex-shrink: 0; }
   .dropdown-item .dest-name {
     flex: 1;
     white-space: nowrap;
@@ -192,7 +192,7 @@ const STYLES = `
     transition: background 0.12s, color 0.12s;
   }
   .btn-note:hover { background: rgba(255,255,255,0.05); color: #EAE8E3; }
-  .btn-note.active { color: #E4C05B; background: rgba(228,192,91,0.12); }
+  .btn-note.active { color: #F6E12B; background: rgba(246,225,43,0.12); }
 
   /* ── Note panel ── */
   .note-panel {
@@ -274,7 +274,7 @@ const STYLES = `
   }
 
   .note-save {
-    background: rgba(228,192,91,0.12);
+    background: rgba(246,225,43,0.12);
     color: #EAE8E3;
     border: none;
     border-radius: 7px;
@@ -286,7 +286,7 @@ const STYLES = `
     font-family: inherit;
     transition: background 0.12s;
   }
-  .note-save:hover { background: rgba(228,192,91,0.2); }
+  .note-save:hover { background: rgba(246,225,43,0.2); }
 `
 
 type State = 'idle' | 'saving' | 'saved' | 'error'

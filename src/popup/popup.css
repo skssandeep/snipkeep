@@ -12,32 +12,37 @@
   --border: #2A2620;      /* hairlines */
   --border-active: #463F31;
 
-  /* ── Accent: highlighter gold — the one color in the system.
-        Semantically motivated (the product IS a highlighter), and gold is an
-        intrinsically bright hue: 10.5:1 on --surface, 9.3:1 on --card — the
-        accent works harder than the old violet (7.3:1) at equal restraint.
-        Hover always lightens. ── */
-  --accent: #E4C05B;
-  --accent-hover: #EFD278;
-  --accent-dim: rgba(228, 192, 91, 0.10);  /* focus-ring glow / flash fill */
+  /* ── Accent: true marker yellow (OKLCH L 0.90, C 0.18, H 102°) — the one
+        color in the system. Re-pitched from antique gold #E4C05B on request
+        (2026-07-17): the brand argument is "the color of the actual tool," so
+        the shade should read as a real highlighter, not brass. Hue is pinned
+        at ~102° deliberately — warmer reverts to gold, cooler goes tennis-ball
+        green. 13.7:1 on --surface, 12.1:1 on --card. This is a LOUD accent on
+        ink-black by design (a highlighter is loud); the "~4 tiny accent spots"
+        rule is now load-bearing, not just taste. Hover always lightens. ── */
+  --accent: #F6E12B;
+  --accent-hover: #FEEF78;
+  --accent-dim: rgba(246, 225, 43, 0.10);  /* focus-ring glow / flash fill */
   /* "active pill" fill — one source for every selected chip/toggle. Recomputed
-     for the gold accent: --accent text on --card+0.18 gold overlay → 6.11:1;
-     the alpha ceiling is now 0.30 (4.50:1, the exact AA floor) — far more
-     headroom than violet had (which failed at 0.22). Still WCAG-locked:
-     re-run the numbers before raising past 0.30. */
-  --accent-soft: rgba(228, 192, 91, 0.18);
-  --accent-ink: #1C1608;  /* text on an accent fill — 10.3:1 */
-  --toggle-on: #957D41;   /* muted gold — "on" without out-shouting the doc name */
+     for marker yellow: --accent text on --card+0.18 overlay → 7.45:1; the
+     alpha ceiling is now 0.34 (4.63:1). Still WCAG-locked: re-run the numbers
+     before raising past 0.34. */
+  --accent-soft: rgba(246, 225, 43, 0.18);
+  --accent-ink: #1C1608;  /* text on an accent fill — 13.5:1 */
+  /* Muted yellow derivatives are the palette's trap: desaturated yellow drifts
+     olive/khaki. This value keeps the accent's hue (~98°) at moderate chroma
+     on purpose — don't derive it by mechanically darkening --accent. */
+  --toggle-on: #968739;
 
   /* ── Text: warm-neutral ramp, all WCAG AA on --card ── */
   --text: #EAE8E3;        /* primary — 13.2:1 on card */
   --text-2: #ADA9A1;      /* secondary — 6.9:1 on card */
   --text-3: #979189;      /* tertiary — 5.2:1 on card, 6.2:1 on bg (WCAG AA) */
   --danger: #FF6B6B;
-  /* Re-hued amber → orange (6.3:1 on card) when the accent became gold: the
+  /* Re-hued amber → orange (6.3:1 on card) when the accent went yellow: the
      old #E8B34D warn was nearly the accent's hue, which would have made every
      deadline chip read as "selected." Orange keeps warn semantically distinct
-     from both the gold accent and the red danger. */
+     from both the yellow accent and the red danger. */
   --warn: #E78A45;
 
   --radius: 10px;         /* buttons, inputs */
@@ -1087,7 +1092,7 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
   transition: background 0.12s;
 }
-.filter-active-chip:hover { background: rgba(228, 192, 91, 0.22); }
+.filter-active-chip:hover { background: rgba(246, 225, 43, 0.22); }
 .filter-active-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .hist-action {
@@ -1115,6 +1120,28 @@ a { color: inherit; text-decoration: none; }
   color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+/* The "···" in this row is a fourth chip, not the Docs-tab square: same box
+   recipe as .hist-action (same padding, fill, border) so its height matches
+   its siblings BY CONSTRUCTION — a fixed width/height here re-drifts the
+   moment the chips' font or padding changes. */
+.history-actions-inner .card-menu-btn {
+  width: auto;
+  height: auto;
+  align-self: stretch;  /* the 16px icon is 2px shorter than the chips' 18px
+                           text line — stretching to the row height closes
+                           that gap without a magic number */
+  background: var(--card-edge);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-2);
+}
+.history-actions-inner .card-menu-btn:hover {
+  color: var(--text);
+  border-color: var(--border-active);
+  background: var(--card-edge);
 }
 
 
@@ -1214,8 +1241,8 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.2px;
 }
 .history-item.resurfaced {
-  border-color: rgba(228, 192, 91, 0.45);
-  background: rgba(228, 192, 91, 0.07);
+  border-color: rgba(246, 225, 43, 0.45);
+  background: rgba(246, 225, 43, 0.07);
 }
 
 /* Card vertical rhythm is grouped by relatedness (Law of Proximity), not spaced
@@ -1356,7 +1383,7 @@ a { color: inherit; text-decoration: none; }
   font-weight: 700;
   margin-top: 1px;
 }
-.privacy-item.ok .privacy-icon { background: rgba(149, 125, 65, 0.18); color: var(--accent); }
+.privacy-item.ok .privacy-icon { background: rgba(150, 135, 57, 0.18); color: var(--accent); }
 .privacy-item.no .privacy-icon { background: rgba(255, 107, 107, 0.14); color: var(--danger); }
 .privacy-item-title {
   font-size: 14px;
@@ -1456,7 +1483,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: rgba(149, 125, 65, 0.18);
+  background: rgba(150, 135, 57, 0.18);
   color: var(--accent);
 }
 .ai-connected-title { font-size: 14px; font-weight: 600; color: var(--text); }

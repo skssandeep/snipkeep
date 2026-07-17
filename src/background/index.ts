@@ -47,7 +47,7 @@ const DOCS_API = 'https://docs.googleapis.com/v1/documents'
 const NOTION_API = 'https://api.notion.com/v1'
 const LINK_FG    = { red: 0.20, green: 0.46, blue: 0.80 }  // domain hyperlink
 const CAPTION_FG = { red: 0.50, green: 0.50, blue: 0.50 }  // grey source caption
-const NOTE_FG    = { red: 0.463, green: 0.376, blue: 0.196 }  // muted gold-brown — the reader's own voice (6.0:1 on the Doc's white page)
+const NOTE_FG    = { red: 0.443, green: 0.388, blue: 0.114 }  // dark marker-yellow ink — the reader's own voice (6.0:1 on the Doc's white page)
 const NOTE_INDENT_PT = 18  // margin note sits indented under its clip
 
 // Vertical rhythm (pt). Proximity: the between-block gap must dwarf every
