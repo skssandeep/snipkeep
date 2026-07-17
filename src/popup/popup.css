@@ -29,10 +29,10 @@
      before raising past 0.34. */
   --accent-soft: rgba(246, 225, 43, 0.18);
   --accent-ink: #1C1608;  /* text on an accent fill — 13.5:1 */
-  /* Muted yellow derivatives are the palette's trap: desaturated yellow drifts
-     olive/khaki. This value keeps the accent's hue (~98°) at moderate chroma
-     on purpose — don't derive it by mechanically darkening --accent. */
-  --toggle-on: #968739;
+  /* No muted-accent token, on purpose (removed 2026-07-17): desaturated
+     yellow drifts olive/khaki — a muted #968739 toggle read as "dull," not
+     "quiet." Yellow is either the full accent or absent; use --accent-soft /
+     --accent-dim alphas for tints, never a darkened solid. */
 
   /* ── Text: warm-neutral ramp, all WCAG AA on --card ── */
   --text: #EAE8E3;        /* primary — 13.2:1 on card */
@@ -344,11 +344,17 @@ a { color: inherit; text-decoration: none; }
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
-.btn-toggle.on  { background: var(--toggle-on); }
+/* Full marker yellow at rest (2026-07-17, user request): the muted #968739
+   track read as khaki, not "quiet highlighter" — dimming yellow changes its
+   CHARACTER, not just its volume, unlike the violet this rule was written
+   for. The knob goes ink instead of white when on (white on yellow is a
+   mushy 1.8:1; ink is 13.5:1) — same ink-on-yellow mark as the extension
+   icon. Hover lightens, consistent with the accent's hover rule. */
+.btn-toggle.on  { background: var(--accent); }
+.btn-toggle.on::after { background: var(--accent-ink); }
 .btn-toggle.off { background: var(--border-active); }
-/* Brighten to full accent only on interaction, so the doc name leads at rest */
 .doc-item:hover .btn-toggle.on,
-.btn-toggle.on:hover { background: var(--accent); }
+.btn-toggle.on:hover { background: var(--accent-hover); }
 .btn-toggle.on::after  { transform: translateX(10px); }
 .btn-toggle.off::after { transform: translateX(0); }
 
@@ -1383,7 +1389,7 @@ a { color: inherit; text-decoration: none; }
   font-weight: 700;
   margin-top: 1px;
 }
-.privacy-item.ok .privacy-icon { background: rgba(150, 135, 57, 0.18); color: var(--accent); }
+.privacy-item.ok .privacy-icon { background: var(--accent-soft); color: var(--accent); }
 .privacy-item.no .privacy-icon { background: rgba(255, 107, 107, 0.14); color: var(--danger); }
 .privacy-item-title {
   font-size: 14px;
@@ -1483,7 +1489,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: rgba(150, 135, 57, 0.18);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 .ai-connected-title { font-size: 14px; font-weight: 600; color: var(--text); }
