@@ -12,22 +12,27 @@
   --border: #2A2620;      /* hairlines */
   --border-active: #463F31;
 
-  /* ── Accent: true marker yellow (OKLCH L 0.90, C 0.18, H 102°) — the one
-        color in the system. Re-pitched from antique gold #E4C05B on request
-        (2026-07-17): the brand argument is "the color of the actual tool," so
-        the shade should read as a real highlighter, not brass. Hue is pinned
-        at ~102° deliberately — warmer reverts to gold, cooler goes tennis-ball
-        green. 13.7:1 on --surface, 12.1:1 on --card. This is a LOUD accent on
-        ink-black by design (a highlighter is loud); the "~4 tiny accent spots"
-        rule is now load-bearing, not just taste. Hover always lightens. ── */
-  --accent: #F6E12B;
-  --accent-hover: #FEEF78;
-  --accent-dim: rgba(246, 225, 43, 0.10);  /* focus-ring glow / flash fill */
+  /* ── Accent: true marker yellow (OKLCH L 0.90, C 0.16, H 102°) — the one
+        color in the system. Hue pinned at ~102° (warmer reverts to gold,
+        cooler goes tennis-ball green). Chroma is deliberately 85% of the sRGB
+        gamut edge (0.188 at this L/H), NOT max: max-saturated colors on dark
+        produce the "visual vibration"/shimmer that discomfort-glare research
+        flags, and the previous C 0.18 sat at 96% of the edge. Luminance is
+        also capped BELOW --text (rel-lum 0.72 vs 0.81) so the accent can
+        never out-glare the reading text — halation on dark backgrounds
+        (worst for the ~40% of adults with astigmatism) scales with peak
+        luminance, not hue; yellow itself is the comfortable bright hue
+        (peak L+M cone sensitivity, no blue-light chromatic aberration).
+        12.1:1 on --card. Still loud by design — the "~4 tiny accent spots"
+        rule is load-bearing. Hover always lightens. ── */
+  --accent: #F4E151;
+  --accent-hover: #FAEE91;
+  --accent-dim: rgba(244, 225, 81, 0.10);  /* focus-ring glow / flash fill */
   /* "active pill" fill — one source for every selected chip/toggle. Recomputed
      for marker yellow: --accent text on --card+0.18 overlay → 7.45:1; the
      alpha ceiling is now 0.34 (4.63:1). Still WCAG-locked: re-run the numbers
      before raising past 0.34. */
-  --accent-soft: rgba(246, 225, 43, 0.18);
+  --accent-soft: rgba(244, 225, 81, 0.18);
   --accent-ink: #1C1608;  /* text on an accent fill — 13.5:1 */
   /* No muted-accent token, on purpose (removed 2026-07-17): desaturated
      yellow drifts olive/khaki — a muted #968739 toggle read as "dull," not
@@ -1098,7 +1103,7 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
   transition: background 0.12s;
 }
-.filter-active-chip:hover { background: rgba(246, 225, 43, 0.22); }
+.filter-active-chip:hover { background: rgba(244, 225, 81, 0.22); }
 .filter-active-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .hist-action {
@@ -1247,8 +1252,8 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.2px;
 }
 .history-item.resurfaced {
-  border-color: rgba(246, 225, 43, 0.45);
-  background: rgba(246, 225, 43, 0.07);
+  border-color: rgba(244, 225, 81, 0.45);
+  background: rgba(244, 225, 81, 0.07);
 }
 
 /* Card vertical rhythm is grouped by relatedness (Law of Proximity), not spaced

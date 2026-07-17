@@ -205,7 +205,7 @@ const TOAST_STYLES = `
     animation: cn-toast-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     pointer-events: none;
   }
-  .toast.success { color: #F6E12B; }
+  .toast.success { color: #F4E151; }
   .toast.error   { color: #FF8A8A; }
   .toast.fade-out { animation: cn-toast-out 0.2s ease forwards; }
 `
