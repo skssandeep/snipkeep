@@ -381,3 +381,9 @@ A full-page study surface at `src/study/index.html` — same bundling pattern as
 **Browse mode** is the library, deliberately plainer than the study flow: full clip text + notes + source links. It exists for *finding* things; the design never presents it as a way to study — when learners can choose, they reliably pick the comfortable low-effort mode (rereading), which is the exact trap the page exists to break.
 
 **Token drift gotcha:** `study.css` is a separate document that COPIES the popup.css `:root` tokens (same as Toolbar.tsx's hardcoded hexes) — palette changes must be applied there by hand.
+
+### Retrieval Flip follow-ups (2026-07-18, user feedback)
+
+- **Reveal shows the FULL clip** — the 80-char preview is for list density while browsing; after a question-reveal the clip is the answer being checked, and an answer cut mid-sentence defeats the exercise.
+- **The study picker lists every doc with clips**, not just question-bearing ones — hiding docs made the library look empty ("why don't I see all my documents?"). Docs without questions say "N clips · no questions yet" and land in Browse mode instead of an empty session.
+- **One-time backfill** (`runRetrievalBackfill`, background): clips saved before the feature get questions drafted through the user's own key — sequential, idempotent (skips already-questioned), resumable (the `retrievalBackfillDone` flag is set only after a pass with ≥1 success, so a dead key doesn't burn the one-time semantics and a SW killed mid-pass resumes on next startup). Runs at SW startup and immediately after CONNECT_AI succeeds.

@@ -1556,6 +1556,9 @@ chrome.runtime.onMessage.addListener(
         const config: AIConfig = { provider, apiKey }
         await chrome.storage.local.set({ aiConfig: config })
         sendResponse({ success: true })
+        // A key just became available — clips saved before it existed can get
+        // their retrieval questions now.
+        runRetrievalBackfill().catch(() => {})
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Connection failed' })
       }
@@ -1699,6 +1702,45 @@ async function draftRetrievalQuestion(text: string, savedAt: number) {
   clips[idx] = { ...clips[idx], retrievalQuestion: question }
   await chrome.storage.local.set({ clips })
 }
+
+// One-time backfill: clips saved before Retrieval Flip shipped have no
+// questions, which left the study picker looking empty next to a rich
+// archive. Sequential (no API burst), idempotent (skips clips that already
+// have questions), and resumable: the done-flag is only set after a pass
+// with at least one success — so a dead key (every call failing) doesn't
+// burn the one-time semantics, and a service worker killed mid-pass just
+// resumes the remainder on next startup. Per-clip failures are attempted
+// once and then skipped for good.
+let backfillRunning = false
+async function runRetrievalBackfill() {
+  if (backfillRunning) return
+  backfillRunning = true
+  try {
+    const stored = await chrome.storage.local.get(['aiConfig', 'retrievalBackfillDone', 'clips'])
+    if (stored.retrievalBackfillDone || !stored.aiConfig) return
+    const list = (stored.clips as HistoryEntry[]) ?? []
+    const remaining = list.filter(
+      c => !c.retrievalQuestion && c.kind !== 'image' && c.text.trim().length >= 40
+    )
+    if (remaining.length === 0) {
+      await chrome.storage.local.set({ retrievalBackfillDone: true })
+      return
+    }
+    let successes = 0
+    for (const clip of remaining) {
+      try {
+        await draftRetrievalQuestion(clip.text, clip.savedAt)
+        successes++
+      } catch {
+        // this clip's draft failed — move on, don't abort the pass
+      }
+    }
+    if (successes > 0) await chrome.storage.local.set({ retrievalBackfillDone: true })
+  } finally {
+    backfillRunning = false
+  }
+}
+runRetrievalBackfill().catch(() => {})
 
 async function handleAskFollowUp(text: string): Promise<string[]> {
   const system =

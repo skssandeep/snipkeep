@@ -64,10 +64,14 @@ export function Study() {
         c => !docFilter || docFilter === 'all' || c.destinationId === docFilter
       )
       const storedLog = (local.studyLog as StudyLog) ?? {}
+      const questionClips = scoped.filter(c => c.retrievalQuestion)
       setClips(scoped)
       setDocs((sync.docs as DocDestination[]) ?? [])
       setLog(storedLog)
-      setSession(pickSession(scoped.filter(c => c.retrievalQuestion), storedLog))
+      setSession(pickSession(questionClips, storedLog))
+      // A doc with clips but no questions yet lands in Browse — its library is
+      // real even before the questions arrive; an empty study session isn't.
+      if (docFilter && questionClips.length === 0 && scoped.length > 0) setMode('browse')
       setLoaded(true)
     })
   }, [docFilter])
@@ -77,18 +81,24 @@ export function Study() {
     return docs.find(d => d.id === docFilter)?.name ?? 'This doc'
   }, [docFilter, docs])
 
-  // Picker rows: every non-done doc with at least one question-bearing clip,
-  // with its count — "12 questions ready" tells the student the session is
-  // already prepared for them (zero setup, the whole anti-flashcard-app bet).
+  // Picker rows: every non-done doc that has clips at all — hiding docs
+  // without questions made the library look empty ("where are my docs?").
+  // Docs with questions lead with "N questions ready" (the session was
+  // prepared before you arrived — the zero-setup bet); docs without open in
+  // Browse and say so honestly, never a dead-end empty session.
   const pickerDocs = useMemo(() => {
     if (docFilter) return []
     return docs
       .filter(d => !d.done)
-      .map(d => ({
-        doc: d,
-        count: clips.filter(c => c.destinationId === d.id && c.retrievalQuestion).length,
-      }))
-      .filter(x => x.count > 0)
+      .map(d => {
+        const docClips = clips.filter(c => c.destinationId === d.id)
+        return {
+          doc: d,
+          clipCount: docClips.length,
+          questionCount: docClips.filter(c => c.retrievalQuestion).length,
+        }
+      })
+      .filter(x => x.clipCount > 0)
   }, [docFilter, docs, clips])
 
   const current = session[index]
@@ -146,17 +156,21 @@ export function Study() {
             <>
               <h1 className="study-pick-title">What are you studying?</h1>
               <div className="study-pick-list">
-                {pickerDocs.map(({ doc, count }) => (
+                {pickerDocs.map(({ doc, clipCount, questionCount }) => (
                   <button key={doc.id} className="study-pick-card" onClick={() => goToDoc(doc.id)}>
                     <span className="study-pick-name">{doc.name}</span>
-                    <span className="study-pick-count">{count} question{count !== 1 ? 's' : ''} ready</span>
+                    <span className="study-pick-count">
+                      {questionCount > 0
+                        ? `${questionCount} question${questionCount !== 1 ? 's' : ''} ready`
+                        : `${clipCount} clip${clipCount !== 1 ? 's' : ''} · no questions yet`}
+                    </span>
                   </button>
                 ))}
-                {pickerDocs.length > 1 && (
+                {pickerDocs.filter(x => x.questionCount > 0).length > 1 && (
                   <button className="study-pick-card all" onClick={() => goToDoc('all')}>
                     <span className="study-pick-name">Everything</span>
                     <span className="study-pick-count">
-                      {pickerDocs.reduce((n, x) => n + x.count, 0)} questions across {pickerDocs.length} docs
+                      {pickerDocs.reduce((n, x) => n + x.questionCount, 0)} questions across your docs
                     </span>
                   </button>
                 )}
