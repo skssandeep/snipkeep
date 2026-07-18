@@ -269,20 +269,24 @@ const BODY_CSS = `
   }
 `
 
+export type DrawerView = 'main' | 'privacy' | 'trust' | 'ai'
+
 interface Props {
   container: HTMLElement
   onClose: () => void
   closeRef: React.MutableRefObject<(() => void) | null>
+  // Open directly on a nested screen — used by the study page's connect-AI
+  // hint so "connect your key" lands ON the AI screen, not one tap away.
+  initialView?: DrawerView
 }
 
-export function Drawer({ container, onClose, closeRef }: Props) {
+export function Drawer({ container, onClose, closeRef, initialView }: Props) {
   const [open, setOpen] = useState(true)
   const [isSignedIn, setIsSignedIn] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [userName, setUserName] = useState('')
   const [showAuthMenu, setShowAuthMenu] = useState(false)
-  type DrawerView = 'main' | 'privacy' | 'trust' | 'ai'
-  const [view, setView] = useState<DrawerView>('main')
+  const [view, setView] = useState<DrawerView>(initialView ?? 'main')
   const [firstDocId, setFirstDocId] = useState<string | null>(null)
   // On the wrapper div, not the trigger button — the dropdown is now a
   // sibling of the button (see .cn-avatar-wrap), so .contains() needs to

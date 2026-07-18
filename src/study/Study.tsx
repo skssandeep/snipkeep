@@ -135,8 +135,8 @@ export function Study() {
           Connect one and every clip you've saved, past and future, gets a
           practice question automatically.
         </p>
-        <button className="study-secondary" onClick={openDrawerFromPage}>
-          Open the drawer → tap ✨ AI
+        <button className="study-secondary" onClick={() => openDrawerFromPage('ai')}>
+          Connect your AI key
         </button>
       </div>
     ) : aiState === 'justConnected' ? (

@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { Drawer } from '../content/Drawer'
+import { Drawer, type DrawerView } from '../content/Drawer'
 import type { ToggleDrawerMessage } from '../types'
 
 // The study page is an extension page, so the content script never runs here
@@ -22,7 +22,7 @@ function closeDrawer() {
   document.getElementById(DRAWER_HOST_ID)?.remove()
 }
 
-function openDrawer() {
+function openDrawer(initialView?: DrawerView) {
   const host = document.createElement('div')
   host.id = DRAWER_HOST_ID
   document.body.appendChild(host)
@@ -32,14 +32,16 @@ function openDrawer() {
   shadow.appendChild(container)
 
   const root = ReactDOM.createRoot(container)
-  root.render(<Drawer container={container} onClose={closeDrawer} closeRef={drawerCloseRef} />)
+  root.render(
+    <Drawer container={container} onClose={closeDrawer} closeRef={drawerCloseRef} initialView={initialView} />
+  )
   drawerRoot = root
 }
 
 // For the page's own CTAs (e.g. the connect-AI hint) — same drawer the icon
-// click opens, just triggered from inside the page.
-export function openDrawerFromPage() {
-  if (!document.getElementById(DRAWER_HOST_ID)) openDrawer()
+// click opens, but able to land directly on a nested screen.
+export function openDrawerFromPage(initialView?: DrawerView) {
+  if (!document.getElementById(DRAWER_HOST_ID)) openDrawer(initialView)
 }
 
 export function initDrawerToggle() {
