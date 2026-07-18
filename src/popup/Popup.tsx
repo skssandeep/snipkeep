@@ -2220,9 +2220,9 @@ export function TrustCard({ firstDocId, onDismiss }: { firstDocId: string | null
 // same nested-view pattern as Privacy Ledger.
 
 const AI_PROVIDERS: { id: AIProvider; name: string; keyUrl: string }[] = [
+  { id: 'gemini', name: 'Gemini', keyUrl: 'https://aistudio.google.com/app/apikey' },
   { id: 'anthropic', name: 'Claude', keyUrl: 'https://console.anthropic.com/settings/keys' },
   { id: 'openai', name: 'ChatGPT', keyUrl: 'https://platform.openai.com/api-keys' },
-  { id: 'gemini', name: 'Gemini', keyUrl: 'https://aistudio.google.com/app/apikey' },
 ]
 
 function maskKey(key: string): string {
