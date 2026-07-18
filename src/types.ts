@@ -195,6 +195,10 @@ export type VoiceEvent =
 
 export interface StartVoiceNoteMessage {
   type: 'START_VOICE_NOTE'
+  // longForm: Teach-It-Back dictation — the voice tab loosens its silence
+  // auto-stop (thinking pauses aren't "done") and raises the session cap.
+  // Absent = the original short margin-note tuning, unchanged.
+  payload?: { longForm?: boolean }
 }
 export interface StartVoiceNoteResponse {
   success: boolean
@@ -292,6 +296,27 @@ export interface SummarizeTopicMessage {
 export interface SummarizeTopicResponse {
   success: boolean
   summary?: string
+  error?: string
+}
+
+// Teach-It-Back: the study page sends a spoken explanation's transcript plus
+// the doc's clips; the background asks the user's own AI to CLASSIFY ONLY —
+// covered / missing (as questions) / conflicting — never to explain. clipIndex
+// refers into the clips array sent, so the UI can reveal the exact source.
+export interface TeachBackMessage {
+  type: 'TEACH_BACK'
+  payload: { destinationName: string; transcript: string; clips: string[] }
+}
+
+export interface TeachBackResult {
+  covered: string[]
+  missing: { question: string; clipIndex: number }[]
+  conflicting: { said: string; clipIndex: number }[]
+}
+
+export interface TeachBackResponse {
+  success: boolean
+  result?: TeachBackResult
   error?: string
 }
 

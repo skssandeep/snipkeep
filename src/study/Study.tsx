@@ -1,6 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bookmark } from 'lucide-react'
-import type { DocDestination, HistoryEntry } from '../types'
+import type {
+  DocDestination,
+  HistoryEntry,
+  StartVoiceNoteMessage,
+  StartVoiceNoteResponse,
+  StopVoiceNoteMessage,
+  VoiceNoteUpdateMessage,
+  TeachBackMessage,
+  TeachBackResponse,
+  TeachBackResult,
+} from '../types'
 import { openDrawerFromPage } from './drawer'
 
 // One study record per clip (keyed by String(savedAt)), now carrying the
@@ -115,7 +125,27 @@ export function Study() {
   const [phase, setPhase] = useState<Phase>('question')
   const [attempt, setAttempt] = useState('')
   const [gotCount, setGotCount] = useState(0)
-  const [mode, setMode] = useState<'study' | 'browse'>('study')
+  const [mode, setMode] = useState<'study' | 'browse' | 'teach'>('study')
+
+  // ── Teach-It-Back (Feynman mode) ──
+  // Recognition itself runs in the voice tab (same pipeline as margin notes,
+  // longForm tuning); this page only starts/stops it and consumes the
+  // relayed transcript. Feature-detect here is valid — same browser.
+  const [voiceSupported] = useState(
+    () => 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window
+  )
+  const [teachPhase, setTeachPhase] = useState<'idle' | 'recording' | 'analyzing' | 'result'>('idle')
+  const [transcript, setTranscript] = useState('')
+  const [teachResult, setTeachResult] = useState<TeachBackResult | null>(null)
+  const [teachError, setTeachError] = useState('')
+  // Which result cards have revealed their source clip (keyed "m0"/"c2").
+  const [teachRevealed, setTeachRevealed] = useState<Set<string>>(new Set())
+  // Refs mirror state for the once-registered message listener (Toolbar's
+  // pattern — the listener would otherwise close over stale values).
+  const teachPhaseRef = useRef(teachPhase)
+  useEffect(() => { teachPhaseRef.current = teachPhase }, [teachPhase])
+  const transcriptRef = useRef('')
+  const analyzeRef = useRef<() => void>(() => {})
 
   // 'unknown' until the first read so the connect hint can't flash before we
   // know; 'justConnected' is its own state so the page can acknowledge the
@@ -176,6 +206,84 @@ export function Study() {
     if (!docFilter || docFilter === 'all') return 'All docs'
     return docs.find(d => d.id === docFilter)?.name ?? 'This doc'
   }, [docFilter, docs])
+
+  // Text clips only, in state order (newest first) — the background trims to
+  // the first 40, and the AI's clipIndex refers into this same array, so the
+  // reveal on result cards stays aligned with what the model actually saw.
+  const teachClips = useMemo(() => clips.filter(c => c.kind !== 'image'), [clips])
+
+  async function analyzeTeaching() {
+    const text = transcriptRef.current.trim()
+    if (text.length < 80) {
+      setTeachError("That was short — try talking it through for a minute, like you're explaining to a friend.")
+      setTeachPhase('idle')
+      return
+    }
+    setTeachPhase('analyzing')
+    setTeachError('')
+    const msg: TeachBackMessage = {
+      type: 'TEACH_BACK',
+      payload: { destinationName: docName, transcript: text, clips: teachClips.map(c => c.text) },
+    }
+    const res: TeachBackResponse = await chrome.runtime.sendMessage(msg)
+    if (res.success && res.result) {
+      setTeachResult(res.result)
+      setTeachRevealed(new Set())
+      setTeachPhase('result')
+    } else {
+      setTeachError(res.error ?? 'Something went wrong — try again.')
+      setTeachPhase('idle')
+    }
+  }
+  // Refreshed every render so the once-registered listener below never calls
+  // a stale closure (same handleSaveRef pattern as the toolbar's voice flow).
+  useEffect(() => { analyzeRef.current = analyzeTeaching })
+
+  // The voice tab's relay lands here (tabs.sendMessage → this tab, frame 0).
+  useEffect(() => {
+    function handleMessage(message: VoiceNoteUpdateMessage) {
+      if (message.type !== 'VOICE_NOTE_UPDATE') return
+      const { event } = message
+      if (event.kind === 'transcript') {
+        transcriptRef.current = event.text
+        setTranscript(event.text)
+      } else if (event.kind === 'error') {
+        setTeachError(event.error)
+        setTeachPhase('idle')
+      } else if (teachPhaseRef.current === 'recording') {
+        analyzeRef.current()
+      }
+    }
+    chrome.runtime.onMessage.addListener(handleMessage)
+    return () => chrome.runtime.onMessage.removeListener(handleMessage)
+  }, [])
+
+  // Leaving teach mode (or the page) mid-recording must stop the mic — a
+  // session with nothing left to receive its updates would keep listening
+  // invisibly (same forgotten-mic rule as the toolbar's note panel).
+  useEffect(() => {
+    if (mode !== 'teach' && teachPhaseRef.current === 'recording') {
+      chrome.runtime.sendMessage({ type: 'STOP_VOICE_NOTE' } satisfies StopVoiceNoteMessage)
+      setTeachPhase('idle')
+    }
+  }, [mode])
+  useEffect(() => () => {
+    if (teachPhaseRef.current === 'recording') {
+      chrome.runtime.sendMessage({ type: 'STOP_VOICE_NOTE' } satisfies StopVoiceNoteMessage)
+    }
+  }, [])
+
+  async function startTeaching() {
+    setTranscript('')
+    transcriptRef.current = ''
+    setTeachError('')
+    setTeachResult(null)
+    const res: StartVoiceNoteResponse = await chrome.runtime.sendMessage(
+      { type: 'START_VOICE_NOTE', payload: { longForm: true } } satisfies StartVoiceNoteMessage
+    )
+    if (res?.success) setTeachPhase('recording')
+    else setTeachError(res?.error ?? 'Could not start the microphone.')
+  }
 
   // Picker rows: every non-done doc that has clips at all — hiding docs
   // without questions made the library look empty ("where are my docs?").
@@ -369,6 +477,16 @@ export function Study() {
             >
               Browse
             </button>
+            {/* Invisible-until-real, like every AI surface: needs a key, a
+                mic-capable browser, and actual clips to compare against. */}
+            {aiState === 'yes' && voiceSupported && teachClips.length > 0 && (
+              <button
+                className={`study-mode${mode === 'teach' ? ' on' : ''}`}
+                onClick={() => setMode('teach')}
+              >
+                Teach
+              </button>
+            )}
           </nav>
         )}
         {/* On the review, one way back to the docs home. */}
@@ -433,6 +551,109 @@ export function Study() {
             </button>
           </main>
         )
+      ) : mode === 'teach' ? (
+        <main className="study-main center">
+          {teachPhase === 'idle' && (
+            <>
+              <h1 className="study-question">Explain {docName} out loud, from memory.</h1>
+              <p className="teach-sub">
+                Talk like you're teaching a friend. When you stop, your own AI
+                checks what you covered against your clips — it points at gaps,
+                it never explains for you.
+              </p>
+              {teachError && <p className="teach-error">{teachError}</p>}
+              <button className="teach-mic" onClick={startTeaching} aria-label="Start explaining">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/>
+                </svg>
+              </button>
+            </>
+          )}
+
+          {teachPhase === 'recording' && (
+            <>
+              <p className="study-progress teach-live"><span className="teach-dot" aria-hidden="true" /> Listening — take your time</p>
+              <p className={`teach-transcript${transcript ? '' : ' empty'}`}>
+                {transcript || 'Start talking whenever you\'re ready…'}
+              </p>
+              <button
+                className="study-primary"
+                onClick={() => chrome.runtime.sendMessage({ type: 'STOP_VOICE_NOTE' } satisfies StopVoiceNoteMessage)}
+              >
+                Done
+              </button>
+            </>
+          )}
+
+          {teachPhase === 'analyzing' && (
+            <p className="study-done-big">Comparing against your clips…</p>
+          )}
+
+          {teachPhase === 'result' && teachResult && (
+            <>
+              {teachResult.covered.length > 0 && (
+                <section className="teach-group">
+                  <h2 className="teach-group-title">✓ You covered</h2>
+                  <div className="teach-chips">
+                    {teachResult.covered.map((c, i) => (
+                      <span key={i} className="teach-chip">{c}</span>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {teachResult.missing.length > 0 && (
+                <section className="teach-group">
+                  <h2 className="teach-group-title">? You didn't mention</h2>
+                  {teachResult.missing.map((m, i) => {
+                    const key = `m${i}`
+                    const clip = teachClips[m.clipIndex]
+                    return (
+                      <div key={key} className="study-answer">
+                        <p className="study-answer-text">{m.question}</p>
+                        {teachRevealed.has(key) && clip ? (
+                          <p className="teach-source">{clip.text}</p>
+                        ) : clip ? (
+                          <button
+                            className="history-reveal teach-reveal"
+                            onClick={() => setTeachRevealed(prev => new Set(prev).add(key))}
+                          >
+                            Show the clip
+                          </button>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </section>
+              )}
+
+              {teachResult.conflicting.length > 0 && (
+                <section className="teach-group">
+                  <h2 className="teach-group-title">⚠ Check this</h2>
+                  {teachResult.conflicting.map((c, i) => {
+                    const clip = teachClips[c.clipIndex]
+                    return (
+                      <div key={i} className="study-answer">
+                        <p className="teach-said">You said: “{c.said}”</p>
+                        {clip && <p className="teach-source">Your clip: {clip.text}</p>}
+                      </div>
+                    )
+                  })}
+                </section>
+              )}
+
+              {teachResult.covered.length === 0 &&
+                teachResult.missing.length === 0 &&
+                teachResult.conflicting.length === 0 && (
+                  <p className="study-empty">Nothing to flag — try a longer explanation for a sharper check.</p>
+                )}
+
+              <button className="study-secondary" onClick={() => { setTeachPhase('idle'); setTranscript(''); transcriptRef.current = '' }}>
+                Teach it again
+              </button>
+            </>
+          )}
+        </main>
       ) : mode === 'browse' ? (
         <main className="study-main browse">
           {session.length === 0 && connectHint}

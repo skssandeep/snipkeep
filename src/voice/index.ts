@@ -51,10 +51,18 @@ interface SpeechRecognitionLike {
 }
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike
 
+// Two tunings, selected once at startup by the ?mode=teach URL param
+// (threaded from StartVoiceNoteMessage.payload.longForm by the background):
+// the default is the original short margin-note behavior; teach mode is
+// Teach-It-Back's long-form dictation, where a multi-second thinking pause
+// mid-explanation must NOT read as "done" and a real explanation needs far
+// more than 90 seconds.
+const TEACH_MODE = new URLSearchParams(window.location.search).get('mode') === 'teach'
+
 // Forgotten-open mic safety net — recognition.continuous keeps listening
 // indefinitely on its own; this guarantees the tab can't sit there listening
 // forever unnoticed. Outer bound regardless of speech activity.
-const MAX_SESSION_MS = 90_000
+const MAX_SESSION_MS = TEACH_MODE ? 300_000 : 90_000
 
 // Auto-stop design (see the psychology note in CLAUDE.md's "Voice tab"
 // section): continuous stays true so a mid-thought pause doesn't cut
@@ -66,7 +74,7 @@ const MAX_SESSION_MS = 90_000
 // shorter once they've been talking and then go quiet (that pause IS the
 // "I'm finished" signal).
 const INITIAL_SILENCE_MS = 8_000
-const PAUSE_SILENCE_MS = 1_800
+const PAUSE_SILENCE_MS = TEACH_MODE ? 5_000 : 1_800
 // Cosmetic only — reassures anyone who does see this tab that it's still
 // working during the initial grace period, distinguishing "quiet, still
 // listening" from "broken." Comfortably before INITIAL_SILENCE_MS expires.

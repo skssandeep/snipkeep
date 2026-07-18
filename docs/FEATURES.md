@@ -395,3 +395,15 @@ The study page's home (no params — what the drawer's 💡 opens) is the **docs
 **Scheduling** is SM-2-lite, entirely client-side: interval ladder `1 → 3 → 7 → 14 → 30 → 60` days; "Got it" advances one step, "Not yet" resets to 1. `StudyLogEntry` grew to `{at, result, interval, due}` with **lazy migration** — v1 entries get an effective due at read time (`dueOf()`: got → at+3d, miss → at+1d), and the next grade rewrites them in the full shape. Never-studied questions are due immediately, so new clips flow into Today on their own.
 
 **Deliberate practice stays exempt on purpose**: `?doc=<id>`/`?doc=all` sessions keep the v1 misses-first ordering and 8-question cap, ignoring dueness (extra retrieval never hurts) — but their grades still feed the schedule. Completed (done) docs never appear in Today. The doc picker survives below Today's done/empty state as "Or study one doc."
+
+## Teach-It-Back (feature research PDF #03)
+
+Feynman mode on a doc's study page: a third header mode — **Teach** — asks the student to explain the topic out loud from memory. The screen is deliberately near-empty (the emptiness IS the test): a prompt, one big mic button, then the live transcript filling the column while a red dot pulses, then "Done."
+
+**Voice reuse:** the same voice-tab pipeline as margin notes, with a `longForm` option threaded `StartVoiceNoteMessage.payload → ?mode=teach` on the voice tab's URL. Teach tuning: `PAUSE_SILENCE_MS` 1.8s → **5s** (a thinking pause isn't "done") and `MAX_SESSION_MS` 90s → **5 min**; note-taking defaults untouched. The pipeline needed zero routing changes — `START_VOICE_NOTE` captures `sender.tab.id`/`frameId`, both real for a full-page extension tab.
+
+**The AI contract (the PACER rule, enforced in-prompt and in-code):** `TEACH_BACK` sends the transcript + the doc's text clips (newest 40, each trimmed to 300 chars, numbered); the model must return strict JSON `{covered, missing, conflicting}` — covered topic phrases, missing content **as questions that point without answering** (max 5, with the source clip's index), and contradictions quoting the student's words. It never explains, and the parser is defensive: fence-stripping, outermost-object salvage, shape validation, `clipIndex` range-clamping; unreadable replies surface "try again," never a broken screen.
+
+**Results screen:** three groups in the existing card language — ✓ Covered (accent-soft chips), ? You didn't mention (question cards, "Show the clip" reveals the exact source — same beat as Retrieval Flip), ⚠ Check this (the student's words beside the clip; the student judges). No scores, no percentages. Transcripts are kept nowhere.
+
+**Gating:** the Teach button appears only with an AI key connected AND a SpeechRecognition-capable browser AND ≥1 text clip — invisible-until-real. Under 80 chars of transcript → a gentle "that was short" nudge, no AI call. Leaving teach mode (or the page) mid-recording stops the mic — same forgotten-mic rule as the toolbar.

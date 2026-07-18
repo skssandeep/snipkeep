@@ -38,6 +38,9 @@ import type {
   AskFollowUpResponse,
   SummarizeTopicMessage,
   SummarizeTopicResponse,
+  TeachBackMessage,
+  TeachBackResult,
+  TeachBackResponse,
   OpenStudyMessage,
   OpenStudyResponse,
   UpdateBibliographyMessage,
@@ -1478,7 +1481,8 @@ chrome.runtime.onMessage.addListener(
         // their focus yanked to a separate tab. It brings itself forward
         // (VOICE_TAB_NEEDS_FOREGROUND, below) only the one time it actually
         // needs to: granting mic permission for the first time.
-        const voiceTab = await chrome.tabs.create({ url: 'src/voice/index.html', openerTabId: sender.tab.id, active: false })
+        const voiceUrl = `src/voice/index.html${message.payload?.longForm ? '?mode=teach' : ''}`
+        const voiceTab = await chrome.tabs.create({ url: voiceUrl, openerTabId: sender.tab.id, active: false })
         if (!voiceTab.id) throw new Error('Could not open the voice-input tab')
         voiceSession = { originTabId: sender.tab.id, originFrameId: sender.frameId ?? 0, voiceTabId: voiceTab.id }
         sendResponse({ success: true })
@@ -1817,6 +1821,82 @@ chrome.runtime.onMessage.addListener(
       try {
         const summary = await handleSummarizeTopic(message.payload.destinationName, message.payload.clips)
         sendResponse({ success: true, summary })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Request failed' })
+      }
+    })()
+
+    return true
+  }
+)
+
+// Teach-It-Back: compare a spoken explanation against the doc's own clips.
+// The AI's job is CLASSIFICATION ONLY — covered topics, missing content
+// phrased as pointed questions, and contradictions — never explanations
+// (the PACER rule: generating the understanding for the student produces
+// the passive consumption this feature exists to fight).
+async function handleTeachBack(
+  destinationName: string,
+  transcript: string,
+  clips: string[]
+): Promise<TeachBackResult> {
+  // Prompt-size control: newest 40 clips, each trimmed. clipIndex in the
+  // reply refers into THIS trimmed list, which the study page sent in the
+  // same order it holds them — indexes stay aligned on both sides.
+  const sent = clips.slice(0, 40).map(c => c.slice(0, 300))
+  const system =
+    'You check a student\'s spoken explanation of a topic against the source notes they saved. ' +
+    'You NEVER explain, summarize, or supply any content yourself — you only classify. ' +
+    'Reply with STRICT JSON only, no code fences, no prose, in exactly this shape: ' +
+    '{"covered": string[], "missing": [{"question": string, "clipIndex": number}], ' +
+    '"conflicting": [{"said": string, "clipIndex": number}]}. ' +
+    '"covered": short topic phrases (2-6 words each) from the notes that the explanation did address. ' +
+    '"missing": important note content the explanation never mentioned — each item is ONE short question ' +
+    '(under 140 characters) that points the student at what they skipped WITHOUT containing the answer, ' +
+    'plus the 0-based index of the note it came from. At most 5 items, most important first. ' +
+    '"conflicting": statements in the explanation that contradict a note — quote the student\'s own words ' +
+    'in "said" plus the contradicted note\'s index. Empty arrays are fine. ' +
+    'Only reference content actually present in the notes; never invent.'
+  const user =
+    `Topic: ${destinationName}\n\nSaved notes:\n` +
+    sent.map((c, i) => `${i}. ${c}`).join('\n') +
+    `\n\nThe student's spoken explanation (raw transcript):\n${transcript.slice(0, 6000)}`
+  const raw = await callAI(system, user)
+
+  // Models occasionally wrap JSON in fences or lead with prose despite the
+  // instruction — salvage the outermost object before giving up.
+  const jsonText = raw.replace(/```(?:json)?/g, '').trim()
+  const start = jsonText.indexOf('{')
+  const end = jsonText.lastIndexOf('}')
+  if (start === -1 || end <= start) throw new Error("The AI's reply couldn't be read — try again")
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(jsonText.slice(start, end + 1))
+  } catch {
+    throw new Error("The AI's reply couldn't be read — try again")
+  }
+  const p = parsed as Partial<TeachBackResult>
+  const inRange = (i: unknown): i is number => typeof i === 'number' && i >= 0 && i < sent.length
+  return {
+    covered: Array.isArray(p.covered) ? p.covered.filter((c): c is string => typeof c === 'string').slice(0, 12) : [],
+    missing: Array.isArray(p.missing)
+      ? p.missing.filter(m => m && typeof m.question === 'string' && inRange(m.clipIndex)).slice(0, 5)
+      : [],
+    conflicting: Array.isArray(p.conflicting)
+      ? p.conflicting.filter(c => c && typeof c.said === 'string' && inRange(c.clipIndex)).slice(0, 5)
+      : [],
+  }
+}
+
+chrome.runtime.onMessage.addListener(
+  (message: TeachBackMessage, _sender, sendResponse: (r: TeachBackResponse) => void) => {
+    if (message.type !== 'TEACH_BACK') return false
+
+    ;(async () => {
+      try {
+        const { destinationName, transcript, clips } = message.payload
+        const result = await handleTeachBack(destinationName, transcript, clips)
+        sendResponse({ success: true, result })
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Request failed' })
       }

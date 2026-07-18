@@ -111,6 +111,7 @@ Works Cited  → content → UPDATE_BIBLIOGRAPHY → background → Google Docs 
 AI connect   → content → CONNECT_AI / DISCONNECT_AI → background (validate key via provider's models endpoint, store/remove aiConfig)
 AI actions   → content → ASK_FOLLOWUP / SUMMARIZE_TOPIC → background → user's own AI provider (callAI adapter)
 Study page   → content → OPEN_STUDY → background → chrome.tabs.create → study tab (src/study/, full-page extension tab reading chrome.storage directly; bundled via vite additionalInputs like the voice tab)
+Teach-back   → study tab → START_VOICE_NOTE {longForm:true} → voice tab opens with ?mode=teach (5s pause window, 5min cap vs the note default 1.8s/90s) → transcript relays back as usual → study tab → TEACH_BACK → background → user's own AI (classification only: covered / missing-as-questions / conflicting, strict-JSON contract parsed defensively)
 Drawer auth  → content → GET_USER_PROFILE / GET_DOC_TITLE / SIGN_IN / SIGN_OUT → background (chrome.identity)
 Voice note   → content → START_VOICE_NOTE → background → chrome.tabs.create → voice tab (src/voice/)
              → voice tab → VOICE_RECOGNITION_EVENT → background → VOICE_NOTE_UPDATE (explicit frameId) → content

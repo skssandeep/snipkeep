@@ -293,6 +293,72 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   text-align: center;
 }
 
+/* ── Teach-It-Back (Feynman mode) ── */
+.teach-sub { font-size: 15px; color: var(--text-2); line-height: 1.6; max-width: 46ch; }
+.teach-error { font-size: 14px; color: #FF8A8A; line-height: 1.5; }
+.teach-mic {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.15s;
+}
+.teach-mic:hover { background: var(--accent-hover); transform: scale(1.04); }
+@keyframes teach-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+.teach-live { display: inline-flex; align-items: center; gap: 8px; }
+.teach-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #FF6B6B;
+  animation: teach-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .teach-dot { animation: none; }
+}
+.teach-transcript {
+  font-size: 19px;
+  line-height: 1.65;
+  color: var(--text);
+  min-height: 120px;
+  white-space: pre-line;
+}
+.teach-transcript.empty { color: var(--text-3); }
+.teach-group { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.teach-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.teach-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.teach-chip {
+  background: var(--accent-soft);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.teach-said { font-size: 15px; line-height: 1.6; }
+.teach-source {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-2);
+  border-left: 2px solid var(--border-active);
+  padding-left: 12px;
+}
+.teach-reveal { margin-top: 0; }
+
 /* ── Browse: the library, deliberately plainer than the study flow ── */
 .study-main.browse { padding-top: 32px; }
 .browse-card {
