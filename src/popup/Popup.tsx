@@ -2236,6 +2236,9 @@ export function AIAssistant({ onBack }: { onBack: () => void }) {
   const [keyInput, setKeyInput] = useState('')
   const [status, setStatus] = useState<'idle' | 'connecting' | 'error'>('idle')
   const [error, setError] = useState('')
+  // Disconnect swaps to an inline confirm (the established high-stakes
+  // pattern — same as History's bulk Clear), never a blocking dialog.
+  const [disconnectConfirming, setDisconnectConfirming] = useState(false)
 
   useEffect(() => {
     chrome.storage.local.get(['aiConfig'], (result) => {
@@ -2282,7 +2285,10 @@ export function AIAssistant({ onBack }: { onBack: () => void }) {
   async function handleDisconnect() {
     const msg: DisconnectAIMessage = { type: 'DISCONNECT_AI' }
     const res: DisconnectAIResponse = await chrome.runtime.sendMessage(msg)
-    if (res.success) setConfig(null)
+    if (res.success) {
+      setConfig(null)
+      setDisconnectConfirming(false)
+    }
   }
 
   return (
@@ -2308,9 +2314,30 @@ export function AIAssistant({ onBack }: { onBack: () => void }) {
               <div className="ai-connected-key">{maskKey(config.apiKey)}</div>
             </div>
           </div>
-          <button className="btn-ghost danger small" onClick={handleDisconnect}>
-            <MdDeleteOutline size={13} /> Disconnect
-          </button>
+          {disconnectConfirming ? (
+            <div className="clear-confirm">
+              <span className="clear-confirm-text">
+                Disconnect {AI_PROVIDERS.find((p) => p.id === config.provider)?.name ?? 'this provider'}?
+                The key is removed from this device and AI features pause — summaries, follow-up
+                questions, and practice questions for new clips. Everything already saved (your clips,
+                existing questions, your Doc) stays exactly as it is.
+              </span>
+              <div className="clear-confirm-actions">
+                <button className="card-menu-cancel" onClick={() => setDisconnectConfirming(false)}>
+                  Keep connected
+                </button>
+                <button className="card-menu-confirm-remove" onClick={handleDisconnect}>
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="ai-disconnect-row">
+              <button className="btn-ghost danger small" onClick={() => setDisconnectConfirming(true)}>
+                <MdDeleteOutline size={13} /> Disconnect
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <>

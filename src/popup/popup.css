@@ -1561,6 +1561,9 @@ a { color: inherit; text-decoration: none; }
   flex-direction: column;
   gap: var(--space-4);
 }
+/* Bottom-right, the resting place for a secondary/destructive action (the
+   same corner every dialog's action row in this app resolves to). */
+.ai-disconnect-row { display: flex; justify-content: flex-end; }
 .ai-connected-row {
   display: flex;
   align-items: center;
