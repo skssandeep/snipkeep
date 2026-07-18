@@ -90,19 +90,23 @@ function goToDoc(id: string) {
 }
 
 export function Study() {
-  // No ?doc → Today (the daily due queue, what the drawer's 💡 opens);
-  // ?choose → the standalone doc picker; ?doc=all → deliberate session
-  // across everything; ?doc=<id> → one doc. URL is the source of truth so
-  // the browser back button always retraces the path.
+  // No params → the docs-first HOME (picker + a warm-up banner for what's due,
+  // what the drawer's 💡 opens); ?today → the daily review queue; ?doc=all →
+  // deliberate session across everything; ?doc=<id> → one doc. URL is the
+  // source of truth so the browser back button always retraces the path.
   const params = new URLSearchParams(window.location.search)
   const docFilter = params.get('doc')
-  const choosing = !docFilter && params.has('choose')
+  const today = !docFilter && params.has('today')
+  const isHome = !docFilter && !today
 
   const [clips, setClips] = useState<HistoryEntry[]>([])
   const [docs, setDocs] = useState<DocDestination[]>([])
   const [log, setLog] = useState<StudyLog>({})
   const [loaded, setLoaded] = useState(false)
 
+  // The today queue is computed on every non-doc route: the ?today session
+  // runs it, and the home banner shows its count. Frozen at mount.
+  const [todayQueue, setTodayQueue] = useState<HistoryEntry[]>([])
   // The session is frozen at mount (not re-derived on storage changes) so a
   // question drafted mid-session can't reshuffle the deck under the student.
   const [session, setSession] = useState<HistoryEntry[]>([])
@@ -149,10 +153,13 @@ export function Study() {
         // is real even before the questions arrive; an empty session isn't.
         if (questionClips.length === 0 && scoped.length > 0) setMode('browse')
       } else {
-        // Today: due questions only, and never from completed projects.
+        // Today's due queue, drawn from every non-completed project — used by
+        // the ?today session AND the home's warm-up banner count.
         const doneIds = new Set(allDocs.filter(d => d.done).map(d => d.id))
         const eligible = questionClips.filter(c => !c.destinationId || !doneIds.has(c.destinationId))
-        setSession(pickToday(eligible, storedLog))
+        const queue = pickToday(eligible, storedLog)
+        setTodayQueue(queue)
+        if (today) setSession(queue)
       }
       setLoaded(true)
     })
@@ -224,10 +231,7 @@ export function Study() {
 
   if (!loaded) return null
 
-  const isToday = !docFilter && !choosing
-
-  // The doc list, shared by the standalone picker (?choose) and the "or
-  // study one doc" block under Today's done/empty states.
+  // The doc list (the home's primary content).
   const pickerRows = pickerDocs.length > 0 && (
     <div className="study-pick-list">
       {pickerDocs.map(({ doc, clipCount, questionCount }) => (
@@ -251,18 +255,33 @@ export function Study() {
     </div>
   )
 
-  const pickerBlock = pickerRows && (
-    <>
-      <h2 className="study-pick-subtitle">Or study one doc</h2>
-      {pickerRows}
-    </>
-  )
+  // The warm-up banner: the daily review reframed as an optional light round
+  // before focused doc study, not a takeover. Three states — due, caught-up,
+  // or absent (no scheduled questions at all).
+  const dueCount = todayQueue.length
+  const anyScheduled = clips.some(c => c.retrievalQuestion)
+  const warmupBanner = dueCount > 0 ? (
+    <button className="study-warmup" onClick={() => { window.location.search = '?today' }}>
+      <span className="study-warmup-main">
+        <span className="study-warmup-sun" aria-hidden="true">☀</span>
+        Warm up · {dueCount} resurfaced today · ~{Math.max(1, Math.round(dueCount * 0.4))} min
+      </span>
+      <span className="study-warmup-go" aria-hidden="true">▶</span>
+    </button>
+  ) : anyScheduled ? (
+    <div className="study-warmup caught-up">
+      <span className="study-warmup-main">
+        <span className="study-warmup-check" aria-hidden="true">✓</span>
+        You're caught up — {nextDueLine(clips.filter(c => c.retrievalQuestion), log) ?? 'nothing due right now'}
+      </span>
+    </div>
+  ) : null
 
   // Shared question → attempt → reveal → grade flow (Today and deliberate).
   const sessionFlow = current && (
     <main className="study-main center">
       <p className="study-progress">
-        {isToday ? 'Today · ' : ''}{index + 1} of {session.length}
+        {today ? 'Today · ' : ''}{index + 1} of {session.length}
       </p>
       <h1 className="study-question">{current.retrievalQuestion}</h1>
 
@@ -330,36 +349,33 @@ export function Study() {
             </button>
           </nav>
         )}
-        {/* Today buried the doc-wise path (it only surfaced after the session
-            ended) — this keeps it one quiet click away at all times. */}
-        {isToday && (
+        {/* On the review, one way back to the docs home. */}
+        {today && (
           <nav className="study-modes">
-            <button className="study-mode" onClick={() => { window.location.search = '?choose' }}>
-              Choose a doc
+            <button className="study-mode" onClick={() => { window.location.search = '' }}>
+              ← Docs
             </button>
           </nav>
         )}
       </header>
 
-      {choosing ? (
+      {isHome ? (
         <main className="study-main center">
+          {warmupBanner}
           {pickerDocs.length === 0 ? (
-            <>
-              <p className="study-empty">
-                Nothing saved yet.<br />
-                Clip a few things first — each doc will show up here.
-              </p>
-              {connectHint}
-            </>
+            <p className="study-empty">
+              Nothing saved yet.<br />
+              Clip a few things first — each doc will show up here.
+            </p>
           ) : (
             <>
               <h1 className="study-pick-title">What are you studying?</h1>
               {pickerRows}
-              {connectHint}
             </>
           )}
+          {connectHint}
         </main>
-      ) : isToday ? (
+      ) : today ? (
         done ? (
           <main className="study-main center">
             {/* A hard, calm stop — no "keep going?", no infinite feed. */}
@@ -367,13 +383,15 @@ export function Study() {
             <p className="study-done-sub">
               {gotCount} recalled · {session.length - gotCount} come back tomorrow
             </p>
-            {pickerBlock}
+            <button className="study-secondary" onClick={() => { window.location.search = '' }}>
+              ← Back to docs
+            </button>
           </main>
         ) : session.length > 0 ? (
           sessionFlow
         ) : (
           <main className="study-main center">
-            {clips.some(c => c.retrievalQuestion) ? (
+            {anyScheduled ? (
               <>
                 <p className="study-done-big">Nothing due today.</p>
                 {(() => {
@@ -388,8 +406,9 @@ export function Study() {
                 arrive with a question to practice on.
               </p>
             )}
-            {pickerBlock}
-            {connectHint}
+            <button className="study-secondary" onClick={() => { window.location.search = '' }}>
+              ← Back to docs
+            </button>
           </main>
         )
       ) : mode === 'browse' ? (

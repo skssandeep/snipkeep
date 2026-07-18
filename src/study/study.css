@@ -181,16 +181,44 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   letter-spacing: -0.4px;
   text-wrap: balance;
 }
-.study-pick-subtitle {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  margin-top: 16px;
-}
 /* "N questions come back tomorrow" — information, never pressure. */
 .study-next-due { font-size: 15px; color: var(--text-3); }
+
+/* ── Warm-up banner: the daily review, reframed as an optional light round at
+   the top of the docs home. Accent-tinted and clickable when questions are
+   due; a muted, calm "caught up" line otherwise. Never a takeover. ── */
+.study-warmup {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 16px 20px;
+  color: var(--text);
+  font-family: var(--font);
+  transition: background 0.15s, border-color 0.15s;
+}
+.study-warmup:hover { background: var(--accent-soft); }
+.study-warmup-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.study-warmup-sun { color: var(--accent); font-size: 17px; }
+.study-warmup-go { color: var(--accent); font-size: 12px; }
+.study-warmup.caught-up {
+  background: var(--card);
+  border-color: var(--card-edge);
+  cursor: default;
+}
+.study-warmup.caught-up .study-warmup-main { font-weight: 500; color: var(--text-3); }
+.study-warmup-check { color: var(--text-3); }
 .study-pick-list { display: flex; flex-direction: column; gap: 10px; }
 .study-pick-card {
   display: flex;
