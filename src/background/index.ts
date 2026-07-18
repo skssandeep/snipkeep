@@ -395,6 +395,22 @@ function videoStampRequest(clipStart: number, textLen: number, clipTextLen: numb
 // once it resolves. -1 means "we didn't ask for one in this save."
 interface BookmarkIdx { caption: number; clipBlock: number }
 
+// The caption's "domain" label. file:// (and other host-less) URLs have an
+// EMPTY hostname — which made the domain-hyperlink request's range empty, a
+// hard 400 from the Docs API ("The range should not be empty"), killing every
+// save from a local file. Fall back to a readable label, and only hyperlink
+// it when the URL is actually a web URL worth linking.
+function captionSource(pageUrl: string): { domain: string; linkable: boolean } {
+  try {
+    const u = new URL(pageUrl)
+    const host = u.hostname.replace(/^www\./, '')
+    if (host) return { domain: host, linkable: /^https?:$/.test(u.protocol) }
+    return { domain: u.protocol === 'file:' ? 'local file' : 'local', linkable: false }
+  } catch {
+    return { domain: 'local', linkable: false }
+  }
+}
+
 async function appendToGoogleDoc(
   docId: string,
   token: string,
@@ -430,7 +446,7 @@ async function appendToGoogleDoc(
   if (isNewArticle) {
     // New article → one heading, one caption (domain · date), then the first clip.
     // Structure:  HEADING_2 title  /  small grey "domain · date" (domain linked)  /  • clip
-    const domain = new URL(pageUrl).hostname.replace(/^www\./, '')
+    const { domain, linkable } = captionSource(pageUrl)
     const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
     const headingLine = `${pageTitle}\n`
@@ -486,18 +502,6 @@ async function appendToGoogleDoc(
           fields: 'spaceAbove,spaceBelow',
         },
       },
-      // Domain portion → hyperlink + link colour (overrides the grey above)
-      {
-        updateTextStyle: {
-          range: { startIndex: captionStart, endIndex: domainEnd },
-          textStyle: {
-            link: { url: pageUrl },
-            foregroundColor: { color: { rgbColor: LINK_FG } },
-            underline: false,
-          },
-          fields: 'link,foregroundColor,underline',
-        },
-      },
       // First clip → bullet, snug spacing
       {
         createParagraphBullets: {
@@ -516,6 +520,22 @@ async function appendToGoogleDoc(
         },
       }
     )
+    // Domain portion → hyperlink + link colour (overrides the grey above).
+    // Only for real web URLs: a host-less page (file://) has no domain text to
+    // range over and nothing worth linking to.
+    if (linkable) {
+      requests.push({
+        updateTextStyle: {
+          range: { startIndex: captionStart, endIndex: domainEnd },
+          textStyle: {
+            link: { url: pageUrl },
+            foregroundColor: { color: { rgbColor: LINK_FG } },
+            underline: false,
+          },
+          fields: 'link,foregroundColor,underline',
+        },
+      })
+    }
     // Preserve any hyperlinks inside the clip text
     if (links.length) requests.push(...linkStyleRequests(clipStart, links))
     // Lecture-timestamp suffix → small link back to the exact video moment
@@ -855,7 +875,7 @@ async function appendImageToGoogleDoc(
 
   if (isNewArticle) {
     // Same heading + caption block as a text clip, then the image below it.
-    const domain = new URL(pageUrl).hostname.replace(/^www\./, '')
+    const { domain, linkable } = captionSource(pageUrl)
     const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     const headingLine = `${pageTitle}\n`
     const captionLine = `${domain} · ${dateStr}\n`
@@ -901,7 +921,11 @@ async function appendImageToGoogleDoc(
           fields: 'spaceAbove,spaceBelow',
         },
       },
-      {
+    )
+    // Domain hyperlink only for real web URLs — a host-less page (file://)
+    // has no domain text to range over (empty range = Docs API 400).
+    if (linkable) {
+      requests.push({
         updateTextStyle: {
           range: { startIndex: captionStart, endIndex: domainEnd },
           textStyle: {
@@ -911,8 +935,8 @@ async function appendImageToGoogleDoc(
           },
           fields: 'link,foregroundColor,underline',
         },
-      },
-    )
+      })
+    }
     // Bookmark the caption, same as the text-clip path — link-rot insurance
     // uses this to drop an "· archived" link here once a snapshot exists.
     captionRangeIdx = requests.length
