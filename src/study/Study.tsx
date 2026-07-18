@@ -91,8 +91,12 @@ function goToDoc(id: string) {
 
 export function Study() {
   // No ?doc → Today (the daily due queue, what the drawer's 💡 opens);
-  // ?doc=all → deliberate session across everything; ?doc=<id> → one doc.
-  const docFilter = new URLSearchParams(window.location.search).get('doc')
+  // ?choose → the standalone doc picker; ?doc=all → deliberate session
+  // across everything; ?doc=<id> → one doc. URL is the source of truth so
+  // the browser back button always retraces the path.
+  const params = new URLSearchParams(window.location.search)
+  const docFilter = params.get('doc')
+  const choosing = !docFilter && params.has('choose')
 
   const [clips, setClips] = useState<HistoryEntry[]>([])
   const [docs, setDocs] = useState<DocDestination[]>([])
@@ -220,32 +224,37 @@ export function Study() {
 
   if (!loaded) return null
 
-  const isToday = !docFilter
+  const isToday = !docFilter && !choosing
 
-  // The deliberate path, offered wherever Today has nothing left to ask.
-  const pickerBlock = pickerDocs.length > 0 && (
+  // The doc list, shared by the standalone picker (?choose) and the "or
+  // study one doc" block under Today's done/empty states.
+  const pickerRows = pickerDocs.length > 0 && (
+    <div className="study-pick-list">
+      {pickerDocs.map(({ doc, clipCount, questionCount }) => (
+        <button key={doc.id} className="study-pick-card" onClick={() => goToDoc(doc.id)}>
+          <span className="study-pick-name">{doc.name}</span>
+          <span className="study-pick-count">
+            {questionCount > 0
+              ? `${questionCount} question${questionCount !== 1 ? 's' : ''} ready`
+              : `${clipCount} clip${clipCount !== 1 ? 's' : ''} · no questions yet`}
+          </span>
+        </button>
+      ))}
+      {pickerDocs.filter(x => x.questionCount > 0).length > 1 && (
+        <button className="study-pick-card all" onClick={() => goToDoc('all')}>
+          <span className="study-pick-name">Everything</span>
+          <span className="study-pick-count">
+            {pickerDocs.reduce((n, x) => n + x.questionCount, 0)} questions across your docs
+          </span>
+        </button>
+      )}
+    </div>
+  )
+
+  const pickerBlock = pickerRows && (
     <>
       <h2 className="study-pick-subtitle">Or study one doc</h2>
-      <div className="study-pick-list">
-        {pickerDocs.map(({ doc, clipCount, questionCount }) => (
-          <button key={doc.id} className="study-pick-card" onClick={() => goToDoc(doc.id)}>
-            <span className="study-pick-name">{doc.name}</span>
-            <span className="study-pick-count">
-              {questionCount > 0
-                ? `${questionCount} question${questionCount !== 1 ? 's' : ''} ready`
-                : `${clipCount} clip${clipCount !== 1 ? 's' : ''} · no questions yet`}
-            </span>
-          </button>
-        ))}
-        {pickerDocs.filter(x => x.questionCount > 0).length > 1 && (
-          <button className="study-pick-card all" onClick={() => goToDoc('all')}>
-            <span className="study-pick-name">Everything</span>
-            <span className="study-pick-count">
-              {pickerDocs.reduce((n, x) => n + x.questionCount, 0)} questions across your docs
-            </span>
-          </button>
-        )}
-      </div>
+      {pickerRows}
     </>
   )
 
@@ -321,9 +330,36 @@ export function Study() {
             </button>
           </nav>
         )}
+        {/* Today buried the doc-wise path (it only surfaced after the session
+            ended) — this keeps it one quiet click away at all times. */}
+        {isToday && (
+          <nav className="study-modes">
+            <button className="study-mode" onClick={() => { window.location.search = '?choose' }}>
+              Choose a doc
+            </button>
+          </nav>
+        )}
       </header>
 
-      {isToday ? (
+      {choosing ? (
+        <main className="study-main center">
+          {pickerDocs.length === 0 ? (
+            <>
+              <p className="study-empty">
+                Nothing saved yet.<br />
+                Clip a few things first — each doc will show up here.
+              </p>
+              {connectHint}
+            </>
+          ) : (
+            <>
+              <h1 className="study-pick-title">What are you studying?</h1>
+              {pickerRows}
+              {connectHint}
+            </>
+          )}
+        </main>
+      ) : isToday ? (
         done ? (
           <main className="study-main center">
             {/* A hard, calm stop — no "keep going?", no infinite feed. */}
