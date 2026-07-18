@@ -1762,6 +1762,10 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
           >
             Show the clip
           </button>
+        ) : hasQuestion ? (
+          /* Revealed as an answer check — the full clip IS the payoff; an
+             80-char preview would cut the answer off mid-sentence. */
+          <div className="history-text">{entry.text}</div>
         ) : (
           <div className="history-text">{entry.text.slice(0, 80)}{entry.text.length > 80 ? '…' : ''}</div>
         )}
