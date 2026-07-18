@@ -138,6 +138,7 @@ All message types are in `src/types.ts`.
 | `local` | `aiConfig` | `{ provider, apiKey }` — BYO-AI key. **Deliberately `local`, not `sync`**: a raw API key shouldn't ride Google's sync servers. Its presence alone gates every AI menu item (absent = feature invisible). |
 | `local` | `reflectionNudgeDismissed` | Reflection Nudge dismissal state. (`triageDismissedDay` may linger from the removed Soft Triage/Someday feature — no longer read.) |
 | `local` | `studyLog` | `Record<savedAt, {at, result, interval, due}>` — per-clip spacing schedule (Five-Minute Review). v1 entries lack `interval`/`due`; `dueOf()` in Study.tsx migrates them lazily at read, next grade rewrites in full shape |
+| `local` | `studyWarmupDismissed` | date string (`toDateString()`) the study home's "caught up" banner was dismissed on — hides it for that day, returns next day when questions are due |
 | `local` | `retrievalBackfillDone` | one-time flag: pre-feature clips have had retrieval questions drafted (set only after a pass with ≥1 success, so a dead key retries later) |
 
 `HistoryEntry` fields beyond the basics: `note?`, `namedRangeId?` (Doc bookmark), `cited?`, `videoTime?` (lecture-timestamp clipping, seconds). (A `someday?` field may linger on stored entries from the removed Soft Triage feature — no longer read.) Legacy `docId` (string, sync) is migrated to `docs: [{ id, name, active }]` on read in both background and content script.

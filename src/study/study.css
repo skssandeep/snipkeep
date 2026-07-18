@@ -219,6 +219,18 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 }
 .study-warmup.caught-up .study-warmup-main { font-weight: 500; color: var(--text-3); }
 .study-warmup-check { color: var(--text-3); }
+.study-warmup-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 6px;
+  transition: color 0.12s, background 0.12s;
+}
+.study-warmup-close:hover { color: var(--text); background: rgba(255,255,255,0.06); }
 .study-pick-list { display: flex; flex-direction: column; gap: 10px; }
 .study-pick-card {
   display: flex;

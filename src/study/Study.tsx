@@ -121,6 +121,11 @@ export function Study() {
   // connect (and the backfill it triggers) instead of the hint just vanishing.
   const [aiState, setAiState] = useState<'unknown' | 'no' | 'yes' | 'justConnected'>('unknown')
 
+  // The "caught up" banner is post-completion acknowledgement — dismissible,
+  // per day. Stored as a date string so it returns naturally when tomorrow's
+  // questions are actually due (then it's the actionable warm-up state anyway).
+  const [warmupDismissed, setWarmupDismissed] = useState(false)
+
   useEffect(() => {
     const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area !== 'local' || !('aiConfig' in changes)) return
@@ -134,10 +139,11 @@ export function Study() {
 
   useEffect(() => {
     Promise.all([
-      chrome.storage.local.get(['clips', 'studyLog', 'aiConfig']),
+      chrome.storage.local.get(['clips', 'studyLog', 'aiConfig', 'studyWarmupDismissed']),
       chrome.storage.sync.get(['docs']),
     ]).then(([local, sync]) => {
       setAiState(local.aiConfig ? 'yes' : 'no')
+      setWarmupDismissed(local.studyWarmupDismissed === new Date().toDateString())
       const allDocs = (sync.docs as DocDestination[]) ?? []
       const scoped = ((local.clips as HistoryEntry[]) ?? []).filter(
         c => !docFilter || docFilter === 'all' || c.destinationId === docFilter
@@ -268,12 +274,22 @@ export function Study() {
       </span>
       <span className="study-warmup-go" aria-hidden="true">▶</span>
     </button>
-  ) : anyScheduled ? (
+  ) : anyScheduled && !warmupDismissed ? (
     <div className="study-warmup caught-up">
       <span className="study-warmup-main">
         <span className="study-warmup-check" aria-hidden="true">✓</span>
         You're caught up — {nextDueLine(clips.filter(c => c.retrievalQuestion), log) ?? 'nothing due right now'}
       </span>
+      <button
+        className="study-warmup-close"
+        aria-label="Dismiss"
+        onClick={() => {
+          setWarmupDismissed(true)
+          chrome.storage.local.set({ studyWarmupDismissed: new Date().toDateString() })
+        }}
+      >
+        ✕
+      </button>
     </div>
   ) : null
 
