@@ -50,8 +50,17 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   padding: 16px 24px;
   border-bottom: 1px solid var(--border);
 }
-.study-wordmark { font-size: 15px; font-weight: 800; letter-spacing: -0.4px; }
+.study-wordmark {
+  display: inline-flex;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  color: var(--text);
+  text-decoration: none;
+}
 .study-wordmark b { color: var(--accent); font-weight: 800; }
+.study-logo { display: inline-flex; align-items: center; color: var(--accent); margin-right: 7px; }
 .study-doc-name {
   font-size: 13px;
   color: var(--text-3);

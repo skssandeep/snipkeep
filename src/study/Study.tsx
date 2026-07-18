@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Bookmark } from 'lucide-react'
 import type { DocDestination, HistoryEntry } from '../types'
 import { openDrawerFromPage } from './drawer'
 
@@ -347,7 +348,12 @@ export function Study() {
   return (
     <div className="study-page">
       <header className="study-header">
-        <span className="study-wordmark">Snip<b>Keep</b></span>
+        {/* Logo → home (the docs picker). href to the bare pathname strips the
+            query, so it lands on the no-params home from any route. */}
+        <a className="study-wordmark" href={window.location.pathname} title="SnipKeep home">
+          <span className="study-logo" aria-hidden="true"><Bookmark size={15} strokeWidth={2.5} /></span>
+          Snip<b>Keep</b>
+        </a>
         {docFilter && <span className="study-doc-name">{docName}</span>}
         {docFilter && (
           <nav className="study-modes">
