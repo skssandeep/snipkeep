@@ -47,6 +47,7 @@ import type {
   UpdateBibliographyMessage,
   UpdateBibliographyResponse,
 } from '../types'
+import { Bookmark } from 'lucide-react'
 import { timedVideoUrl } from '../lib/video'
 
 type Tab = 'docs' | 'completed' | 'history'
@@ -106,13 +107,13 @@ function GateScreen({ onSignIn }: { onSignIn: () => Promise<void> }) {
 
   return (
     <div className="gate-screen">
+      <div className="gate-logo-mark" aria-hidden="true"><Bookmark size={40} strokeWidth={2.5} /></div>
       <div className="gate-logo">Snip<span>Keep</span></div>
-      <p className="gate-tagline">Save what you read,<br />exactly where you write.</p>
+      <p className="gate-tagline">Turn what you read<br />into what you remember.</p>
       <button className="btn-primary full-width" onClick={handleClick} disabled={loading}>
         {loading ? 'Connecting…' : 'Connect with Google'}
       </button>
       {error && <p className="gate-error">{error}</p>}
-      <p className="gate-note">Uses your existing Chrome profile — no new account needed</p>
     </div>
   )
 }
