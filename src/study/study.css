@@ -174,13 +174,23 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .study-secondary:hover { color: var(--text); border-color: var(--text-3); }
 .study-grade .study-secondary { align-self: auto; }
 
-/* ── Doc picker (no ?doc in the URL): choose what to study ── */
+/* ── Doc picker: the deliberate path, below Today's done/empty state ── */
 .study-pick-title {
   font-size: 26px;
   font-weight: 700;
   letter-spacing: -0.4px;
   text-wrap: balance;
 }
+.study-pick-subtitle {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-top: 16px;
+}
+/* "N questions come back tomorrow" — information, never pressure. */
+.study-next-due { font-size: 15px; color: var(--text-3); }
 .study-pick-list { display: flex; flex-direction: column; gap: 10px; }
 .study-pick-card {
   display: flex;

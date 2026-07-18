@@ -387,3 +387,11 @@ A full-page study surface at `src/study/index.html` — same bundling pattern as
 - **Reveal shows the FULL clip** — the 80-char preview is for list density while browsing; after a question-reveal the clip is the answer being checked, and an answer cut mid-sentence defeats the exercise.
 - **The study picker lists every doc with clips**, not just question-bearing ones — hiding docs made the library look empty ("why don't I see all my documents?"). Docs without questions say "N clips · no questions yet" and land in Browse mode instead of an empty session.
 - **One-time backfill** (`runRetrievalBackfill`, background): clips saved before the feature get questions drafted through the user's own key — sequential, idempotent (skips already-questioned), resumable (the `retrievalBackfillDone` flag is set only after a pass with ≥1 success, so a dead key doesn't burn the one-time semantics and a SW killed mid-pass resumes on next startup). Runs at SW startup and immediately after CONNECT_AI succeeds.
+
+## The Five-Minute Review (feature research PDF #02)
+
+The study page's home (no `?doc=` — what the drawer's 💡 opens) is now **Today**: the questions actually *due* under a spacing schedule, most-overdue first, capped at `TODAY_SIZE = 5`, ending in "That's today's review." Zero due shows "Nothing due today" plus when the next question returns ("2 questions come back on Saturday") — information, never pressure; no streaks, no badges.
+
+**Scheduling** is SM-2-lite, entirely client-side: interval ladder `1 → 3 → 7 → 14 → 30 → 60` days; "Got it" advances one step, "Not yet" resets to 1. `StudyLogEntry` grew to `{at, result, interval, due}` with **lazy migration** — v1 entries get an effective due at read time (`dueOf()`: got → at+3d, miss → at+1d), and the next grade rewrites them in the full shape. Never-studied questions are due immediately, so new clips flow into Today on their own.
+
+**Deliberate practice stays exempt on purpose**: `?doc=<id>`/`?doc=all` sessions keep the v1 misses-first ordering and 8-question cap, ignoring dueness (extra retrieval never hurts) — but their grades still feed the schedule. Completed (done) docs never appear in Today. The doc picker survives below Today's done/empty state as "Or study one doc."
