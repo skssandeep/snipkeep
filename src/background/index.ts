@@ -1293,7 +1293,16 @@ chrome.runtime.onMessage.addListener(
 )
 
 // Sign-out — like sign-in, must run here: the drawer's content-script context has
-// no chrome.identity. Drops Chrome's cached token and clears the app's auth flags.
+// no chrome.identity. Revokes the Google-side grant, drops Chrome's cached
+// token, and clears the app's auth flags.
+//
+// The revoke fetch is the part that makes account SWITCHING possible: an
+// earlier version only removed the local cache, leaving the Google-side
+// grant alive — so the next interactive getAuthToken silently re-minted a
+// token for the same account with zero UI, and a user with multiple Chrome
+// accounts could never reach the account chooser. With the grant revoked,
+// the next sign-in starts from nothing and Chrome shows its sign-in dialog
+// (including account selection when the profile has several).
 chrome.runtime.onMessage.addListener(
   (message: SignOutMessage, _sender, sendResponse: (r: SignOutResponse) => void) => {
     if (message.type !== 'SIGN_OUT') return false
@@ -1302,9 +1311,11 @@ chrome.runtime.onMessage.addListener(
       try {
         const token = await getAuthTokenSilent()
         if (token) {
-          await new Promise<void>((resolve) =>
-            chrome.identity.removeCachedAuthToken({ token }, () => resolve())
-          )
+          // Best-effort: offline shouldn't block local sign-out. no-cors on
+          // purpose — accounts.google.com isn't in host_permissions, and the
+          // revoke only needs the request to LAND, not a readable response.
+          await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`, { mode: 'no-cors' }).catch(() => {})
+          await chrome.identity.clearAllCachedAuthTokens()
         }
         await chrome.storage.sync.set({ isSignedIn: false, userEmail: '', userName: '' })
         sendResponse({ success: true })
