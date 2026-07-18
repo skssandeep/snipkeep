@@ -107,9 +107,14 @@ function GateScreen({ onSignIn }: { onSignIn: () => Promise<void> }) {
 
   return (
     <div className="gate-screen">
-      <div className="gate-logo-mark" aria-hidden="true"><Bookmark size={40} strokeWidth={2.5} /></div>
-      <div className="gate-logo">Snip<span>Keep</span></div>
-      <p className="gate-tagline">Turn what you read<br />into what you remember.</p>
+      {/* One brand block (icon + name + tagline) held tight, then a clear gap
+          to the action — Law of Proximity: identity reads as one unit, the
+          button as a separate, deliberate step. */}
+      <div className="gate-brand">
+        <div className="gate-logo-mark" aria-hidden="true"><Bookmark size={40} strokeWidth={2.5} /></div>
+        <div className="gate-logo">Snip<span>Keep</span></div>
+        <p className="gate-tagline">Turn what you read<br />into what you remember.</p>
+      </div>
       <button className="btn-primary full-width" onClick={handleClick} disabled={loading}>
         {loading ? 'Connecting…' : 'Connect with Google'}
       </button>

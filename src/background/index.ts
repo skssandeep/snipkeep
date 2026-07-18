@@ -72,6 +72,21 @@ async function getAuthToken(): Promise<string> {
   return result.token
 }
 
+// Turn Chrome's terse identity errors into guidance the user can act on. The
+// big one: with NO Google account signed into Chrome at all, getAuthToken
+// rejects with "The user is not signed in." / "OAuth2 not granted or revoked."
+// — which says nothing about the actual fix (add an account to the browser).
+function friendlyAuthError(raw: string): string {
+  const m = raw.toLowerCase()
+  if (m.includes('not signed in') || m.includes('no accounts') || m.includes('not granted or revoked')) {
+    return 'No Google account is signed into Chrome. Click your profile picture at the top-right of the browser, add your Google account, then try Connect with Google again.'
+  }
+  if (m.includes('did not approve') || m.includes('access') && m.includes('denied') || m.includes('canceled') || m.includes('cancelled')) {
+    return 'Sign-in was cancelled. Click Connect with Google to try again.'
+  }
+  return raw
+}
+
 // Non-interactive — for background lookups that must never pop a sign-in prompt.
 async function getAuthTokenSilent(): Promise<string | null> {
   try {
@@ -1269,7 +1284,7 @@ chrome.runtime.onMessage.addListener(
         await chrome.storage.sync.set({ isSignedIn: true, userEmail: email, ...(name ? { userName: name } : {}) })
         sendResponse({ success: true, email, name })
       } catch (err) {
-        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Sign-in failed' })
+        sendResponse({ success: false, error: friendlyAuthError(err instanceof Error ? err.message : 'Sign-in failed') })
       }
     })()
 
