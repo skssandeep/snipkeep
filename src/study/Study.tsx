@@ -608,19 +608,25 @@ export function Study() {
                   {teachResult.missing.map((m, i) => {
                     const key = `m${i}`
                     const clip = teachClips[m.clipIndex]
+                    const open = teachRevealed.has(key)
+                    const toggle = () =>
+                      setTeachRevealed(prev => {
+                        const next = new Set(prev)
+                        if (next.has(key)) next.delete(key)
+                        else next.add(key)
+                        return next
+                      })
                     return (
                       <div key={key} className="study-answer">
                         <p className="study-answer-text">{m.question}</p>
-                        {teachRevealed.has(key) && clip ? (
-                          <p className="teach-source">{clip.text}</p>
-                        ) : clip ? (
-                          <button
-                            className="teach-reveal"
-                            onClick={() => setTeachRevealed(prev => new Set(prev).add(key))}
-                          >
-                            Show the clip ↓
-                          </button>
-                        ) : null}
+                        {clip && (
+                          <>
+                            {open && <p className="teach-source">{clip.text}</p>}
+                            <button className="teach-reveal" onClick={toggle} aria-expanded={open}>
+                              {open ? 'Hide the clip ↑' : 'Show the clip ↓'}
+                            </button>
+                          </>
+                        )}
                       </div>
                     )
                   })}
