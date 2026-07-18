@@ -54,7 +54,15 @@ type Tab = 'docs' | 'completed' | 'history'
 // Opens the full-page study tab (Retrieval Flip's session surface), optionally
 // filtered to one doc. Routed through the background — this popup runs in the
 // content-script context, which can't open chrome-extension:// URLs itself.
+// EXCEPT when the drawer is already open ON the study page (its document IS
+// the study page): then navigate this tab in place instead of stacking a
+// second study tab.
 function openStudy(destinationId?: string) {
+  const studyBase = chrome.runtime.getURL('src/study/')
+  if (window.location.href.startsWith(studyBase)) {
+    window.location.href = `${studyBase}index.html${destinationId ? `?doc=${encodeURIComponent(destinationId)}` : ''}`
+    return
+  }
   const msg: OpenStudyMessage = { type: 'OPEN_STUDY', payload: { destinationId } }
   chrome.runtime.sendMessage(msg).catch(() => {})
 }
