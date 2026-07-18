@@ -213,7 +213,8 @@ const STYLES = `
     width: 100%;
     box-sizing: border-box;
     min-height: 52px;
-    max-height: 140px;
+    max-height: 140px;  /* the JS auto-grow clamps here, then the box scrolls */
+    overflow-y: auto;
     resize: none;
     background: #18140F;
     border: 1px solid #2A2620;
@@ -356,6 +357,19 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
   const savingRef = useRef(false)
 
   useEffect(() => { if (showNote) noteRef.current?.focus() }, [showNote])
+
+  // Auto-grow the note box with its content — a fixed height guillotines the
+  // third line mid-glyph once voice input outruns it. Height tracks
+  // scrollHeight up to the CSS max-height (140px), after which the box
+  // scrolls; scrollTop chases the end so the newest words stay in view while
+  // dictating.
+  useEffect(() => {
+    const el = noteRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+    el.scrollTop = el.scrollHeight
+  }, [note, showNote])
 
   // VOICE_NOTE_UPDATE is the one message type used on the background→Toolbar
   // leg (see types.ts) — the background relays it via chrome.tabs.sendMessage
