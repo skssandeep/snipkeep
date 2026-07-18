@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Bookmark } from 'lucide-react'
-import { MdAutoAwesome, MdClose, MdKeyboardReturn, MdLock, MdLogout } from 'react-icons/md'
+import { MdAutoAwesome, MdClose, MdKeyboardReturn, MdLightbulb, MdLock, MdLogout } from 'react-icons/md'
 import type { GetUserProfileMessage, GetUserProfileResponse, SignOutMessage, DocDestination } from '../types'
-import { Popup, PrivacyLedger, TrustCard, AIAssistant } from '../popup/Popup'
+import { Popup, PrivacyLedger, TrustCard, AIAssistant, openStudy } from '../popup/Popup'
 import { ensureFontLoaded } from '../lib/fonts'
 import popupStyles from '../popup/popup.css?inline'
 import {
@@ -443,6 +443,15 @@ export function Drawer({ container, onClose, closeRef }: Props) {
             </SheetTitle>
 
             <div className="cn-header-actions">
+              {isSignedIn && (
+                <button
+                  className="cn-ai-btn"
+                  onClick={() => openStudy()}
+                  title="Study — practice your clips as questions"
+                >
+                  <MdLightbulb size={13} />
+                </button>
+              )}
               {isSignedIn && (
                 <button
                   className={`cn-ai-btn ${view === 'ai' ? 'active' : ''}`}

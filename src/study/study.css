@@ -174,6 +174,41 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .study-secondary:hover { color: var(--text); border-color: var(--text-3); }
 .study-grade .study-secondary { align-self: auto; }
 
+/* ── Doc picker (no ?doc in the URL): choose what to study ── */
+.study-pick-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  text-wrap: balance;
+}
+.study-pick-list { display: flex; flex-direction: column; gap: 10px; }
+.study-pick-card {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: 10px;
+  padding: 16px 20px;
+  color: var(--text);
+  transition: border-color 0.12s, background 0.12s;
+}
+.study-pick-card:hover { border-color: var(--border-active); background: var(--surface); }
+.study-pick-name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.study-pick-count { font-size: 13px; color: var(--text-3); flex-shrink: 0; }
+.study-pick-card.all { background: none; border-style: dashed; }
+.study-pick-card.all:hover { background: var(--surface); }
+
 /* ── End of session ── */
 .study-done-big { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; }
 .study-done-sub { font-size: 15px; color: var(--text-2); }

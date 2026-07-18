@@ -57,7 +57,7 @@ type Tab = 'docs' | 'completed' | 'history'
 // EXCEPT when the drawer is already open ON the study page (its document IS
 // the study page): then navigate this tab in place instead of stacking a
 // second study tab.
-function openStudy(destinationId?: string) {
+export function openStudy(destinationId?: string) {
   const studyBase = chrome.runtime.getURL('src/study/')
   if (window.location.href.startsWith(studyBase)) {
     window.location.href = `${studyBase}index.html${destinationId ? `?doc=${encodeURIComponent(destinationId)}` : ''}`

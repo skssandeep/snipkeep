@@ -30,7 +30,15 @@ function pickSession(clips: HistoryEntry[], log: StudyLog): HistoryEntry[] {
 
 type Phase = 'question' | 'answer'
 
+// Navigating (not in-page state) keeps the URL the source of truth for what's
+// being studied: the browser back button returns to the picker for free.
+function goToDoc(id: string) {
+  window.location.search = `?doc=${encodeURIComponent(id)}`
+}
+
 export function Study() {
+  // No ?doc → the picker ("choose what to study"); ?doc=all → everything;
+  // ?doc=<id> → that one doc.
   const docFilter = new URLSearchParams(window.location.search).get('doc')
 
   const [clips, setClips] = useState<HistoryEntry[]>([])
@@ -52,22 +60,36 @@ export function Study() {
       chrome.storage.local.get(['clips', 'studyLog']),
       chrome.storage.sync.get(['docs']),
     ]).then(([local, sync]) => {
-      const all = ((local.clips as HistoryEntry[]) ?? []).filter(
-        c => !docFilter || c.destinationId === docFilter
+      const scoped = ((local.clips as HistoryEntry[]) ?? []).filter(
+        c => !docFilter || docFilter === 'all' || c.destinationId === docFilter
       )
       const storedLog = (local.studyLog as StudyLog) ?? {}
-      setClips(all)
+      setClips(scoped)
       setDocs((sync.docs as DocDestination[]) ?? [])
       setLog(storedLog)
-      setSession(pickSession(all.filter(c => c.retrievalQuestion), storedLog))
+      setSession(pickSession(scoped.filter(c => c.retrievalQuestion), storedLog))
       setLoaded(true)
     })
   }, [docFilter])
 
   const docName = useMemo(() => {
-    if (!docFilter) return 'All docs'
+    if (!docFilter || docFilter === 'all') return 'All docs'
     return docs.find(d => d.id === docFilter)?.name ?? 'This doc'
   }, [docFilter, docs])
+
+  // Picker rows: every non-done doc with at least one question-bearing clip,
+  // with its count — "12 questions ready" tells the student the session is
+  // already prepared for them (zero setup, the whole anti-flashcard-app bet).
+  const pickerDocs = useMemo(() => {
+    if (docFilter) return []
+    return docs
+      .filter(d => !d.done)
+      .map(d => ({
+        doc: d,
+        count: clips.filter(c => c.destinationId === d.id && c.retrievalQuestion).length,
+      }))
+      .filter(x => x.count > 0)
+  }, [docFilter, docs, clips])
 
   const current = session[index]
   const done = loaded && (index >= session.length) && session.length > 0
@@ -93,24 +115,56 @@ export function Study() {
     <div className="study-page">
       <header className="study-header">
         <span className="study-wordmark">Snip<b>Keep</b></span>
-        <span className="study-doc-name">{docName}</span>
-        <nav className="study-modes">
-          <button
-            className={`study-mode${mode === 'study' ? ' on' : ''}`}
-            onClick={() => setMode('study')}
-          >
-            Study
-          </button>
-          <button
-            className={`study-mode${mode === 'browse' ? ' on' : ''}`}
-            onClick={() => setMode('browse')}
-          >
-            Browse
-          </button>
-        </nav>
+        {docFilter && <span className="study-doc-name">{docName}</span>}
+        {docFilter && (
+          <nav className="study-modes">
+            <button
+              className={`study-mode${mode === 'study' ? ' on' : ''}`}
+              onClick={() => setMode('study')}
+            >
+              Study
+            </button>
+            <button
+              className={`study-mode${mode === 'browse' ? ' on' : ''}`}
+              onClick={() => setMode('browse')}
+            >
+              Browse
+            </button>
+          </nav>
+        )}
       </header>
 
-      {mode === 'browse' ? (
+      {!docFilter ? (
+        <main className="study-main center">
+          {pickerDocs.length === 0 ? (
+            <p className="study-empty">
+              No questions anywhere yet.<br />
+              Save a few clips with an AI provider connected (drawer → ✨ AI) and
+              they'll each arrive with a question to practice on.
+            </p>
+          ) : (
+            <>
+              <h1 className="study-pick-title">What are you studying?</h1>
+              <div className="study-pick-list">
+                {pickerDocs.map(({ doc, count }) => (
+                  <button key={doc.id} className="study-pick-card" onClick={() => goToDoc(doc.id)}>
+                    <span className="study-pick-name">{doc.name}</span>
+                    <span className="study-pick-count">{count} question{count !== 1 ? 's' : ''} ready</span>
+                  </button>
+                ))}
+                {pickerDocs.length > 1 && (
+                  <button className="study-pick-card all" onClick={() => goToDoc('all')}>
+                    <span className="study-pick-name">Everything</span>
+                    <span className="study-pick-count">
+                      {pickerDocs.reduce((n, x) => n + x.count, 0)} questions across {pickerDocs.length} docs
+                    </span>
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </main>
+      ) : mode === 'browse' ? (
         <main className="study-main browse">
           {clips.length === 0 ? (
             <p className="study-empty">Nothing saved here yet.</p>
