@@ -333,6 +333,10 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 }
 .teach-transcript.empty { color: var(--text-3); }
 .teach-group { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+/* Result cards are list items, not the single answer-check hero — tighter
+   padding so a five-card list scans as a list. */
+.teach-group .study-answer { padding: 16px 20px; gap: 8px; }
+.teach-group .study-answer-text { font-size: 15px; }
 .teach-group-title {
   font-size: 13px;
   font-weight: 700;
@@ -354,10 +358,24 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-2);
-  border-left: 2px solid var(--border-active);
+  border-left: 2px solid var(--accent);
   padding-left: 12px;
 }
-.teach-reveal { margin-top: 0; }
+/* Quiet inline reveal — the popup's .history-reveal doesn't exist in this
+   document, and an unstyled <button> renders as a native white bar. */
+.teach-reveal {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 0.12s;
+}
+.teach-reveal:hover { color: var(--accent); }
 
 /* ── Browse: the library, deliberately plainer than the study flow ── */
 .study-main.browse { padding-top: 32px; }

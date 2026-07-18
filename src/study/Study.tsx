@@ -615,10 +615,10 @@ export function Study() {
                           <p className="teach-source">{clip.text}</p>
                         ) : clip ? (
                           <button
-                            className="history-reveal teach-reveal"
+                            className="teach-reveal"
                             onClick={() => setTeachRevealed(prev => new Set(prev).add(key))}
                           >
-                            Show the clip
+                            Show the clip ↓
                           </button>
                         ) : null}
                       </div>
