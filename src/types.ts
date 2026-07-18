@@ -42,6 +42,11 @@ export interface HistoryEntry {
   // sourceUrl on purpose — sourceUrl is also the page's identity for
   // grouping/dedup/archiving, and a baked-in t= param would break all three.
   videoTime?: number
+  // Retrieval Flip: one AI-drafted question this clip answers, patched in
+  // fire-and-forget after the save. Absent = no AI key at save time, image
+  // clip, clip too short, or the draft failed — all render text-first as
+  // before, so this field's presence alone gates the question-first UI.
+  retrievalQuestion?: string
 }
 
 // A hyperlink found inside the selected text — character range into the clip's

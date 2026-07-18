@@ -12,6 +12,7 @@ import {
   MdEdit,
   MdEvent,
   MdFilterList,
+  MdHelpOutline,
   MdInbox,
   MdLightbulb,
   MdLink,
@@ -1489,6 +1490,10 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   // The bottom "Clear" control swaps to an inline "are you sure?" when armed.
   const [clearConfirming, setClearConfirming] = useState(false)
   const [query, setQuery] = useState('')
+  // Retrieval Flip: cards whose clip text has been revealed this session
+  // (keyed by the card's render key). Deliberately NOT persisted — next
+  // popup open, the question leads again and earns another recall attempt.
+  const [revealed, setRevealed] = useState<Set<string>>(new Set())
   // Page url → Wayback Machine snapshot url. Populated by the background's
   // link-rot insurance a few seconds after a save; listened for live so the
   // "🏛 Archived" link can appear without reopening the drawer.
@@ -1733,13 +1738,36 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
   function clipCard(entry: HistoryEntry, key: string, resurfaced = false) {
     const doc = docHref(entry)
     const archiveUrl = archivedUrls[entry.sourceUrl]
+    // Retrieval Flip: question-first only when BROWSING — an active search
+    // must show the matched text (the user is locating, not studying). The
+    // question block stays visible after reveal so the see-question →
+    // attempt-recall → check-against-clip beat reads in order.
+    const hasQuestion = !!entry.retrievalQuestion && !query.trim()
+    const flipped = hasQuestion && !revealed.has(key)
     return (
       <div
         key={key}
         className={`history-item${resurfaced ? ' resurfaced' : ''}${feedback?.key === key ? ' show-actions' : ''}`}
       >
-        <div className="history-text">{entry.text.slice(0, 80)}{entry.text.length > 80 ? '…' : ''}</div>
-        {entry.note && (
+        {hasQuestion && (
+          <div className="history-question">
+            <MdHelpOutline size={14} className="history-question-icon" />
+            <span>{entry.retrievalQuestion}</span>
+          </div>
+        )}
+        {flipped ? (
+          <button
+            className="history-reveal"
+            onClick={() => setRevealed(prev => new Set(prev).add(key))}
+          >
+            Show the clip
+          </button>
+        ) : (
+          <div className="history-text">{entry.text.slice(0, 80)}{entry.text.length > 80 ? '…' : ''}</div>
+        )}
+        {/* The margin note usually paraphrases the clip, so while the card is
+            flipped it would hand over the answer — hidden until reveal. */}
+        {entry.note && !flipped && (
           <div className="history-note"><MdSubdirectoryArrowRight size={13} /> {renderNoteWithTags(entry.note, setQuery)}</div>
         )}
         <div className="history-meta">

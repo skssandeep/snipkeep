@@ -1030,13 +1030,17 @@ async function handleSave(payload: SaveNoteMessage['payload']) {
   // its toast. Skips pages already snapshotted; silent on any failure.
   ensureArchived(url).catch(() => {})
 
+  // Hoisted so the fire-and-forget question draft below can find this exact
+  // entry again — savedAt is the archive's de-facto primary key.
+  const savedAt = Date.now()
+
   await addToArchive({
     text: text.slice(0, 1000),
     sourceTitle: title,
     sourceUrl: url,
     destinationName,
     destinationId,
-    savedAt: Date.now(),
+    savedAt,
     ...(trimmedNote ? { note: trimmedNote.slice(0, 200) } : {}),
     // Bookmark for Living Resurface — lets it find this exact clip again later
     // and add a freshly dated note right after it, even as the doc grows.
@@ -1044,6 +1048,11 @@ async function handleSave(payload: SaveNoteMessage['payload']) {
     // Lecture-timestamp clipping — drives the History card's Source deep link.
     ...(videoTime !== undefined ? { videoTime } : {}),
   })
+
+  // Retrieval Flip — fire-and-forget like ensureArchived above: a missing AI
+  // key, rejected key, or API failure silently yields no question, and the
+  // save's response never waits on this.
+  draftRetrievalQuestion(text, savedAt).catch(() => {})
 
   await bumpDocStats(destinationId)
 }
@@ -1660,6 +1669,35 @@ async function callAI(systemPrompt: string, userPrompt: string): Promise<string>
 // Explicitly asks for exactly 3 questions, not a written reflection — the
 // point (see docs/IDEAS.md #3) is the student does the thinking; the model
 // only points at where to look, never writes the answer for them.
+// Retrieval Flip: draft ONE question this clip answers, then patch it onto the
+// already-saved archive entry. Called fire-and-forget from handleSave — every
+// failure path (no key, API error, empty/oversized reply) just leaves the
+// entry question-less, which the History card renders exactly as before.
+async function draftRetrievalQuestion(text: string, savedAt: number) {
+  if (text.trim().length < 40) return  // too short to make a non-trivial question
+
+  const system =
+    'You write one retrieval-practice question for a student. Given a saved clip of text, write ' +
+    'exactly ONE short question (under 120 characters) that the clip itself answers. The question ' +
+    'must be answerable from the clip alone, must not contain the answer, and must not be a ' +
+    'yes/no question. Reply with only the question.'
+  const raw = await callAI(system, text.slice(0, 1000))
+  const question = raw
+    .split('\n')
+    .map((line) => line.replace(/^[-*\d.)\s]+/, '').trim())
+    .filter(Boolean)[0]
+  if (!question || question.length > 200) return
+
+  // Fresh re-read before writing back — the AI call was in flight, and other
+  // saves may have changed `clips` since (same pattern as handleAddDocNote).
+  const result = await chrome.storage.local.get(['clips'])
+  const clips = (result.clips as HistoryEntry[]) ?? []
+  const idx = clips.findIndex(c => c.savedAt === savedAt)
+  if (idx === -1) return  // entry deleted (or aged past ARCHIVE_MAX) meanwhile
+  clips[idx] = { ...clips[idx], retrievalQuestion: question }
+  await chrome.storage.local.set({ clips })
+}
+
 async function handleAskFollowUp(text: string): Promise<string[]> {
   const system =
     'You help a student think more deeply about something they just saved while researching. ' +
