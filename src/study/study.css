@@ -209,6 +209,20 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .study-pick-card.all { background: none; border-style: dashed; }
 .study-pick-card.all:hover { background: var(--surface); }
 
+/* ── Connect-AI hint: the upgrade path, shown exactly where its absence is
+   felt (a picker/browse full of "no questions yet"). Quiet card, accent only
+   on the left rule — informational, not an alarm. ── */
+.study-hint {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.study-hint p { font-size: 14px; color: var(--text-2); line-height: 1.6; }
+
 /* ── End of session ── */
 .study-done-big { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; }
 .study-done-sub { font-size: 15px; color: var(--text-2); }

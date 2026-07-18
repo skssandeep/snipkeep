@@ -36,6 +36,12 @@ function openDrawer() {
   drawerRoot = root
 }
 
+// For the page's own CTAs (e.g. the connect-AI hint) — same drawer the icon
+// click opens, just triggered from inside the page.
+export function openDrawerFromPage() {
+  if (!document.getElementById(DRAWER_HOST_ID)) openDrawer()
+}
+
 export function initDrawerToggle() {
   chrome.runtime.onMessage.addListener((message: ToggleDrawerMessage) => {
     if (message.type !== 'TOGGLE_DRAWER') return

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { DocDestination, HistoryEntry } from '../types'
+import { openDrawerFromPage } from './drawer'
 
 // One study attempt's latest outcome per clip (keyed by String(savedAt)).
 // Deliberately tiny — Phase 2 (spaced scheduling) can grow richer state, but
@@ -55,11 +56,28 @@ export function Study() {
   const [gotCount, setGotCount] = useState(0)
   const [mode, setMode] = useState<'study' | 'browse'>('study')
 
+  // 'unknown' until the first read so the connect hint can't flash before we
+  // know; 'justConnected' is its own state so the page can acknowledge the
+  // connect (and the backfill it triggers) instead of the hint just vanishing.
+  const [aiState, setAiState] = useState<'unknown' | 'no' | 'yes' | 'justConnected'>('unknown')
+
+  useEffect(() => {
+    const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area !== 'local' || !('aiConfig' in changes)) return
+      setAiState(prev =>
+        changes.aiConfig.newValue ? (prev === 'no' ? 'justConnected' : 'yes') : 'no'
+      )
+    }
+    chrome.storage.onChanged.addListener(onChanged)
+    return () => chrome.storage.onChanged.removeListener(onChanged)
+  }, [])
+
   useEffect(() => {
     Promise.all([
-      chrome.storage.local.get(['clips', 'studyLog']),
+      chrome.storage.local.get(['clips', 'studyLog', 'aiConfig']),
       chrome.storage.sync.get(['docs']),
     ]).then(([local, sync]) => {
+      setAiState(local.aiConfig ? 'yes' : 'no')
       const scoped = ((local.clips as HistoryEntry[]) ?? []).filter(
         c => !docFilter || docFilter === 'all' || c.destinationId === docFilter
       )
@@ -103,6 +121,29 @@ export function Study() {
 
   const current = session[index]
   const done = loaded && (index >= session.length) && session.length > 0
+
+  // A new user has clips but no AI key: without this, the picker is a wall of
+  // "no questions yet" with no explanation and no way out. The hint names the
+  // one-time setup and its full payoff (the backfill covers past clips too);
+  // after connecting, it acknowledges the work now happening instead of
+  // silently disappearing.
+  const connectHint =
+    aiState === 'no' ? (
+      <div className="study-hint">
+        <p>
+          Questions are drafted by your own AI key — SnipKeep never sees it.
+          Connect one and every clip you've saved, past and future, gets a
+          practice question automatically.
+        </p>
+        <button className="study-secondary" onClick={openDrawerFromPage}>
+          Open the drawer → tap ✨ AI
+        </button>
+      </div>
+    ) : aiState === 'justConnected' ? (
+      <div className="study-hint">
+        <p>Connected — questions are being drafted for your clips right now. Check back in a minute.</p>
+      </div>
+    ) : null
 
   async function grade(result: 'got' | 'miss') {
     if (!current) return
@@ -175,11 +216,13 @@ export function Study() {
                   </button>
                 )}
               </div>
+              {connectHint}
             </>
           )}
         </main>
       ) : mode === 'browse' ? (
         <main className="study-main browse">
+          {session.length === 0 && connectHint}
           {clips.length === 0 ? (
             <p className="study-empty">Nothing saved here yet.</p>
           ) : (
