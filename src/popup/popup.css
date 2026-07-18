@@ -93,6 +93,8 @@ a { color: inherit; text-decoration: none; }
 .history-item:focus-visible,
 .hist-action:focus-visible,
 .history-reveal:focus-visible,
+.ai-provider-select:focus-visible,
+.ai-provider-open:focus-visible,
 .privacy-back:focus-visible,
 .privacy-open-docs:focus-visible,
 .privacy-trust-link:focus-visible,
@@ -1477,24 +1479,75 @@ a { color: inherit; text-decoration: none; }
   flex-direction: column;
   gap: var(--space-2);
 }
+/* Provider row = one card, TWO separated affordances: the radio-select area
+   (grows to fill) and the ↗ key-page link, divided by a hairline so each
+   clearly owns its click. Selecting never navigates; navigating never
+   selects. */
 .ai-provider-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: stretch;
   width: 100%;
-  padding: var(--space-3) var(--space-4);
   background: var(--card);
   border: 1px solid var(--card-edge);
   border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ai-provider-card:hover { border-color: var(--border-active); }
+.ai-provider-card.active { border-color: var(--accent); background: var(--accent-dim); }
+.ai-provider-select {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  background: none;
+  border: none;
   color: var(--text);
   font-family: var(--font);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
 }
-.ai-provider-card:hover { border-color: var(--border-active); background: var(--card-2); }
-.ai-provider-card.active { border-color: var(--accent); }
+.ai-provider-select:hover { background: rgba(255,255,255,0.03); }
+/* The radio dot — state shown by form (a filled dot), not color alone. */
+.ai-radio {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-active);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s;
+}
+.ai-provider-card.active .ai-radio { border-color: var(--accent); }
+.ai-provider-card.active .ai-radio::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .ai-provider-name { font-size: 14px; font-weight: 600; }
-.ai-provider-open { color: var(--text-3); display: flex; }
+.ai-provider-open {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-4);
+  border-left: 1px solid var(--card-edge);
+  color: var(--text-3);
+  transition: color 0.12s, background 0.12s;
+}
+.ai-provider-open:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+.ai-key-page-link {
+  color: var(--accent);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.ai-key-page-link:hover { text-decoration: underline; }
 
 .ai-key-entry {
   display: flex;

@@ -2250,14 +2250,17 @@ export function AIAssistant({ onBack }: { onBack: () => void }) {
     return () => chrome.storage.onChanged.removeListener(handler)
   }, [])
 
+  // Selection ONLY — no navigation side effect. The old version also
+  // window.open()ed the provider's key page on click, which collapsed two
+  // actions into one control: a user comparing providers got yanked to an
+  // external site for what read as picking a radio option. Navigation now
+  // lives in its own explicit affordance (the ↗ link on each card and in the
+  // key-entry hint), so choosing and leaving are separate, reversible acts.
   function selectProvider(p: (typeof AI_PROVIDERS)[number]) {
     setSelected(p)
     setKeyInput('')
     setStatus('idle')
     setError('')
-    // Standard web API — works directly from the content-script context,
-    // no chrome.tabs messaging (unavailable here) needed.
-    window.open(p.keyUrl, '_blank', 'noopener,noreferrer')
   }
 
   async function handleConnect() {
@@ -2311,23 +2314,45 @@ export function AIAssistant({ onBack }: { onBack: () => void }) {
         </div>
       ) : (
         <>
-          <div className="ai-provider-list">
+          {/* A real radio group: clicking a row selects, nothing else. The ↗
+              is its own separated link (a SIBLING of the select button inside
+              the card wrapper — never nested, per the button-in-button
+              gotcha), so leaving for the provider's key page is always the
+              user's explicit choice, available before OR after selecting. */}
+          <div className="ai-provider-list" role="radiogroup" aria-label="AI provider">
             {AI_PROVIDERS.map((p) => (
-              <button
-                key={p.id}
-                className={`ai-provider-card ${selected?.id === p.id ? 'active' : ''}`}
-                onClick={() => selectProvider(p)}
-              >
-                <span className="ai-provider-name">{p.name}</span>
-                <span className="ai-provider-open"><MdOpenInNew size={13} /></span>
-              </button>
+              <div key={p.id} className={`ai-provider-card ${selected?.id === p.id ? 'active' : ''}`}>
+                <button
+                  className="ai-provider-select"
+                  role="radio"
+                  aria-checked={selected?.id === p.id}
+                  onClick={() => selectProvider(p)}
+                >
+                  <span className="ai-radio" aria-hidden="true" />
+                  <span className="ai-provider-name">{p.name}</span>
+                </button>
+                <a
+                  className="ai-provider-open"
+                  href={p.keyUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Open ${p.name}'s API key page in a new tab`}
+                  title="Open the API key page"
+                >
+                  <MdOpenInNew size={14} />
+                </a>
+              </div>
             ))}
           </div>
 
           {selected && (
             <div className="ai-key-entry">
               <p className="hint">
-                Opened {selected.name}'s API key page in a new tab — create a key there, then paste it below.
+                Create a key on{' '}
+                <a className="ai-key-page-link" href={selected.keyUrl} target="_blank" rel="noreferrer">
+                  {selected.name}'s key page <MdOpenInNew size={11} />
+                </a>
+                , then paste it below.
               </p>
               <input
                 className="input mono-input"
