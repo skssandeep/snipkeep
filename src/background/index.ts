@@ -38,6 +38,8 @@ import type {
   AskFollowUpResponse,
   SummarizeTopicMessage,
   SummarizeTopicResponse,
+  OpenStudyMessage,
+  OpenStudyResponse,
   UpdateBibliographyMessage,
   UpdateBibliographyResponse,
 } from '../types'
@@ -1749,6 +1751,29 @@ chrome.runtime.onMessage.addListener(
         sendResponse({ success: true, summary })
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Request failed' })
+      }
+    })()
+
+    return true
+  }
+)
+
+// Retrieval Flip's study surface — a full-page extension tab (same bundling
+// pattern as the voice tab: not in the manifest, listed in vite.config's
+// additionalInputs). Opened here because content-script contexts can't
+// navigate to chrome-extension:// URLs themselves.
+chrome.runtime.onMessage.addListener(
+  (message: OpenStudyMessage, _sender, sendResponse: (r: OpenStudyResponse) => void) => {
+    if (message.type !== 'OPEN_STUDY') return false
+
+    ;(async () => {
+      try {
+        const dest = message.payload.destinationId
+        const url = chrome.runtime.getURL(`src/study/index.html${dest ? `?doc=${encodeURIComponent(dest)}` : ''}`)
+        await chrome.tabs.create({ url })
+        sendResponse({ success: true })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Could not open the study page' })
       }
     })()
 

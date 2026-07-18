@@ -12,7 +12,7 @@ export default defineConfig({
       // manifest.json's schema — chrome.tabs.create() just takes a URL
       // string at runtime — so it needs to be listed here explicitly or the
       // plugin never bundles it into dist/.
-      additionalInputs: ['src/voice/index.html'],
+      additionalInputs: ['src/voice/index.html', 'src/study/index.html'],
     }),
   ],
   resolve: {

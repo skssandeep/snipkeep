@@ -43,12 +43,21 @@ import type {
   AskFollowUpResponse,
   SummarizeTopicMessage,
   SummarizeTopicResponse,
+  OpenStudyMessage,
   UpdateBibliographyMessage,
   UpdateBibliographyResponse,
 } from '../types'
 import { timedVideoUrl } from '../lib/video'
 
 type Tab = 'docs' | 'completed' | 'history'
+
+// Opens the full-page study tab (Retrieval Flip's session surface), optionally
+// filtered to one doc. Routed through the background — this popup runs in the
+// content-script context, which can't open chrome-extension:// URLs itself.
+function openStudy(destinationId?: string) {
+  const msg: OpenStudyMessage = { type: 'OPEN_STUDY', payload: { destinationId } }
+  chrome.runtime.sendMessage(msg).catch(() => {})
+}
 
 function timeAgo(ts: number): string {
   const s = Math.floor((Date.now() - ts) / 1000)
@@ -774,6 +783,9 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
                           onMarkDone={() => { markDone(doc.id); setMenuOpenFor(null) }}
                           onRemove={() => { handleRemoveDoc(doc.id); setMenuOpenFor(null) }}
                           onSummarize={aiConnected ? () => { handleSummarize(doc); setMenuOpenFor(null) } : undefined}
+                          onStudy={allClips.some(c => c.destinationId === doc.id && c.retrievalQuestion)
+                            ? () => { openStudy(doc.id); setMenuOpenFor(null) }
+                            : undefined}
                           onClose={() => setMenuOpenFor(null)}
                         />
                       )}
@@ -1126,6 +1138,7 @@ function DocMenu({
   onMarkDone,
   onRemove,
   onSummarize,
+  onStudy,
   onClose,
 }: {
   docName: string
@@ -1140,6 +1153,9 @@ function DocMenu({
   // an inert menu item invites a dead click and needs its own explanation;
   // omitting it keeps the feature genuinely invisible until opted in.
   onSummarize?: () => void
+  // Undefined until this doc has at least one clip with a retrieval
+  // question — same invisible-until-real rule as onSummarize.
+  onStudy?: () => void
   onClose: () => void
 }) {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -1182,6 +1198,11 @@ function DocMenu({
           <span className="card-menu-icon"><MdEvent /></span>Set a deadline
         </button>
       )}
+      {onStudy && (
+        <button className="card-menu-item" onClick={onStudy}>
+          <span className="card-menu-icon"><MdLightbulb /></span>Study
+        </button>
+      )}
       {onSummarize && (
         <button className="card-menu-item" onClick={onSummarize}>
           <span className="card-menu-icon"><MdAutoAwesome /></span>Summarize
@@ -1213,6 +1234,7 @@ function HistoryCardMenu({
   onAddNote,
   onRemove,
   onAskFollowUp,
+  onStudyDoc,
   onClose,
 }: {
   archiveUrl?: string
@@ -1221,6 +1243,8 @@ function HistoryCardMenu({
   // Undefined entirely (not disabled) when no AI key is connected — see the
   // matching note on DocMenu's onSummarize.
   onAskFollowUp?: () => void
+  // Undefined when this clip has no retrieval question (nothing to study yet).
+  onStudyDoc?: () => void
   onClose: () => void
 }) {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -1254,6 +1278,11 @@ function HistoryCardMenu({
       {onAskFollowUp && (
         <button className="card-menu-item" onClick={onAskFollowUp}>
           <span className="card-menu-icon"><MdAutoAwesome /></span>Follow-up questions
+        </button>
+      )}
+      {onStudyDoc && (
+        <button className="card-menu-item" onClick={onStudyDoc}>
+          <span className="card-menu-icon"><MdLightbulb /></span>Study this doc
         </button>
       )}
       {/* Destructive, so divider-separated (distance from the safe actions) and
@@ -1839,6 +1868,9 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
               } : undefined}
               onRemove={() => { removeClip(entry); setCardMenuOpenFor(null) }}
               onAskFollowUp={aiConnected ? () => { handleAskFollowUp(entry); setCardMenuOpenFor(null) } : undefined}
+              onStudyDoc={entry.retrievalQuestion && entry.destinationId
+                ? () => { openStudy(entry.destinationId); setCardMenuOpenFor(null) }
+                : undefined}
               onClose={() => setCardMenuOpenFor(null)}
             />
           )}

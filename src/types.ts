@@ -295,6 +295,20 @@ export interface SummarizeTopicResponse {
   error?: string
 }
 
+// Retrieval Flip's study surface: opens the full-page study tab
+// (src/study/index.html), optionally pre-filtered to one destination doc.
+// The tab must be opened by the background — content-script contexts can't
+// navigate to chrome-extension:// URLs themselves.
+export interface OpenStudyMessage {
+  type: 'OPEN_STUDY'
+  payload: { destinationId?: string }
+}
+
+export interface OpenStudyResponse {
+  success: boolean
+  error?: string
+}
+
 // docs/IDEAS.md #2 — a "Works Cited" section, auto-maintained at the true end
 // of the Doc, rebuilt fresh from the full deduplicated + alphabetized set of
 // citations every time one is added (not appended incrementally — see the

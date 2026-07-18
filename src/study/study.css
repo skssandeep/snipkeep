@@ -1,0 +1,203 @@
+/* Study page — a separate document from the popup, so tokens are COPIED from
+   popup.css :root (same gotcha as Toolbar.tsx's hardcoded hexes, documented
+   in CLAUDE.md): when popup.css tokens change, update these by hand.
+
+   Design stance: one thing on screen at a time. The question is the page;
+   everything else (progress, header) whispers. No sidebars, no counters
+   ticking, no streaks — attention is the scarcest resource in studying and
+   this page spends none of it on chrome. */
+
+:root {
+  --bg: #100D08;
+  --surface: #18140F;
+  --card: #24201A;
+  --card-edge: rgba(255, 255, 255, 0.05);
+  --border: #2A2620;
+  --border-active: #463F31;
+  --accent: #F4E151;
+  --accent-hover: #FAEE91;
+  --accent-soft: rgba(244, 225, 81, 0.18);
+  --accent-ink: #1C1608;
+  --text: #EAE8E3;
+  --text-2: #ADA9A1;
+  --text-3: #979189;
+  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; cursor: pointer; }
+button:focus-visible, textarea:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.study-page { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ── Header: present but quiet ── */
+.study-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.study-wordmark { font-size: 15px; font-weight: 800; letter-spacing: -0.4px; }
+.study-wordmark b { color: var(--accent); font-weight: 800; }
+.study-doc-name {
+  font-size: 13px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.study-modes { margin-left: auto; display: flex; gap: 4px; }
+.study-mode {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 7px;
+  transition: color 0.12s, background 0.12s;
+}
+.study-mode:hover { color: var(--text); }
+.study-mode.on { color: var(--text); background: var(--card); }
+
+/* ── The single column ── */
+.study-main {
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 48px 24px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.study-main.center { flex: 1; justify-content: center; }
+
+.study-progress {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+}
+
+.study-question {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.study-attempt {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+  outline: none;
+  transition: border-color 0.12s;
+}
+.study-attempt:focus { border-color: var(--border-active); }
+.study-attempt::placeholder { color: var(--text-3); }
+
+/* What the student typed, kept visible above the answer for comparison. */
+.study-attempt-echo {
+  font-size: 14px;
+  font-style: italic;
+  color: var(--text-2);
+  border-left: 2px solid var(--border-active);
+  padding-left: 12px;
+  white-space: pre-line;
+}
+
+.study-answer {
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: 10px;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.study-answer-text { font-size: 16px; line-height: 1.65; }
+.study-answer-note { font-size: 13px; font-style: italic; color: var(--accent); white-space: pre-line; }
+.study-answer-meta { font-size: 12px; }
+.study-answer-meta a { color: var(--text-3); text-decoration: none; }
+.study-answer-meta a:hover { color: var(--text); text-decoration: underline; }
+
+.study-grade { display: flex; gap: 12px; justify-content: flex-end; }
+
+.study-primary {
+  align-self: flex-start;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 9px;
+  padding: 11px 22px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.1px;
+  transition: background 0.12s;
+}
+.study-primary:hover { background: var(--accent-hover); }
+.study-grade .study-primary { align-self: auto; }
+
+.study-secondary {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--border-active);
+  border-radius: 9px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: color 0.12s, border-color 0.12s;
+}
+.study-secondary:hover { color: var(--text); border-color: var(--text-3); }
+.study-grade .study-secondary { align-self: auto; }
+
+/* ── End of session ── */
+.study-done-big { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; }
+.study-done-sub { font-size: 15px; color: var(--text-2); }
+
+.study-empty {
+  font-size: 15px;
+  color: var(--text-2);
+  line-height: 1.7;
+  text-align: center;
+}
+
+/* ── Browse: the library, deliberately plainer than the study flow ── */
+.study-main.browse { padding-top: 32px; }
+.browse-card {
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: 10px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.browse-text { font-size: 15px; line-height: 1.65; }
+.browse-note { font-size: 13px; font-style: italic; color: var(--accent); white-space: pre-line; }
+.browse-meta { font-size: 12px; }
+.browse-meta a { color: var(--text-3); text-decoration: none; }
+.browse-meta a:hover { color: var(--text); text-decoration: underline; }

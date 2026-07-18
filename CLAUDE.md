@@ -110,6 +110,7 @@ Add doc note → content → ADD_DOC_NOTE     → background → Google Docs API
 Works Cited  → content → UPDATE_BIBLIOGRAPHY → background → Google Docs API (delete old block, rebuild at doc end)
 AI connect   → content → CONNECT_AI / DISCONNECT_AI → background (validate key via provider's models endpoint, store/remove aiConfig)
 AI actions   → content → ASK_FOLLOWUP / SUMMARIZE_TOPIC → background → user's own AI provider (callAI adapter)
+Study page   → content → OPEN_STUDY → background → chrome.tabs.create → study tab (src/study/, full-page extension tab reading chrome.storage directly; bundled via vite additionalInputs like the voice tab)
 Drawer auth  → content → GET_USER_PROFILE / GET_DOC_TITLE / SIGN_IN / SIGN_OUT → background (chrome.identity)
 Voice note   → content → START_VOICE_NOTE → background → chrome.tabs.create → voice tab (src/voice/)
              → voice tab → VOICE_RECOGNITION_EVENT → background → VOICE_NOTE_UPDATE (explicit frameId) → content
@@ -136,6 +137,7 @@ All message types are in `src/types.ts`.
 | `local` | `worksCitedBookmarks` | `Record<destId, namedRangeId>` — the current Works Cited block per doc, so the next cite can delete-and-rebuild it |
 | `local` | `aiConfig` | `{ provider, apiKey }` — BYO-AI key. **Deliberately `local`, not `sync`**: a raw API key shouldn't ride Google's sync servers. Its presence alone gates every AI menu item (absent = feature invisible). |
 | `local` | `reflectionNudgeDismissed` | Reflection Nudge dismissal state. (`triageDismissedDay` may linger from the removed Soft Triage/Someday feature — no longer read.) |
+| `local` | `studyLog` | `Record<savedAt, {at, result: 'got'\|'miss'}>` — latest study outcome per clip (Retrieval Flip's study page; misses lead the next session) |
 
 `HistoryEntry` fields beyond the basics: `note?`, `namedRangeId?` (Doc bookmark), `cited?`, `videoTime?` (lecture-timestamp clipping, seconds). (A `someday?` field may linger on stored entries from the removed Soft Triage feature — no longer read.) Legacy `docId` (string, sync) is migrated to `docs: [{ id, name, active }]` on read in both background and content script.
 
