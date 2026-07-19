@@ -11,13 +11,17 @@
   --bg: #100D08;
   --surface: #18140F;
   --card: #24201A;
+  --card-2: #2F2B25;
   --card-edge: rgba(255, 255, 255, 0.05);
   --border: #2A2620;
   --border-active: #463F31;
   --accent: #F4E151;
   --accent-hover: #FAEE91;
+  --accent-dim: rgba(244, 225, 81, 0.10);
   --accent-soft: rgba(244, 225, 81, 0.18);
   --accent-ink: #1C1608;
+  --danger: #FF6B6B;
+  --warn: #E78A45;
   --text: #EAE8E3;
   --text-2: #ADA9A1;
   --text-3: #979189;
@@ -193,10 +197,30 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 /* "N questions come back tomorrow" — information, never pressure. */
 .study-next-due { font-size: 15px; color: var(--text-3); }
 
+/* A secondary section header (e.g. "How solid is it?") — related to
+   .study-pick-title but visibly subordinate to it: normal case, smaller,
+   dimmer. Deliberately NOT Outline's .ol-zone-title (tiny uppercase caption)
+   — borrowing an unrelated feature's label style made two sibling sections
+   on the same page read as two different UI languages. */
+.study-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-2);
+  letter-spacing: -0.1px;
+}
+
 /* ── Knowledge Heat: collected vs recalled per doc, two bars on one scale —
    the visual gap IS the message. No percentages, no red, no streaks;
    healthy ratios earn silence. Rows click through to the doc's session. ── */
-.heat { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; width: 100%; }
+.heat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  width: 100%;
+}
 .heat-row {
   display: flex;
   flex-direction: column;
@@ -245,102 +269,109 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   font-size: 15px;
   font-weight: 600;
 }
-.study-warmup-sun { color: var(--accent); font-size: 17px; }
-.study-warmup-go { color: var(--accent); font-size: 12px; }
+.study-warmup-sun { color: var(--accent); font-size: 18px; flex-shrink: 0; }
+.study-warmup-go { color: var(--accent); font-size: 17px; flex-shrink: 0; }
 .study-warmup.caught-up {
   background: var(--card);
   border-color: var(--card-edge);
   cursor: default;
 }
 .study-warmup.caught-up .study-warmup-main { font-weight: 500; color: var(--text-3); }
-.study-warmup-check { color: var(--text-3); }
+.study-warmup-check { color: var(--text-3); font-size: 18px; flex-shrink: 0; }
 .study-warmup-close {
   flex-shrink: 0;
+  display: inline-flex;
   background: none;
   border: none;
   color: var(--text-3);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1;
   padding: 4px;
   border-radius: 6px;
   transition: color 0.12s, background 0.12s;
 }
 .study-warmup-close:hover { color: var(--text); background: rgba(255,255,255,0.06); }
-.study-pick-list { display: flex; flex-direction: column; gap: 10px; }
-.study-pick-group { display: flex; flex-direction: column; gap: 4px; }
-/* Exam Forge entry — appears only when a doc has a deadline + material + key. */
-.study-forge-row {
-  align-self: flex-start;
-  background: none;
-  border: none;
-  padding: 4px 8px;
-  margin-left: 12px;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-3);
-  cursor: pointer;
-  border-radius: 7px;
-  transition: color 0.12s;
-}
-.study-forge-row:hover { color: var(--accent); }
+.study-pick-list { display: flex; flex-direction: column; gap: 12px; }
+.study-pick-group { display: flex; flex-direction: column; }
 
-/* Study Pact: the next planned slot + the Google Calendar / .ics buttons. */
-.study-pact-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-left: 12px; }
-.study-pact-next {
-  background: none;
-  border: none;
-  padding: 4px 8px;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-3);
-  cursor: pointer;
-  border-radius: 7px;
-  transition: color 0.12s;
-  text-align: left;
+/* Exam Forge / Study Pact live in ONE footer zone below the doc row, inside
+   the SAME visual card (see .has-extras below) — never loose text dangling
+   under a disconnected box, which read as broken/cluttered. A thin top
+   border stands in for the divider between the primary row and the footer. */
+.study-pick-extras {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-top: 1px solid var(--border);
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+  padding: 14px 20px 16px;
 }
-.study-pact-next:hover { color: var(--text); }
-.study-pact-ics {
-  background: none;
-  border: 1px solid var(--border-active);
-  border-radius: 7px;
-  padding: 4px 10px;
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-3);
-  cursor: pointer;
-  transition: color 0.12s, border-color 0.12s;
-  white-space: nowrap;
+.study-pick-group.has-extras .study-pick-card {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom: none;
 }
-.study-pact-ics:hover { color: var(--text); border-color: var(--text-3); }
-.study-pact-cal {
-  background: none;
+
+/* One shared "chip" language for every secondary action in the footer
+   (Forge, Calendar reminder, .ics) — same size, same weight, same rest
+   state, so they read as one family instead of three different button
+   styles fighting for attention. */
+.study-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
   border: 1px solid var(--border-active);
-  border-radius: 7px;
-  padding: 4px 10px;
+  border-radius: 8px;
+  padding: 6px 12px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--text-3);
+  color: var(--text-2);
   cursor: pointer;
   transition: color 0.12s, border-color 0.12s, background 0.12s;
   white-space: nowrap;
 }
-.study-pact-cal:hover:not(:disabled) { color: var(--text); border-color: var(--text-3); }
-.study-pact-cal:disabled { cursor: default; opacity: 0.7; }
-.study-pact-cal.on {
+.study-chip svg { flex-shrink: 0; font-size: 15px; }
+.study-chip:hover:not(:disabled) { color: var(--text); border-color: var(--text-3); background: var(--card-2); }
+.study-chip:disabled { cursor: default; opacity: 0.65; }
+.study-chip.on {
   background: var(--accent-soft);
   border-color: transparent;
   color: var(--accent);
 }
-.study-pact-cal-error {
-  flex-basis: 100%;
-  font-size: 12px;
-  color: var(--danger);
-  line-height: 1.4;
+.study-chip-spin { animation: study-chip-spin 0.9s linear infinite; }
+@keyframes study-chip-spin { to { transform: rotate(360deg); } }
+
+/* Study Pact's own row: the plain-language "Next: …" line (click-through to
+   the doc, like the card above it) with its chips trailing on the same
+   line where they fit, wrapping below on narrow widths. */
+.study-pact { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.study-pact-info {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.12s;
 }
+.study-pact-info svg { flex-shrink: 0; font-size: 15px; color: var(--accent); align-self: center; }
+.study-pact-info:hover { color: var(--text); }
+.study-pact-load { color: var(--text-3); font-weight: 500; }
+.study-pact-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.study-pact-error { font-size: 12px; color: var(--danger); line-height: 1.4; }
 
 /* ── Exam Forge ── */
 .exam-error { font-size: 15px; color: #FF8A8A; line-height: 1.6; }

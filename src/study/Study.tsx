@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bookmark } from 'lucide-react'
+import {
+  MdArrowForward,
+  MdCheckCircle,
+  MdClose,
+  MdEvent,
+  MdFileDownload,
+  MdNotificationsActive,
+  MdNotificationsNone,
+  MdQuiz,
+  MdSync,
+  MdWbSunny,
+} from 'react-icons/md'
 import type {
   DocDestination,
   HistoryEntry,
@@ -53,6 +65,24 @@ function nextInterval(current: number | undefined, result: 'got' | 'miss'): numb
   if (result === 'miss') return 1
   const cur = current ?? 0
   return INTERVALS.find(i => i > cur) ?? INTERVALS[INTERVALS.length - 1]
+}
+
+// Study Pact picker-card data: the next slot + its live share of the due
+// load (due questions ÷ remaining slots, so a missed slot redistributes).
+// null whenever the doc has no pact/deadline, or no slot remains before it —
+// the caller renders nothing in that case, same as before this was pulled
+// out of the JSX.
+function pactCardData(doc: DocDestination, clips: HistoryEntry[], log: StudyLog) {
+  if (!doc.pact || !doc.dueDate) return null
+  const label = nextSlotLabel(doc.pact, doc.dueDate)
+  if (!label) return null
+  const slots = upcomingSlots(doc.pact, doc.dueDate)
+  const due = clips.filter(
+    c => c.destinationId === doc.id && c.retrievalQuestion &&
+      dueOf(log[String(c.savedAt)]) <= Date.now()
+  ).length
+  const perSlot = slots.length > 0 ? Math.max(1, Math.ceil(due / slots.length)) : 0
+  return { label, slots, due, perSlot }
 }
 
 // Deliberate-session order (unchanged from v1): misses first, then
@@ -415,80 +445,99 @@ export function Study() {
 
   if (!loaded) return null
 
-  // The doc list (the home's primary content).
+  // The doc list (the home's primary content). Each row is ONE visual card:
+  // the doc itself is the primary zone (click anywhere to study), and — only
+  // when they apply — Exam Forge / Study Pact render as a footer zone below
+  // a divider, inside the same card. A doc with neither is just a clean row;
+  // extras never dangle as loose text underneath a disconnected box.
   const pickerRows = pickerDocs.length > 0 && (
     <div className="study-pick-list">
-      {pickerDocs.map(({ doc, clipCount, questionCount, textCount }) => (
-        <div key={doc.id} className="study-pick-group">
-          <button className="study-pick-card" onClick={() => goToDoc(doc.id)}>
-            <span className="study-pick-name">{doc.name}</span>
-            <span className="study-pick-count">
-              {questionCount > 0
-                ? `${questionCount} question${questionCount !== 1 ? 's' : ''} ready`
-                : `${clipCount} clip${clipCount !== 1 ? 's' : ''} · no questions yet`}
-            </span>
-          </button>
-          {/* Exam Forge: appears exactly when exam prep is real — a deadline
-              exists, there's enough material, and a key can build it. A
-              SIBLING of the card button, never nested. */}
-          {doc.dueDate && textCount >= 3 && aiState === 'yes' && (
-            <button
-              className="study-forge-row"
-              onClick={() => { window.location.search = `?exam=${encodeURIComponent(doc.id)}` }}
-            >
-              ⚒ Forge a practice exam
+      {pickerDocs.map(({ doc, clipCount, questionCount, textCount }) => {
+        const showForge = !!doc.dueDate && textCount >= 3 && aiState === 'yes'
+        const pact = pactCardData(doc, clips, log)
+        const hasExtras = showForge || !!pact
+
+        return (
+          <div key={doc.id} className={`study-pick-group${hasExtras ? ' has-extras' : ''}`}>
+            <button className="study-pick-card" onClick={() => goToDoc(doc.id)}>
+              <span className="study-pick-name">{doc.name}</span>
+              <span className="study-pick-count">
+                {questionCount > 0
+                  ? `${questionCount} question${questionCount !== 1 ? 's' : ''} ready`
+                  : `${clipCount} clip${clipCount !== 1 ? 's' : ''} · no questions yet`}
+              </span>
             </button>
-          )}
-          {/* Study Pact: the next slot with its live share of the load —
-              due questions ÷ remaining slots, so a missed slot silently
-              redistributes. Plus the .ics snapshot (the in-app line is the
-              live truth; a downloaded calendar can't self-update). */}
-          {doc.pact && doc.dueDate && (() => {
-            const label = nextSlotLabel(doc.pact, doc.dueDate)
-            if (!label) return null
-            const slots = upcomingSlots(doc.pact, doc.dueDate)
-            const due = clips.filter(
-              c => c.destinationId === doc.id && c.retrievalQuestion &&
-                dueOf(log[String(c.savedAt)]) <= Date.now()
-            ).length
-            const perSlot = slots.length > 0 ? Math.max(1, Math.ceil(due / slots.length)) : 0
-            const isSynced = !!pactCalendar[doc.id]
-            const isSyncing = syncingPactFor === doc.id
-            const syncError = pactSyncError[doc.id]
-            return (
-              <div className="study-pact-row">
-                <button className="study-pact-next" onClick={() => goToDoc(doc.id)}>
-                  📅 Next: {label}{due > 0 ? ` · ~${perSlot} question${perSlot !== 1 ? 's' : ''} (~${Math.max(1, Math.round(perSlot * 1.5))} min)` : ''}
-                </button>
-                <button
-                  className={`study-pact-cal${isSynced ? ' on' : ''}`}
-                  disabled={isSyncing}
-                  onClick={() => togglePactCalendar(doc)}
-                  title={isSynced ? 'Turn off Google Calendar reminders for this plan' : 'Get a Google Calendar event + reminder for every upcoming slot, on every device'}
-                >
-                  {isSyncing ? 'Setting up…' : isSynced ? '🔔 Reminders on' : '🔔 Remind me in Google Calendar'}
-                </button>
-                <button
-                  className="study-pact-ics"
-                  onClick={() => {
-                    const ics = buildPactIcs(doc.name, slots)
-                    const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }))
-                    const a = document.createElement('a')
-                    a.href = url
-                    a.download = `snipkeep-${doc.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-plan.ics`
-                    a.click()
-                    URL.revokeObjectURL(url)
-                  }}
-                  title="Download the remaining slots as calendar events (a snapshot — this line stays the live plan)"
-                >
-                  Add to calendar
-                </button>
-                {syncError && <span className="study-pact-cal-error">{syncError}</span>}
+
+            {hasExtras && (
+              <div className="study-pick-extras">
+                {/* Exam Forge: appears exactly when exam prep is real — a
+                    deadline exists, there's enough material, and a key can
+                    build it. */}
+                {showForge && (
+                  <button
+                    className="study-chip study-chip-forge"
+                    onClick={() => { window.location.search = `?exam=${encodeURIComponent(doc.id)}` }}
+                  >
+                    <MdQuiz aria-hidden="true" /> Forge a practice exam
+                  </button>
+                )}
+                {/* Study Pact: the next slot + its live share of the load,
+                    a Google Calendar sync toggle (real reminders, incl. the
+                    phone), and the .ics snapshot fallback. */}
+                {pact && (() => {
+                  const isSynced = !!pactCalendar[doc.id]
+                  const isSyncing = syncingPactFor === doc.id
+                  const syncError = pactSyncError[doc.id]
+                  return (
+                    <div className="study-pact">
+                      <button className="study-pact-info" onClick={() => goToDoc(doc.id)}>
+                        <MdEvent aria-hidden="true" />
+                        <span>
+                          Next: {pact.label}
+                          {pact.due > 0 && (
+                            <span className="study-pact-load">
+                              {' '}· ~{pact.perSlot} question{pact.perSlot !== 1 ? 's' : ''} (~{Math.max(1, Math.round(pact.perSlot * 1.5))} min)
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                      <div className="study-pact-actions">
+                        <button
+                          className={`study-chip study-chip-cal${isSynced ? ' on' : ''}`}
+                          disabled={isSyncing}
+                          onClick={() => togglePactCalendar(doc)}
+                          title={isSynced ? 'Turn off Google Calendar reminders for this plan' : 'Get a Google Calendar event + reminder for every upcoming slot, on every device'}
+                        >
+                          {isSyncing ? <MdSync className="study-chip-spin" aria-hidden="true" />
+                            : isSynced ? <MdNotificationsActive aria-hidden="true" />
+                            : <MdNotificationsNone aria-hidden="true" />}
+                          {isSyncing ? 'Setting up…' : isSynced ? 'Reminders on' : 'Remind me'}
+                        </button>
+                        <button
+                          className="study-chip study-chip-ics"
+                          onClick={() => {
+                            const ics = buildPactIcs(doc.name, pact.slots)
+                            const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }))
+                            const a = document.createElement('a')
+                            a.href = url
+                            a.download = `snipkeep-${doc.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-plan.ics`
+                            a.click()
+                            URL.revokeObjectURL(url)
+                          }}
+                          title="Download the remaining slots as calendar events (a snapshot — this line stays the live plan)"
+                        >
+                          <MdFileDownload aria-hidden="true" /> .ics
+                        </button>
+                      </div>
+                      {syncError && <p className="study-pact-error">{syncError}</p>}
+                    </div>
+                  )
+                })()}
               </div>
-            )
-          })()}
-        </div>
-      ))}
+            )}
+          </div>
+        )
+      })}
       {pickerDocs.filter(x => x.questionCount > 0).length > 1 && (
         <button className="study-pick-card all" onClick={() => goToDoc('all')}>
           <span className="study-pick-name">Everything</span>
@@ -508,15 +557,15 @@ export function Study() {
   const warmupBanner = dueCount > 0 ? (
     <button className="study-warmup" onClick={() => { window.location.search = '?today' }}>
       <span className="study-warmup-main">
-        <span className="study-warmup-sun" aria-hidden="true">☀</span>
+        <MdWbSunny className="study-warmup-sun" aria-hidden="true" />
         Warm up · {dueCount} resurfaced today · ~{Math.max(1, Math.round(dueCount * 0.4))} min
       </span>
-      <span className="study-warmup-go" aria-hidden="true">▶</span>
+      <MdArrowForward className="study-warmup-go" aria-hidden="true" />
     </button>
   ) : anyScheduled && !warmupDismissed ? (
     <div className="study-warmup caught-up">
       <span className="study-warmup-main">
-        <span className="study-warmup-check" aria-hidden="true">✓</span>
+        <MdCheckCircle className="study-warmup-check" aria-hidden="true" />
         You're caught up — {nextDueLine(clips.filter(c => c.retrievalQuestion), log) ?? 'nothing due right now'}
       </span>
       <button
@@ -527,7 +576,7 @@ export function Study() {
           chrome.storage.local.set({ studyWarmupDismissed: new Date().toDateString() })
         }}
       >
-        ✕
+        <MdClose aria-hidden="true" />
       </button>
     </div>
   ) : null
@@ -660,7 +709,7 @@ export function Study() {
           )}
           {heatRows.length > 0 && (
             <section className="heat">
-              <h2 className="ol-zone-title">How solid is it?</h2>
+              <h2 className="study-section-title">How solid is it?</h2>
               {heatRows.map(({ doc, collected, recalled }) => {
                 const gap = collected >= 10 && recalled / collected < 0.2
                 return (
