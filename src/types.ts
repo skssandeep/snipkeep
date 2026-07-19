@@ -51,20 +51,6 @@ export interface HistoryEntry {
   // chapter boundary, not page content — history-only (never written to the
   // Doc), marked so the History card can label it.
   predicted?: boolean
-  // Confusion Flag: "I don't get this yet" — set at save time (toolbar ?) or
-  // later (History menu). Works alone (a chip on the card); with an AI key a
-  // prerequisite ladder gets built alongside it.
-  confused?: boolean
-  ladder?: LadderStep[]
-}
-
-// One rung of a Confusion-Flag prerequisite ladder — a question drawn (where
-// possible) from the student's OWN archive, ordered easy → the confusing clip
-// itself. The ladder asks; it never explains.
-export interface LadderStep {
-  question: string
-  sourceSavedAt?: number  // the archive clip this step draws from (reveal target)
-  analogy?: boolean       // an analogy pairing to map, not a plain question
 }
 
 // A hyperlink found inside the selected text — character range into the clip's
@@ -86,7 +72,6 @@ export interface SaveNoteMessage {
     note?: string          // optional personal annotation ("your take")
     links?: LinkSpan[]      // hyperlinks to preserve inside the clip text
     videoTime?: number      // lecture-timestamp clipping — see HistoryEntry.videoTime
-    confused?: boolean      // Confusion Flag set at save time (toolbar ? button)
   }
 }
 
@@ -315,19 +300,6 @@ export interface SummarizeTopicMessage {
 export interface SummarizeTopicResponse {
   success: boolean
   summary?: string
-  error?: string
-}
-
-// Confusion Flag: toggle "I don't get this yet" on an archive entry. Turning
-// it ON (with an AI key) also builds the prerequisite ladder fire-and-forget;
-// turning it OFF ("Got it now") clears the ladder too.
-export interface FlagConfusionMessage {
-  type: 'FLAG_CONFUSION'
-  payload: { savedAt: number; confused: boolean }
-}
-
-export interface FlagConfusionResponse {
-  success: boolean
   error?: string
 }
 

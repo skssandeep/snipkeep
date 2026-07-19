@@ -43,9 +43,6 @@ import type {
   TeachBackResponse,
   SavePredictionMessage,
   SavePredictionResponse,
-  LadderStep,
-  FlagConfusionMessage,
-  FlagConfusionResponse,
   OpenStudyMessage,
   OpenStudyResponse,
   UpdateBibliographyMessage,
@@ -1029,7 +1026,7 @@ async function appendImageToNotion(
 // ── Main save handler ─────────────────────────────────────────────────────────
 
 async function handleSave(payload: SaveNoteMessage['payload']) {
-  const { text, url, title, destinationId, destinationType, note, links, videoTime, confused } = payload
+  const { text, url, title, destinationId, destinationType, note, links, videoTime } = payload
   const trimmedNote = note?.trim() ?? ''
   const linkSpans = links ?? []
 
@@ -1096,20 +1093,12 @@ async function handleSave(payload: SaveNoteMessage['payload']) {
     ...(clipNamedRangeId ? { namedRangeId: clipNamedRangeId } : {}),
     // Lecture-timestamp clipping — drives the History card's Source deep link.
     ...(videoTime !== undefined ? { videoTime } : {}),
-    // Confusion Flag set at save time (toolbar ? button).
-    ...(confused ? { confused: true } : {}),
   })
 
   // Retrieval Flip — fire-and-forget like ensureArchived above: a missing AI
   // key, rejected key, or API failure silently yields no question, and the
   // save's response never waits on this.
   draftRetrievalQuestion(text, savedAt).catch(() => {})
-
-  // Confusion Flag: build the prerequisite ladder in the background. Same
-  // degradation contract — no key or a failed call leaves the flag alone
-  // (the card still shows it) and the study page falls back to the normal
-  // question flow.
-  if (confused) buildLadder(savedAt).catch(() => {})
 
   await bumpDocStats(destinationId)
 }
@@ -1860,114 +1849,6 @@ chrome.runtime.onMessage.addListener(
         sendResponse({ success: true, summary })
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Request failed' })
-      }
-    })()
-
-    return true
-  }
-)
-
-// Confusion Flag: build a prerequisite ladder for a clip the student marked
-// "I don't get this yet." Two scaffold questions drawn from clips they've
-// ALREADY saved (the zone-of-proximal-development bet: climb from what you
-// demonstrably know), an optional analogy pairing from the same archive, and
-// the confusing clip itself as the summit. The AI classifies and asks — the
-// PACER rule — and every failure path just leaves the entry ladder-less.
-async function buildLadder(savedAt: number) {
-  const stored = await chrome.storage.local.get(['clips'])
-  const clips = (stored.clips as HistoryEntry[]) ?? []
-  const entry = clips.find(c => c.savedAt === savedAt)
-  if (!entry || entry.kind === 'image') return
-
-  // The pool the ladder can draw from: the newest other text clips.
-  const pool = clips
-    .filter(c => c.savedAt !== savedAt && c.kind !== 'image' && c.text.trim().length >= 40)
-    .slice(0, 30)
-
-  const system =
-    'You build a 2-step prerequisite ladder for a student stuck on a confusing note. You NEVER ' +
-    'explain or answer — you only ask. Reply with STRICT JSON only, no code fences, exactly: ' +
-    '{"steps": [{"question": string, "poolIndex": number|null}, {"question": string, "poolIndex": number|null}], ' +
-    '"analogyIndex": number|null}. ' +
-    'The two steps are short questions (under 140 chars each) ordered from easiest to harder, each ' +
-    'testing an idea the confusing note DEPENDS on. Where one of the numbered pool notes covers that ' +
-    'idea, draw the question from it and set its 0-based poolIndex; otherwise poolIndex null. ' +
-    '"analogyIndex": the index of a pool note that genuinely works as an ANALOGY for the confusing ' +
-    'note (a similar structure in a different domain), or null — do not force one. Never invent ' +
-    'content absent from the notes.'
-  const user =
-    `The confusing note:\n${entry.text.slice(0, 600)}\n\nThe student's other notes:\n` +
-    pool.map((c, i) => `${i}. ${c.text.slice(0, 250)}`).join('\n')
-  const raw = await callAI(system, user)
-
-  const jsonText = raw.replace(/```(?:json)?/g, '').trim()
-  const start = jsonText.indexOf('{')
-  const end = jsonText.lastIndexOf('}')
-  if (start === -1 || end <= start) return
-  let parsed: { steps?: { question?: unknown; poolIndex?: unknown }[]; analogyIndex?: unknown }
-  try {
-    parsed = JSON.parse(jsonText.slice(start, end + 1))
-  } catch {
-    return
-  }
-  const inPool = (i: unknown): i is number => typeof i === 'number' && i >= 0 && i < pool.length
-
-  const ladder: LadderStep[] = []
-  if (inPool(parsed.analogyIndex)) {
-    ladder.push({
-      question: 'You saved something that works like this — try mapping the two onto each other.',
-      sourceSavedAt: pool[parsed.analogyIndex].savedAt,
-      analogy: true,
-    })
-  }
-  for (const step of parsed.steps ?? []) {
-    if (typeof step?.question !== 'string' || !step.question.trim()) continue
-    ladder.push({
-      question: step.question.trim().slice(0, 200),
-      ...(inPool(step.poolIndex) ? { sourceSavedAt: pool[step.poolIndex].savedAt } : {}),
-    })
-    if (ladder.filter(l => !l.analogy).length >= 2) break
-  }
-  if (ladder.filter(l => !l.analogy).length === 0) return  // nothing usable came back
-
-  // The summit: the confusing clip itself, re-asked.
-  ladder.push({
-    question: entry.retrievalQuestion ?? 'So — what is this clip saying, in your own words?',
-    sourceSavedAt: entry.savedAt,
-  })
-
-  // Fresh-read patch, same recipe as every other entry update.
-  const fresh = await chrome.storage.local.get(['clips'])
-  const freshClips = (fresh.clips as HistoryEntry[]) ?? []
-  const idx = freshClips.findIndex(c => c.savedAt === savedAt)
-  if (idx === -1) return
-  freshClips[idx] = { ...freshClips[idx], ladder }
-  await chrome.storage.local.set({ clips: freshClips })
-}
-
-chrome.runtime.onMessage.addListener(
-  (message: FlagConfusionMessage, _sender, sendResponse: (r: FlagConfusionResponse) => void) => {
-    if (message.type !== 'FLAG_CONFUSION') return false
-
-    ;(async () => {
-      try {
-        const { savedAt, confused } = message.payload
-        const stored = await chrome.storage.local.get(['clips'])
-        const clips = (stored.clips as HistoryEntry[]) ?? []
-        const idx = clips.findIndex(c => c.savedAt === savedAt)
-        if (idx === -1) throw new Error('Clip not found in history')
-        if (confused) {
-          clips[idx] = { ...clips[idx], confused: true }
-        } else {
-          // "Got it now" clears the ladder along with the flag.
-          const { ladder: _dropped, ...rest } = clips[idx]
-          clips[idx] = { ...rest, confused: false }
-        }
-        await chrome.storage.local.set({ clips })
-        if (confused) buildLadder(savedAt).catch(() => {})
-        sendResponse({ success: true })
-      } catch (err) {
-        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Could not update the flag' })
       }
     })()
 

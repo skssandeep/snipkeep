@@ -3,8 +3,6 @@ import { Bookmark } from 'lucide-react'
 import type {
   DocDestination,
   HistoryEntry,
-  LadderStep,
-  FlagConfusionMessage,
   StartVoiceNoteMessage,
   StartVoiceNoteResponse,
   StopVoiceNoteMessage,
@@ -129,13 +127,6 @@ export function Study() {
   const [gotCount, setGotCount] = useState(0)
   const [mode, setMode] = useState<'study' | 'browse' | 'teach'>('study')
 
-  // ── Confusion-Flag ladder ──
-  // Ladder step sources can live in ANY doc (the builder's pool is cross-doc),
-  // so lookups use the full unscoped archive, not the doc-filtered `clips`.
-  const allClipsRef = useRef<HistoryEntry[]>([])
-  const [ladderIndex, setLadderIndex] = useState(0)
-  const [ladderRevealed, setLadderRevealed] = useState(false)
-
   // ── Teach-It-Back (Feynman mode) ──
   // Recognition itself runs in the voice tab (same pipeline as margin notes,
   // longForm tuning); this page only starts/stops it and consumes the
@@ -189,7 +180,6 @@ export function Study() {
         c => !docFilter || docFilter === 'all' || c.destinationId === docFilter
       )
       const storedLog = (local.studyLog as StudyLog) ?? {}
-      allClipsRef.current = (local.clips as HistoryEntry[]) ?? []
       const questionClips = scoped.filter(c => c.retrievalQuestion)
       setClips(scoped)
       setDocs(allDocs)
@@ -351,23 +341,7 @@ export function Study() {
     if (result === 'got') setGotCount(n => n + 1)
     setAttempt('')
     setPhase('question')
-    setLadderIndex(0)
-    setLadderRevealed(false)
     setIndex(i => i + 1)
-  }
-
-  // Summit actions: "Got it now" clears the flag (and its ladder) before
-  // grading; "Still foggy" keeps both so the schedule brings the climb back.
-  function finishLadder(gotIt: boolean) {
-    if (!current) return
-    if (gotIt) {
-      const msg: FlagConfusionMessage = {
-        type: 'FLAG_CONFUSION',
-        payload: { savedAt: current.savedAt, confused: false },
-      }
-      chrome.runtime.sendMessage(msg).catch(() => {})
-    }
-    grade(gotIt ? 'got' : 'miss')
   }
 
   if (!loaded) return null
@@ -428,76 +402,8 @@ export function Study() {
     </div>
   ) : null
 
-  // Confusion-Flag ladder lookups: a step's source clip may be in any doc.
-  const ladderSource = (step: LadderStep): HistoryEntry | undefined =>
-    step.sourceSavedAt !== undefined
-      ? allClipsRef.current.find(c => c.savedAt === step.sourceSavedAt)
-      : undefined
-
-  const ladder = current?.confused && current.ladder?.length ? current.ladder : null
-  const atSummit = !!ladder && ladderIndex >= ladder.length
-
-  // The prerequisite ladder — replaces the single-question flow for flagged
-  // clips: numbered steps on an accent rail, one active at a time, climbing
-  // from the student's own known material up to the confusing clip.
-  const ladderFlow = ladder && current && (
-    <main className="study-main center">
-      <p className="study-progress">{today ? 'Today · ' : ''}{index + 1} of {session.length} · foggy clip</p>
-      <h1 className="ladder-title">Let's climb up to this one.</h1>
-      <div className="ladder">
-        {ladder.map((step, i) => {
-          const state = i < ladderIndex ? 'done' : i === ladderIndex ? 'now' : 'next'
-          const source = ladderSource(step)
-          return (
-            <div key={i} className={`ladder-step ${state}`}>
-              <span className="ladder-dot" aria-hidden="true">{state === 'done' ? '✓' : i + 1}</span>
-              <div className="ladder-body">
-                {state === 'next' ? (
-                  <p className="ladder-q dim">…</p>
-                ) : (
-                  <p className="ladder-q">{step.question}</p>
-                )}
-                {state === 'now' && (
-                  <>
-                    {step.analogy && (
-                      <p className="ladder-hint">Map it onto the clip you're stuck on — what plays which role?</p>
-                    )}
-                    {ladderRevealed && source ? (
-                      <p className="teach-source">{source.text}</p>
-                    ) : source ? (
-                      <button className="teach-reveal" onClick={() => setLadderRevealed(true)}>
-                        Show the clip ↓
-                      </button>
-                    ) : null}
-                    {!atSummit && (
-                      <button
-                        className="study-primary ladder-next"
-                        onClick={() => { setLadderIndex(i + 1); setLadderRevealed(false) }}
-                      >
-                        {i + 1 < ladder.length ? 'Next step ▸' : 'Reached the top'}
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      {atSummit && (
-        <div className="ladder-summit">
-          <p className="study-done-sub">That's the climb. How does the clip feel now?</p>
-          <div className="study-grade">
-            <button className="study-secondary" onClick={() => finishLadder(false)}>Still foggy</button>
-            <button className="study-primary" onClick={() => finishLadder(true)}>Got it now</button>
-          </div>
-        </div>
-      )}
-    </main>
-  )
-
   // Shared question → attempt → reveal → grade flow (Today and deliberate).
-  const normalFlow = current && (
+  const sessionFlow = current && (
     <main className="study-main center">
       <p className="study-progress">
         {today ? 'Today · ' : ''}{index + 1} of {session.length}
@@ -546,8 +452,6 @@ export function Study() {
       )}
     </main>
   )
-
-  const sessionFlow = ladder ? ladderFlow : normalFlow
 
   return (
     <div className="study-page">

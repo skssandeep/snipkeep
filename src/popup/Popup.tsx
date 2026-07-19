@@ -44,7 +44,6 @@ import type {
   SummarizeTopicMessage,
   SummarizeTopicResponse,
   OpenStudyMessage,
-  FlagConfusionMessage,
   UpdateBibliographyMessage,
   UpdateBibliographyResponse,
 } from '../types'
@@ -1250,8 +1249,6 @@ function HistoryCardMenu({
   onRemove,
   onAskFollowUp,
   onStudyDoc,
-  onToggleConfusion,
-  confused,
   onClose,
 }: {
   archiveUrl?: string
@@ -1262,10 +1259,6 @@ function HistoryCardMenu({
   onAskFollowUp?: () => void
   // Undefined when this clip has no retrieval question (nothing to study yet).
   onStudyDoc?: () => void
-  // Confusion Flag toggle — AI-gated (the ladder needs a key). Label flips
-  // with state: "I don't get this yet" ⇄ "Got it now".
-  onToggleConfusion?: () => void
-  confused?: boolean
   onClose: () => void
 }) {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -1304,12 +1297,6 @@ function HistoryCardMenu({
       {onStudyDoc && (
         <button className="card-menu-item" onClick={onStudyDoc}>
           <span className="card-menu-icon"><MdLightbulb /></span>Study this doc
-        </button>
-      )}
-      {onToggleConfusion && (
-        <button className="card-menu-item" onClick={onToggleConfusion}>
-          <span className="card-menu-icon"><MdHelpOutline /></span>
-          {confused ? 'Got it now' : "I don't get this yet"}
         </button>
       )}
       {/* Destructive, so divider-separated (distance from the safe actions) and
@@ -1777,15 +1764,6 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
     }
   }
 
-  function toggleConfusion(entry: HistoryEntry) {
-    const next = !entry.confused
-    const msg: FlagConfusionMessage = { type: 'FLAG_CONFUSION', payload: { savedAt: entry.savedAt, confused: next } }
-    chrome.runtime.sendMessage(msg).catch(() => {})
-    // Optimistic mirror; the storage listener reconciles (and delivers the
-    // ladder when the background finishes building it).
-    setEntries(prev => prev.map(e => e.savedAt === entry.savedAt ? { ...e, confused: next } : e))
-  }
-
   async function handleAskFollowUp(entry: HistoryEntry) {
     setFollowUpOpenFor(entry.savedAt)
     setFollowUpQuestions([])
@@ -1841,7 +1819,6 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
         )}
         <div className="history-meta">
           {entry.predicted && <span className="history-predicted">☀ prediction</span>}
-          {entry.confused && <span className="history-foggy">? foggy</span>}
           <span className="history-source">{entry.sourceTitle}</span>
           <span className="history-dot">·</span>
           <span className="history-dest">{entry.destinationName}</span>
@@ -1909,10 +1886,6 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
               onStudyDoc={entry.retrievalQuestion && entry.destinationId
                 ? () => { openStudy(entry.destinationId); setCardMenuOpenFor(null) }
                 : undefined}
-              onToggleConfusion={aiConnected && entry.kind !== 'image'
-                ? () => { toggleConfusion(entry); setCardMenuOpenFor(null) }
-                : undefined}
-              confused={entry.confused}
               onClose={() => setCardMenuOpenFor(null)}
             />
           )}
