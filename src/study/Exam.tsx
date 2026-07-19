@@ -29,10 +29,20 @@ const KIND_LABEL: Record<ExamKind, string> = {
   why: 'Why',
 }
 
-const VERDICT_META: Record<ExamVerdict, { label: string; glyph: string }> = {
-  covered: { label: 'Covered', glyph: '✓' },
-  missed: { label: 'Revisit', glyph: '○' },
-  conflicting: { label: 'Check this', glyph: '⚠' },
+// Two vocabularies on purpose: written answers get soft CLASSIFICATION labels
+// (the AI compares, it can't truly grade free text), while MCQ correctness is
+// an objective fact — saying "Incorrect" plainly is honest, not shame.
+const VERDICT_META: Record<'written' | 'mcq', Record<ExamVerdict, { label: string; glyph: string; cls: string }>> = {
+  written: {
+    covered: { label: 'Covered', glyph: '✓', cls: 'covered' },
+    missed: { label: 'Revisit', glyph: '○', cls: 'missed' },
+    conflicting: { label: 'Check this', glyph: '⚠', cls: 'conflicting' },
+  },
+  mcq: {
+    covered: { label: 'Correct', glyph: '✓', cls: 'covered' },
+    missed: { label: 'Skipped', glyph: '○', cls: 'missed' },
+    conflicting: { label: 'Incorrect', glyph: '✕', cls: 'wrong' },
+  },
 }
 
 interface Props {
@@ -247,8 +257,9 @@ export function Exam({ clips, destinationId, destinationName }: Props) {
           <p className="study-progress">Practice exam · {destinationName}</p>
           {/* Counts, never a score. */}
           <h1 className="ladder-title">
-            {counts.covered} covered · {counts.missed} to revisit
-            {counts.conflicting > 0 ? ` · ${counts.conflicting} to double-check` : ''}
+            {format === 'mcq'
+              ? `${counts.covered} correct · ${counts.conflicting} incorrect${counts.missed > 0 ? ` · ${counts.missed} skipped` : ''}`
+              : `${counts.covered} covered · ${counts.missed} to revisit${counts.conflicting > 0 ? ` · ${counts.conflicting} to double-check` : ''}`}
           </h1>
           <div className="exam-report">
             {questions.map((q, i) => {
@@ -258,19 +269,33 @@ export function Exam({ clips, destinationId, destinationName }: Props) {
               return (
                 <div key={i} className="study-answer exam-item">
                   <div className="exam-item-head">
-                    <span className={`exam-verdict exam-verdict-${v}`}>
-                      {VERDICT_META[v].glyph} {VERDICT_META[v].label}
+                    <span className={`exam-verdict exam-verdict-${VERDICT_META[format][v].cls}`}>
+                      {VERDICT_META[format][v].glyph} {VERDICT_META[format][v].label}
                     </span>
                     <span className={`exam-kind exam-kind-${q.kind}`}>{KIND_LABEL[q.kind]}</span>
                   </div>
                   <p className="study-answer-text">{q.question}</p>
-                  {answers[i] ? (
+                  {format === 'mcq' && q.options && q.correctIndex !== undefined ? (
+                    <>
+                      {answers[i] ? (
+                        <p className={`exam-row ${v === 'covered' ? 'exam-row-right' : 'exam-row-wrong'}`}>
+                          <span className="exam-row-label">{v === 'covered' ? '✓' : '✕'} Your answer</span>
+                          {answers[i]}
+                        </p>
+                      ) : (
+                        <p className="exam-skipped">— skipped —</p>
+                      )}
+                      {v !== 'covered' && (
+                        <p className="exam-row exam-row-right">
+                          <span className="exam-row-label">✓ Correct answer</span>
+                          {q.options[q.correctIndex]}
+                        </p>
+                      )}
+                    </>
+                  ) : answers[i] ? (
                     <p className="study-attempt-echo">{answers[i]}</p>
                   ) : (
                     <p className="exam-skipped">— skipped —</p>
-                  )}
-                  {format === 'mcq' && v !== 'covered' && q.options && q.correctIndex !== undefined && (
-                    <p className="exam-correct">Your clip says: {q.options[q.correctIndex]}</p>
                   )}
                   {v !== 'covered' && clip && (
                     <>

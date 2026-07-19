@@ -284,6 +284,32 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .exam-verdict-covered     { color: var(--accent); }
 .exam-verdict-missed      { color: var(--text-3); }
 .exam-verdict-conflicting { color: var(--warn); }
+.exam-verdict-wrong       { color: var(--danger); }
+
+/* MCQ answer rows: labeled, tinted left rules — right = accent, wrong = red.
+   Objective facts get plain colors; the label carries the meaning. */
+.exam-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  border-left: 3px solid var(--border-active);
+  padding: 4px 0 4px 12px;
+  border-radius: 2px;
+}
+.exam-row-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.exam-row-right { border-left-color: var(--accent); }
+.exam-row-right .exam-row-label { color: var(--accent); }
+.exam-row-wrong { border-left-color: var(--danger); }
+.exam-row-wrong .exam-row-label { color: var(--danger); }
+.exam-row-wrong { color: var(--text-2); }
 .exam-skipped { font-size: 13px; font-style: italic; color: var(--text-3); }
 
 /* Format choice: two equal cards, tradeoff stated on each. */
