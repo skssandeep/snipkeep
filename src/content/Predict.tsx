@@ -13,8 +13,8 @@ export interface PredictApi {
 
 const STYLES = `
   @keyframes predict-in {
-    from { opacity: 0; transform: translateY(6px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
   }
   .wrap {
     position: fixed;
@@ -52,58 +52,96 @@ const STYLES = `
   .pill:focus-visible { outline: 2px solid #F4E151; outline-offset: 2px; }
 
   .card {
-    width: 340px;
+    width: 372px;
     background: #18140F;
     border: 1px solid #2A2620;
-    border-left: 3px solid #F4E151;
-    border-radius: 12px;
-    padding: 16px 18px;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.3);
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.35);
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    animation: predict-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    gap: 12px;
+    animation: predict-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
   @media (prefers-reduced-motion: reduce) {
     .card { animation: none; }
   }
-  .card-q {
-    font-size: 14px;
+  .card-eyebrow {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+  .card-eyebrow-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #F4E151;
+    white-space: nowrap;
+  }
+  .card-eyebrow-chapter {
+    font-size: 12px;
     font-weight: 600;
+    color: #979189;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .card-q {
+    font-size: 15px;
+    font-weight: 700;
     color: #EAE8E3;
-    line-height: 1.5;
+    line-height: 1.45;
+    letter-spacing: -0.2px;
   }
   .card-input {
     width: 100%;
     box-sizing: border-box;
-    min-height: 56px;
+    min-height: 60px;
     resize: none;
     background: #100D08;
     border: 1px solid #2A2620;
-    border-radius: 8px;
-    padding: 9px 11px;
+    border-radius: 10px;
+    padding: 10px 12px;
     color: #EAE8E3;
     font-family: inherit;
     font-size: 13px;
-    line-height: 1.5;
+    line-height: 1.55;
     outline: none;
-    transition: border-color 0.12s;
+    transition: border-color 0.12s, box-shadow 0.12s;
   }
-  .card-input:focus { border-color: #463F31; }
+  .card-input:focus {
+    border-color: #F4E151;
+    box-shadow: 0 0 0 3px rgba(244, 225, 81, 0.10);
+  }
   .card-input::placeholder { color: #6D6860; }
   .card-foot {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 10px;
   }
-  .card-hint { font-size: 11px; color: #6D6860; }
+  .card-hint { font-size: 11px; color: #6D6860; margin-right: auto; }
+  .card-skip {
+    background: none;
+    border: none;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #979189;
+    cursor: pointer;
+    font-family: inherit;
+    border-radius: 8px;
+    transition: color 0.12s;
+  }
+  .card-skip:hover { color: #EAE8E3; }
   .card-go {
     background: #F4E151;
     color: #1C1608;
     border: none;
-    border-radius: 8px;
-    padding: 8px 16px;
+    border-radius: 9px;
+    padding: 9px 18px;
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
@@ -111,7 +149,7 @@ const STYLES = `
     transition: background 0.12s;
   }
   .card-go:hover { background: #FAEE91; }
-  .card-go:focus-visible { outline: 2px solid #EAE8E3; outline-offset: 2px; }
+  .card-go:focus-visible, .card-skip:focus-visible { outline: 2px solid #F4E151; outline-offset: 2px; }
 `
 
 interface Props {
@@ -150,14 +188,31 @@ export function Predict({ apiRef, onSave }: Props) {
     document.querySelector('video')?.play().catch(() => {})
   }
 
+  // Shadow-DOM retargeting bug this guards against: key events from the guess
+  // box bubble to the document with e.target retargeted to the shadow HOST (a
+  // plain div), so YouTube's hotkey handler doesn't recognize "user is
+  // typing" and fires shortcuts — typing "C" toggled captions, "K" paused,
+  // digits seeked. Stopping propagation at the card boundary (after our own
+  // handlers have run) keeps every keystroke inside the card. keyup/keypress
+  // too — some player bindings listen there.
+  const trapKeys = {
+    onKeyDown: (e: React.KeyboardEvent) => e.stopPropagation(),
+    onKeyUp: (e: React.KeyboardEvent) => e.stopPropagation(),
+    onKeyPress: (e: React.KeyboardEvent) => e.stopPropagation(),
+  }
+
   return (
     <>
       <style>{STYLES}</style>
       <div className="wrap">
         {prompt && (
-          <div className="card" role="dialog" aria-label="Prediction prompt">
+          <div className="card" role="dialog" aria-label="Prediction prompt" {...trapKeys}>
+            <div className="card-eyebrow">
+              <span className="card-eyebrow-label">☀ Predict</span>
+              <span className="card-eyebrow-chapter">{prompt.chapterTitle}</span>
+            </div>
             <div className="card-q">
-              Before continuing — what do you think “{prompt.chapterTitle}” will cover? Take a guess.
+              Before continuing — what do you think this chapter will cover?
             </div>
             <textarea
               ref={inputRef}
@@ -171,7 +226,8 @@ export function Predict({ apiRef, onSave }: Props) {
               }}
             />
             <div className="card-foot">
-              <span className="card-hint">Never graded · esc skips</span>
+              <span className="card-hint">Never graded</span>
+              <button className="card-skip" onClick={() => resume(false)}>Skip</button>
               <button className="card-go" onClick={() => resume(true)}>Continue ▸</button>
             </div>
           </div>
