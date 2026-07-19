@@ -377,6 +377,66 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 }
 .teach-reveal:hover { color: var(--accent); }
 
+/* ── Confusion-Flag ladder: numbered steps on an accent rail, one active at
+   a time. Progress is your visible position on the rail — no percentages,
+   no scores. ── */
+.ladder-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  text-wrap: balance;
+}
+.ladder { display: flex; flex-direction: column; width: 100%; }
+.ladder-step {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding: 0 0 22px 0;
+}
+/* The rail: drawn per-step so it naturally spans between dots. */
+.ladder-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 28px;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-active);
+}
+.ladder-step.done:not(:last-child)::before { background: var(--accent); }
+.ladder-dot {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  border: 2px solid var(--border-active);
+  color: var(--text-3);
+  background: var(--bg);
+  z-index: 1;
+}
+.ladder-step.now .ladder-dot { border-color: var(--accent); color: var(--accent); }
+.ladder-step.done .ladder-dot { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.ladder-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 3px;
+}
+.ladder-q { font-size: 15px; font-weight: 600; line-height: 1.5; color: var(--text); }
+.ladder-step.done .ladder-q { color: var(--text-3); font-weight: 500; }
+.ladder-q.dim { color: var(--text-3); }
+.ladder-hint { font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.ladder-next { align-self: flex-start; }
+.ladder-summit { display: flex; flex-direction: column; gap: 14px; }
+.ladder-summit .study-grade { justify-content: flex-start; }
+
 /* ── Browse: the library, deliberately plainer than the study flow ── */
 .study-main.browse { padding-top: 32px; }
 .browse-card {

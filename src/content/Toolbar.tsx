@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { MdCheck, MdClose, MdEdit, MdKeyboardReturn, MdMic, MdMoreHoriz } from 'react-icons/md'
+import { MdCheck, MdClose, MdEdit, MdKeyboardReturn, MdMic, MdMoreHoriz, MdQuestionMark } from 'react-icons/md'
 import type {
   Destination,
   ToolbarApi,
@@ -296,7 +296,7 @@ interface Props {
   destinations: Destination[]
   defaultDestId: string
   apiRef?: React.MutableRefObject<ToolbarApi | null>
-  onSave: (destId: string, destType: 'gdoc' | 'notion', note?: string) => Promise<void>
+  onSave: (destId: string, destType: 'gdoc' | 'notion', note?: string, confused?: boolean) => Promise<void>
   onDismiss: () => void
 }
 
@@ -307,6 +307,8 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
   const [showDropdown, setShowDropdown] = useState(false)
   const [note, setNote] = useState('')
   const [showNote, setShowNote] = useState(false)
+  // Confusion Flag: save this clip marked "I don't get this yet."
+  const [confused, setConfused] = useState(false)
   const noteRef = useRef<HTMLTextAreaElement>(null)
 
   // Voice-note capture. Feature-detected directly here (not via a round-trip
@@ -487,7 +489,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
     setShowDropdown(false)
     setShowNote(false)
     try {
-      await onSave(target.id, target.type, note.trim() || undefined)
+      await onSave(target.id, target.type, note.trim() || undefined, confused)
       setState('saved')
       setTimeout(onDismiss, 1400)
     } catch (err) {
@@ -542,8 +544,8 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
   }
 
   // Actions the highlight can land on. Menu only exists with >1 destination.
-  const actions: ('save' | 'note' | 'menu')[] =
-    destinations.length > 1 ? ['save', 'note', 'menu'] : ['save', 'note']
+  const actions: ('save' | 'note' | 'flag' | 'menu')[] =
+    destinations.length > 1 ? ['save', 'note', 'flag', 'menu'] : ['save', 'note', 'flag']
 
   // Driven by page-level key presses (via apiRef). Returns true when consumed.
   const handleNavKey = (key: string): boolean => {
@@ -561,6 +563,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
       const action = actions[highlightRef.current] ?? 'save'
       if (action === 'save') handleSaveRequest()
       else if (action === 'note') { setShowDropdown(false); setShowNote(true) }
+      else if (action === 'flag') { setConfused(v => !v) }
       else { setShowNote(false); setShowDropdown(true) }
       return true
     }
@@ -631,9 +634,16 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
           >
             <MdEdit size={15} />
           </button>
+          <button
+            className={`btn-note${confused ? ' active' : ''}${navActive && highlight === 2 ? ' kbd-focus' : ''}`}
+            onClick={() => setConfused(v => !v)}
+            title={confused ? "Flagged: I don't get this yet — saving keeps the flag" : "I don't get this yet — save it flagged"}
+          >
+            <MdQuestionMark size={14} />
+          </button>
           {destinations.length > 1 && (
             <button
-              className={`btn-menu${showDropdown ? ' active' : ''}${navActive && highlight === 2 ? ' kbd-focus' : ''}`}
+              className={`btn-menu${showDropdown ? ' active' : ''}${navActive && highlight === 3 ? ' kbd-focus' : ''}`}
               onClick={() => { setShowDropdown(v => !v); setShowNote(false) }}
               title="Choose destination"
             >

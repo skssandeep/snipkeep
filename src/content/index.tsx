@@ -178,7 +178,7 @@ async function showToolbar(rect: DOMRect, text: string, links: LinkSpan[], video
       destinations={destinations}
       defaultDestId={defaultDestId}
       apiRef={toolbarApiRef}
-      onSave={async (destId, destType, note) => {
+      onSave={async (destId, destType, note, confused) => {
         const msg: SaveNoteMessage = {
           type: 'SAVE_NOTE',
           // videoCtx was captured when the toolbar appeared — the selection
@@ -187,6 +187,7 @@ async function showToolbar(rect: DOMRect, text: string, links: LinkSpan[], video
             text, url: videoCtx.url, title: document.title,
             destinationId: destId, destinationType: destType, note, links,
             ...(videoCtx.videoTime !== undefined ? { videoTime: videoCtx.videoTime } : {}),
+            ...(confused ? { confused: true } : {}),
           },
         }
         const res: SaveNoteResponse = await chrome.runtime.sendMessage(msg)
