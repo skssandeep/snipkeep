@@ -405,7 +405,8 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
-  align-items: start;
+  /* stretch (the default) — every column takes the row's full height so the
+     board reads as one balanced block regardless of card counts */
 }
 .ol-col {
   display: flex;
@@ -416,7 +417,9 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   border-radius: 12px;
   overflow: hidden;
   transition: border-color 0.12s, background 0.12s;
-  min-height: 220px;
+  /* One shared height: long columns scroll inside, short ones show calm
+     empty space — visual balance over content-hugging. */
+  height: clamp(340px, 52vh, 580px);
 }
 .ol-col-head {
   display: flex;
@@ -469,7 +472,6 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   gap: 8px;
   padding: 10px;
   overflow-y: auto;
-  max-height: 46vh;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
   flex: 1;
