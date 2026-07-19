@@ -56,6 +56,14 @@ export function nextSlotLabel(pact: Pact, dueDate: string, from = new Date()): s
   return `${day} ${PACT_TIME_LABEL[pact.time]}`
 }
 
+// Local wall-clock RFC3339, no offset (e.g. "2026-07-26T18:00:00"). Paired
+// with an explicit IANA timeZone, this is how the Google Calendar event body
+// wants floating-local times. Shared with the .ics builder.
+export function rfc3339Local(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`
+}
+
 // A minimal, standards-plain VCALENDAR: one 15-minute floating-local VEVENT
 // per slot. A SNAPSHOT on purpose — it can't self-update without a server;
 // the in-app pact line is the live truth.

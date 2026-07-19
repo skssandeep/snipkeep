@@ -10,6 +10,8 @@ import type {
   TeachBackMessage,
   TeachBackResponse,
   TeachBackResult,
+  SyncPactMessage,
+  SyncPactResponse,
 } from '../types'
 import { openDrawerFromPage } from './drawer'
 import { upcomingSlots, nextSlotLabel, buildPactIcs } from '../lib/pact'
@@ -119,6 +121,13 @@ export function Study() {
   const [log, setLog] = useState<StudyLog>({})
   const [loaded, setLoaded] = useState(false)
 
+  // Study Pact → Google Calendar: which docs have live synced events
+  // (storage.local.pactCalendar, background-owned), which doc is mid-sync,
+  // and a per-doc inline error from the last attempt.
+  const [pactCalendar, setPactCalendar] = useState<Record<string, { eventIds: string[] }>>({})
+  const [syncingPactFor, setSyncingPactFor] = useState<string | null>(null)
+  const [pactSyncError, setPactSyncError] = useState<Record<string, string>>({})
+
   // The today queue is computed on every non-doc route: the ?today session
   // runs it, and the home banner shows its count. Frozen at mount.
   const [todayQueue, setTodayQueue] = useState<HistoryEntry[]>([])
@@ -176,6 +185,9 @@ export function Study() {
         const all = (changes.clips.newValue as HistoryEntry[]) ?? []
         setClips(all.filter(c => !docFilter || docFilter === 'all' || c.destinationId === docFilter))
       }
+      if ('pactCalendar' in changes) {
+        setPactCalendar((changes.pactCalendar.newValue as Record<string, { eventIds: string[] }>) ?? {})
+      }
     }
     chrome.storage.onChanged.addListener(onChanged)
     return () => chrome.storage.onChanged.removeListener(onChanged)
@@ -185,11 +197,12 @@ export function Study() {
 
   useEffect(() => {
     Promise.all([
-      chrome.storage.local.get(['clips', 'studyLog', 'aiConfig', 'studyWarmupDismissed']),
+      chrome.storage.local.get(['clips', 'studyLog', 'aiConfig', 'studyWarmupDismissed', 'pactCalendar']),
       chrome.storage.sync.get(['docs']),
     ]).then(([local, sync]) => {
       setAiState(local.aiConfig ? 'yes' : 'no')
       setWarmupDismissed(local.studyWarmupDismissed === new Date().toDateString())
+      setPactCalendar((local.pactCalendar as Record<string, { eventIds: string[] }>) ?? {})
       const allDocs = (sync.docs as DocDestination[]) ?? []
       const scopeId = examFor ?? docFilter
       const scoped = ((local.clips as HistoryEntry[]) ?? []).filter(
@@ -363,6 +376,25 @@ export function Study() {
       </div>
     ) : null
 
+  // Study Pact → Google Calendar: explicit button, always interactive (may
+  // show the Google consent/account prompt — the first sync after this
+  // feature shipped needs it even for already-signed-in users, since the
+  // manifest's OAuth scope grew). Toggles off by deleting the doc's events.
+  async function togglePactCalendar(doc: DocDestination) {
+    const wasOn = !!pactCalendar[doc.id]
+    setSyncingPactFor(doc.id)
+    setPactSyncError(prev => { const next = { ...prev }; delete next[doc.id]; return next })
+    const msg: SyncPactMessage = {
+      type: 'SYNC_PACT',
+      payload: { destinationId: doc.id, destinationName: doc.name, enabled: !wasOn, interactive: true },
+    }
+    const res: SyncPactResponse = await chrome.runtime.sendMessage(msg)
+    setSyncingPactFor(null)
+    if (!res.success) {
+      setPactSyncError(prev => ({ ...prev, [doc.id]: res.error ?? 'Approve calendar access and try again.' }))
+    }
+  }
+
   async function grade(result: 'got' | 'miss') {
     if (!current) return
     const key = String(current.savedAt)
@@ -420,10 +452,21 @@ export function Study() {
                 dueOf(log[String(c.savedAt)]) <= Date.now()
             ).length
             const perSlot = slots.length > 0 ? Math.max(1, Math.ceil(due / slots.length)) : 0
+            const isSynced = !!pactCalendar[doc.id]
+            const isSyncing = syncingPactFor === doc.id
+            const syncError = pactSyncError[doc.id]
             return (
               <div className="study-pact-row">
                 <button className="study-pact-next" onClick={() => goToDoc(doc.id)}>
                   📅 Next: {label}{due > 0 ? ` · ~${perSlot} question${perSlot !== 1 ? 's' : ''} (~${Math.max(1, Math.round(perSlot * 1.5))} min)` : ''}
+                </button>
+                <button
+                  className={`study-pact-cal${isSynced ? ' on' : ''}`}
+                  disabled={isSyncing}
+                  onClick={() => togglePactCalendar(doc)}
+                  title={isSynced ? 'Turn off Google Calendar reminders for this plan' : 'Get a Google Calendar event + reminder for every upcoming slot, on every device'}
+                >
+                  {isSyncing ? 'Setting up…' : isSynced ? '🔔 Reminders on' : '🔔 Remind me in Google Calendar'}
                 </button>
                 <button
                   className="study-pact-ics"
@@ -440,6 +483,7 @@ export function Study() {
                 >
                   Add to calendar
                 </button>
+                {syncError && <span className="study-pact-cal-error">{syncError}</span>}
               </div>
             )
           })()}

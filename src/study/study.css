@@ -285,8 +285,8 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 }
 .study-forge-row:hover { color: var(--accent); }
 
-/* Study Pact: the next planned slot + the .ics snapshot button. */
-.study-pact-row { display: flex; align-items: center; gap: 10px; margin-left: 12px; }
+/* Study Pact: the next planned slot + the Google Calendar / .ics buttons. */
+.study-pact-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-left: 12px; }
 .study-pact-next {
   background: none;
   border: none;
@@ -315,6 +315,32 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   white-space: nowrap;
 }
 .study-pact-ics:hover { color: var(--text); border-color: var(--text-3); }
+.study-pact-cal {
+  background: none;
+  border: 1px solid var(--border-active);
+  border-radius: 7px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  white-space: nowrap;
+}
+.study-pact-cal:hover:not(:disabled) { color: var(--text); border-color: var(--text-3); }
+.study-pact-cal:disabled { cursor: default; opacity: 0.7; }
+.study-pact-cal.on {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+.study-pact-cal-error {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--danger);
+  line-height: 1.4;
+}
 
 /* ── Exam Forge ── */
 .exam-error { font-size: 15px; color: #FF8A8A; line-height: 1.6; }

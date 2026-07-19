@@ -324,6 +324,22 @@ export type ExamKind = 'recall' | 'application' | 'why'
 
 export type ExamFormat = 'written' | 'mcq'
 
+// Study Pact → Google Calendar: create/refresh (or delete, when !enabled) the
+// doc's upcoming review slots as real Calendar events with reminders, using
+// the same OAuth token as Docs. interactive = the explicit button (may prompt
+// for consent); false = a silent auto-resync after a plan edit (skipped if no
+// scoped token). Events are delete-then-recreated so the calendar mirrors the
+// live plan; created IDs live in storage.local.pactCalendar.
+export interface SyncPactMessage {
+  type: 'SYNC_PACT'
+  payload: { destinationId: string; destinationName: string; enabled: boolean; interactive: boolean }
+}
+
+export interface SyncPactResponse {
+  success: boolean
+  error?: string
+}
+
 export interface ForgeExamMessage {
   type: 'FORGE_EXAM'
   // mcq: each question carries 4 options + the correct index (drawn from the

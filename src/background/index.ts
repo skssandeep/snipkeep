@@ -43,6 +43,8 @@ import type {
   TeachBackResponse,
   SavePredictionMessage,
   SavePredictionResponse,
+  SyncPactMessage,
+  SyncPactResponse,
   ClipRole,
   ClassifyRolesMessage,
   ClassifyRolesResponse,
@@ -61,8 +63,11 @@ import type {
   UpdateBibliographyResponse,
 } from '../types'
 import { formatVideoTime, timedVideoUrl } from '../lib/video'
+import { upcomingSlots, rfc3339Local } from '../lib/pact'
 
 const DOCS_API = 'https://docs.googleapis.com/v1/documents'
+const CALENDAR_API = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
+const CAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
 const NOTION_API = 'https://api.notion.com/v1'
 const LINK_FG    = { red: 0.20, green: 0.46, blue: 0.80 }  // domain hyperlink
 const CAPTION_FG = { red: 0.50, green: 0.50, blue: 0.50 }  // grey source caption
@@ -2208,6 +2213,118 @@ chrome.runtime.onMessage.addListener(
         sendResponse({ success: true })
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Export failed' })
+      }
+    })()
+
+    return true
+  }
+)
+
+// ── Study Pact → Google Calendar ──
+// Push the pact's upcoming review slots into the user's OWN Google Calendar
+// as real events with reminders (so the phone Google Calendar app notifies
+// them). Same OAuth token as Docs — one scope added to the manifest, one
+// consent. Delete-then-recreate keeps the calendar mirroring the live plan.
+
+type PactCalendarMap = Record<string, { eventIds: string[] }>
+
+// Interactive: the explicit button. The manifest scope grew, so an existing
+// user's cached token may lack calendar — re-prompt once (removeCachedAuthToken
+// forces a fresh consent that includes it). Non-interactive: an auto-resync
+// after a plan edit; returns null to skip silently rather than ever prompting.
+async function getCalendarToken(interactive: boolean): Promise<string | null> {
+  if (!interactive) {
+    const token = await getAuthTokenSilent()
+    return token
+  }
+  let result = await chrome.identity.getAuthToken({ interactive: true })
+  if (result.token && result.grantedScopes && !result.grantedScopes.includes(CAL_SCOPE)) {
+    await new Promise<void>(r => chrome.identity.removeCachedAuthToken({ token: result.token! }, () => r()))
+    result = await chrome.identity.getAuthToken({ interactive: true })
+  }
+  if (!result.token) throw new Error('Sign-in failed — try again.')
+  if (result.grantedScopes && !result.grantedScopes.includes(CAL_SCOPE)) {
+    throw new Error('Calendar access wasn’t granted. Try again and approve the calendar permission.')
+  }
+  return result.token
+}
+
+// Wrap a calendar fetch so a stale-token 401 clears the cache and retries once
+// with a fresh token (there's no shared 401-refresh helper to lean on).
+async function calendarFetch(token: string, url: string, init: RequestInit, allow404 = false): Promise<Response> {
+  let res = await fetch(url, { ...init, headers: { Authorization: `Bearer ${token}`, ...(init.headers ?? {}) } })
+  if (res.status === 401) {
+    await new Promise<void>(r => chrome.identity.removeCachedAuthToken({ token }, () => r()))
+    const fresh = await getAuthTokenSilent()
+    if (fresh) res = await fetch(url, { ...init, headers: { Authorization: `Bearer ${fresh}`, ...(init.headers ?? {}) } })
+  }
+  if (!res.ok && !(allow404 && res.status === 404)) {
+    throw new Error(`Calendar API ${res.status}: ${await res.text()}`)
+  }
+  return res
+}
+
+async function syncPactCalendar(destId: string, destName: string, enabled: boolean, interactive: boolean) {
+  const token = await getCalendarToken(interactive)
+  if (!token) return  // non-interactive with no token — skip silently
+
+  const stored = await chrome.storage.local.get(['pactCalendar'])
+  const map = (stored.pactCalendar as PactCalendarMap) ?? {}
+
+  // Always clear the doc's existing events first (delete-then-recreate).
+  for (const id of map[destId]?.eventIds ?? []) {
+    await calendarFetch(token, `${CALENDAR_API}/${id}`, { method: 'DELETE' }, true).catch(() => {})
+  }
+
+  if (!enabled) {
+    delete map[destId]
+    await chrome.storage.local.set({ pactCalendar: map })
+    return
+  }
+
+  const sync = await chrome.storage.sync.get(['docs'])
+  const doc = ((sync.docs as DocDestination[]) ?? []).find(d => d.id === destId)
+  if (!doc?.pact || !doc.dueDate) {
+    delete map[destId]
+    await chrome.storage.local.set({ pactCalendar: map })
+    return
+  }
+
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  const slots = upcomingSlots(doc.pact, doc.dueDate, new Date(), 30)
+  const newIds: string[] = []
+  for (const slot of slots) {
+    const end = new Date(slot.getTime() + 15 * 60 * 1000)
+    const body = {
+      summary: `SnipKeep · Review ${destName}`,
+      description: 'Your Study Pact review — a few minutes of retrieval beats a cram. Open SnipKeep to start.',
+      start: { dateTime: rfc3339Local(slot), timeZone: zone },
+      end: { dateTime: rfc3339Local(end), timeZone: zone },
+      reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 10 }] },
+    }
+    const res = await calendarFetch(token, CALENDAR_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const created = await res.json() as { id?: string }
+    if (created.id) newIds.push(created.id)
+  }
+  map[destId] = { eventIds: newIds }
+  await chrome.storage.local.set({ pactCalendar: map })
+}
+
+chrome.runtime.onMessage.addListener(
+  (message: SyncPactMessage, _sender, sendResponse: (r: SyncPactResponse) => void) => {
+    if (message.type !== 'SYNC_PACT') return false
+
+    ;(async () => {
+      try {
+        const { destinationId, destinationName, enabled, interactive } = message.payload
+        await syncPactCalendar(destinationId, destinationName, enabled, interactive)
+        sendResponse({ success: true })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Calendar sync failed' })
       }
     })()
 

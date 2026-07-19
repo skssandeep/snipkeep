@@ -166,6 +166,12 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   const docsRef = useRef<DocDestination[]>([])
   useEffect(() => { docsRef.current = docs }, [docs])
 
+  // Which docs already have a live Google Calendar sync (set up from the study
+  // page). Read once + kept live via storage.onChanged below, so selectDeadline/
+  // clearDeadline can silently resync an already-connected doc's events without
+  // ever prompting for auth on a doc that was never opted in.
+  const pactCalendarIdsRef = useRef<Set<string>>(new Set())
+
   // FLIP reorder animation for the doc list: when a toggle moves a card (active
   // docs sort above inactive), the card slides to its new spot instead of
   // teleporting. Each render, compare every card's current top to where it was
@@ -416,13 +422,15 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
     // durable across drawer close/reopen and browser restarts. Read on mount,
     // then stay in sync so a clip (or a citation) made while the drawer is
     // open updates the counts live.
-    chrome.storage.local.get(['docStats', 'clips', 'history', 'aiConfig'], (result) => {
+    chrome.storage.local.get(['docStats', 'clips', 'history', 'aiConfig', 'pactCalendar'], (result) => {
       setDocStats((result.docStats as DocStats) ?? {})
       const clips = result.clips as HistoryEntry[] | undefined
       const list = clips && clips.length ? clips : ((result.history as HistoryEntry[]) ?? [])
       setUncitedCounts(computeUncited(list))
       setAllClips(list)
       setAiConnected(!!result.aiConfig)
+      const pactCal = result.pactCalendar as Record<string, unknown> | undefined
+      pactCalendarIdsRef.current = new Set(Object.keys(pactCal ?? {}))
     })
 
     const onStatsChange = (
@@ -437,6 +445,10 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
         setAllClips(list)
       }
       if ('aiConfig' in changes) setAiConnected(!!changes.aiConfig.newValue)
+      if (changes.pactCalendar) {
+        const pactCal = changes.pactCalendar.newValue as Record<string, unknown> | undefined
+        pactCalendarIdsRef.current = new Set(Object.keys(pactCal ?? {}))
+      }
     }
     chrome.storage.onChanged.addListener(onStatsChange)
     return () => chrome.storage.onChanged.removeListener(onStatsChange)
@@ -610,6 +622,7 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
     setDocs(updated)
     chrome.storage.sync.set({ docs: updated })
     setEditingDeadlineFor(null)
+    resyncPactCalendarIfConnected(id, updated)
   }
 
   function clearDeadline(id: string) {
@@ -617,6 +630,21 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
     setDocs(updated)
     chrome.storage.sync.set({ docs: updated })
     setEditingDeadlineFor(null)
+    resyncPactCalendarIfConnected(id, updated)
+  }
+
+  // Silent resync after a plan edit — only for docs that already have a live
+  // Google Calendar sync (button on the study page), and never interactive:
+  // no scoped token means skip quietly rather than ever prompting from here.
+  // Clearing the deadline/pact naturally deletes the doc's events, since
+  // syncPactCalendar rebuilds from the (now pact-less) doc.
+  function resyncPactCalendarIfConnected(id: string, updated: DocDestination[]) {
+    if (!pactCalendarIdsRef.current.has(id)) return
+    const doc = updated.find(d => d.id === id)
+    chrome.runtime.sendMessage({
+      type: 'SYNC_PACT',
+      payload: { destinationId: id, destinationName: doc?.name ?? '', enabled: !!doc?.pact, interactive: false },
+    })
   }
 
   function handleSaveNotion() {
