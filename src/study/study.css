@@ -381,16 +381,11 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
    left, the argument tree on the right. Drag states over animation: the
    dragged card dims and tilts, legal zones go accent-dashed. Empty space is
    the honesty signal — dashed "unsupported" points, the unplaced count. ── */
-.study-main.outline { max-width: 1020px; }
-.outline { display: flex; flex-direction: column; gap: 18px; width: 100%; }
-.outline-columns {
-  display: grid;
-  grid-template-columns: 300px 1fr;
-  gap: 20px;
-  align-items: start;
-}
-@media (max-width: 780px) { .outline-columns { grid-template-columns: 1fr; } }
+.study-main.outline { max-width: 1100px; }
+.outline { display: flex; flex-direction: column; gap: 22px; width: 100%; }
 
+.ol-board-wrap { display: flex; flex-direction: column; gap: 12px; }
+.ol-board-head { display: flex; align-items: baseline; gap: 16px; }
 .ol-zone-title {
   font-size: 13px;
   font-weight: 700;
@@ -399,64 +394,44 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   color: var(--text-3);
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: 10px;
 }
 .ol-count { font-size: 12px; font-weight: 600; color: var(--accent); text-transform: none; letter-spacing: 0; }
 .ol-hint { font-size: 13px; color: var(--text-3); line-height: 1.5; }
 
-.ol-tray {
-  position: sticky;
-  top: 16px;
-  display: flex;
-  flex-direction: column;
+/* ── The PACER board: five equal vertical columns, Kanban-style. Each column
+   is a drop zone that re-labels a dropped card to its role. ── */
+.ol-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
-  max-height: calc(100vh - 120px);
-  overflow-y: auto;
+  align-items: start;
 }
-.ol-tray-list { display: flex; flex-direction: column; gap: 10px; }
-
-/* PACER group bars: one labeled, collapsible shelf per role — visually a
-   BAR, not another card: role-tinted strip with a 3px leading rule. Each
-   whole group is also a drop zone: dropping a card on it RE-LABELS the
-   piece to that role (the student's will beats the AI's label). */
-.ol-group {
+.ol-col {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  background: var(--surface);
   border: 1.5px dashed transparent;
-  border-radius: 10px;
-  padding: 3px;
+  outline: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
   transition: border-color 0.12s, background 0.12s;
+  min-height: 220px;
 }
-.ol-group-bar {
+.ol-col-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  gap: 7px;
+  padding: 10px 12px;
   background: var(--card-2);
-  border: none;
   border-left: 3px solid var(--border-active);
-  border-radius: 6px;
-  padding: 9px 12px;
-  font-family: inherit;
-  text-align: left;
-  transition: filter 0.12s;
 }
-.ol-group-bar:hover { filter: brightness(1.15); }
 .ol-bar-claim        { border-left-color: var(--accent); background: var(--accent-dim); }
 .ol-bar-claim .ol-group-title { color: var(--accent); }
 .ol-bar-counterpoint { border-left-color: var(--warn); background: rgba(231, 138, 69, 0.08); }
 .ol-bar-counterpoint .ol-group-title { color: var(--warn); }
 .ol-bar-evidence     { border-left-color: var(--text-2); }
-.ol-bar-definition,
-.ol-bar-procedure,
-.ol-bar-unlabeled    { border-left-color: var(--border-active); }
-.ol-group-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.ol-group-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .ol-dot-claim        { background: var(--accent); }
 .ol-dot-counterpoint { background: var(--warn); }
 .ol-dot-evidence     { background: var(--text-2); }
@@ -464,15 +439,34 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .ol-dot-procedure    { background: none; border: 1.5px solid var(--border-active); }
 .ol-dot-unlabeled    { background: var(--border-active); }
 .ol-group-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.ol-group-count { font-size: 12px; font-weight: 600; color: var(--text-3); margin-left: auto; }
-.ol-group-chevron { font-size: 10px; color: var(--text-3); }
-.ol-group-cards { display: flex; flex-direction: column; gap: 8px; padding-left: 4px; }
+.ol-group-count { font-size: 11px; font-weight: 700; color: var(--text-3); margin-left: auto; }
+.ol-col-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  overflow-y: auto;
+  max-height: 46vh;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  flex: 1;
+}
+.ol-col-empty {
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+  padding: 24px 8px;
+  line-height: 1.5;
+}
 
 /* The card — the draggable unit. cursor:grab is the affordance. */
 .ol-card {

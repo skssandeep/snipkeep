@@ -109,7 +109,6 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
     { key: 'procedure', title: 'Procedures' },
     { key: 'unlabeled', title: 'Unlabeled' },
   ]
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   // Every role bar always renders (even at 0) — each is a drop target for
   // re-labeling, and a target that only exists sometimes can't be trusted.
   // Only Unlabeled hides when empty (it's a state, not a category).
@@ -244,50 +243,40 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
 
   return (
     <div className="outline">
-      <div className="outline-columns">
-        {/* ── The tray: unplaced pieces ── */}
-        <aside className={`ol-tray${hotZone === 'tray' ? ' drop-hot' : ''}`} {...zoneProps('tray')}>
+      {/* ── The PACER board: five role columns side by side. Each column is
+          a drop zone that RE-LABELS a dropped card to its role. ── */}
+      <section className="ol-board-wrap">
+        <div className="ol-board-head">
           <h2 className="ol-zone-title">
             Your pieces <span className="ol-count">{tray.length} left</span>
           </h2>
           {!aiConnected && tray.some(c => !c.role) && (
             <p className="ol-hint">Connect an AI key (drawer → ✨) and the pieces get role labels.</p>
           )}
-          <div className="ol-tray-list">
-            {trayGroups.map(g => (
-              <div
-                key={g.key}
-                className={`ol-group${hotZone === `role-${g.key}` ? ' drop-hot' : ''}`}
-                {...zoneProps(`role-${g.key}`)}
-              >
-                <button
-                  className={`ol-group-bar ol-bar-${g.key}`}
-                  onClick={() =>
-                    setCollapsed(prev => {
-                      const next = new Set(prev)
-                      if (next.has(g.key)) next.delete(g.key)
-                      else next.add(g.key)
-                      return next
-                    })
-                  }
-                  aria-expanded={!collapsed.has(g.key)}
-                >
-                  <span className={`ol-group-dot ol-dot-${g.key}`} aria-hidden="true" />
-                  <span className="ol-group-title">{g.title}</span>
-                  <span className="ol-group-count">{g.cards.length}</span>
-                  <span className="ol-group-chevron" aria-hidden="true">{collapsed.has(g.key) ? '▸' : '▾'}</span>
-                </button>
-                {!collapsed.has(g.key) && (
-                  <div className="ol-group-cards">{g.cards.map(c => card(c))}</div>
-                )}
+        </div>
+        <div className="ol-board">
+          {trayGroups.map(g => (
+            <div
+              key={g.key}
+              className={`ol-col${hotZone === `role-${g.key}` ? ' drop-hot' : ''}`}
+              {...zoneProps(`role-${g.key}`)}
+            >
+              <div className={`ol-col-head ol-bar-${g.key}`}>
+                <span className={`ol-group-dot ol-dot-${g.key}`} aria-hidden="true" />
+                <span className="ol-group-title">{g.title}</span>
+                <span className="ol-group-count">{g.cards.length}</span>
               </div>
-            ))}
-            {tray.length === 0 && <p className="ol-hint">Everything's placed.</p>}
-          </div>
-        </aside>
+              <div className="ol-col-cards">
+                {g.cards.map(c => card(c))}
+                {g.cards.length === 0 && <p className="ol-col-empty">Drop here to re-label</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-        {/* ── The skeleton: the argument tree ── */}
-        <section className="ol-skeleton">
+      {/* ── The skeleton: the argument tree ── */}
+      <section className="ol-skeleton">
           {outline.points.map((p, i) => {
             const claim = p.claim !== null ? byId.get(p.claim) : undefined
             const supported = !!claim && p.children.length > 0
@@ -332,7 +321,6 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
             + Add point
           </button>
         </section>
-      </div>
 
       {/* ── Footer: honesty count + export ── */}
       <footer className="ol-foot">
