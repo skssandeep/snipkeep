@@ -1818,6 +1818,7 @@ function History({ initialFilter, onFilterConsumed }: { initialFilter: string | 
           <div className="history-note"><MdSubdirectoryArrowRight size={13} /> {renderNoteWithTags(entry.note, setQuery)}</div>
         )}
         <div className="history-meta">
+          {entry.predicted && <span className="history-predicted">☀ prediction</span>}
           <span className="history-source">{entry.sourceTitle}</span>
           <span className="history-dot">·</span>
           <span className="history-dest">{entry.destinationName}</span>

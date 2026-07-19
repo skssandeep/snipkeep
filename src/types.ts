@@ -47,6 +47,10 @@ export interface HistoryEntry {
   // clip, clip too short, or the draft failed — all render text-first as
   // before, so this field's presence alone gates the question-first UI.
   retrievalQuestion?: string
+  // Predict-First: this entry is the user's own pre-content guess at a video
+  // chapter boundary, not page content — history-only (never written to the
+  // Doc), marked so the History card can label it.
+  predicted?: boolean
 }
 
 // A hyperlink found inside the selected text — character range into the clip's
@@ -296,6 +300,28 @@ export interface SummarizeTopicMessage {
 export interface SummarizeTopicResponse {
   success: boolean
   summary?: string
+  error?: string
+}
+
+// Predict-First: a guess made at a video chapter boundary, saved to history
+// ONLY (predictions are the student's scratch thinking, not source material —
+// the Doc stays clips-only). The background stamps predicted:true and a
+// templated retrievalQuestion so the guess flows into the study page.
+export interface SavePredictionMessage {
+  type: 'SAVE_PREDICTION'
+  payload: {
+    guess: string
+    chapterTitle: string
+    url: string
+    title: string
+    destinationId: string
+    destinationName: string
+    videoTime?: number
+  }
+}
+
+export interface SavePredictionResponse {
+  success: boolean
   error?: string
 }
 

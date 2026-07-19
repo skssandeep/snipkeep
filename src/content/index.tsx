@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Toolbar } from './Toolbar'
 import { Drawer } from './Drawer'
+import { Predict, type PredictApi } from './Predict'
 import { ensureFontLoaded } from '../lib/fonts'
 import type {
   Destination,
@@ -16,14 +17,23 @@ import type {
   TriggerSaveMessage,
   ToggleDrawerMessage,
   ToolbarApi,
+  SavePredictionMessage,
+  SavePredictionResponse,
 } from '../types'
 
 const HOST_ID = 'snipkeep-host'
 const DRAWER_HOST_ID = 'snipkeep-drawer-host'
 const TOAST_ID = 'snipkeep-toast'
+const PREDICT_HOST_ID = 'snipkeep-predict-host'
 const DEBOUNCE_MS = 250
 const TOOLBAR_HEIGHT = 44
 const GAP = 8
+// Predict-First rate limits: never two prompts within this window, and a
+// title change alongside a time jump bigger than this is a SEEK, not natural
+// playback crossing a boundary. 5s covers up to ~4× playback speed between
+// 1s poll ticks — lecture watchers at 2× must not read as seeking.
+const PREDICT_COOLDOWN_MS = 2 * 60 * 1000
+const PREDICT_SEEK_JUMP_S = 5
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let activeRoot: ReactDOM.Root | null = null
@@ -231,6 +241,142 @@ function showToast(message: string, type: 'success' | 'error') {
   }, 1800)
 }
 
+// ── Predict-First (feature research PDF #04) ─────────────────────────────────
+// Opt-in per-video: a "☀ Predict mode" pill on chaptered YouTube watch pages;
+// armed, it pauses at chapter boundaries with one prediction prompt. Boundary
+// detection watches YouTube's own chapter-title element (.ytp-chapter-title-
+// content) — when its text changes during NATURAL playback, a boundary was
+// just crossed. No progress-bar math, no yt internals.
+
+const predictApiRef: React.MutableRefObject<PredictApi | null> = { current: null }
+let predictRoot: ReactDOM.Root | null = null
+let predictPoll: ReturnType<typeof setInterval> | null = null
+let predictSeen = new Set<string>()
+let predictLastPromptAt = 0
+let predictLastTitle = ''
+let predictLastTime = 0
+
+function isWatchPage(): boolean {
+  try {
+    const u = new URL(window.location.href)
+    return /(^|\.)youtube\.com$/.test(u.hostname) && u.pathname === '/watch'
+  } catch {
+    return false
+  }
+}
+
+// Same canonicalization as getVideoClipContext: sourceUrl is page identity,
+// the timestamp never rides in it.
+function canonicalWatchUrl(): string {
+  try {
+    const u = new URL(window.location.href)
+    u.searchParams.delete('t')
+    u.searchParams.delete('start')
+    return u.toString()
+  } catch {
+    return window.location.href
+  }
+}
+
+function currentChapterTitle(): string {
+  return document.querySelector('.ytp-chapter-title-content')?.textContent?.trim() ?? ''
+}
+
+function savePrediction(guess: string, chapterTitle: string, videoTime: number) {
+  loadDestinations().then(({ destinations, defaultDestId }) => {
+    const dest = destinations.find(d => d.id === defaultDestId) ?? destinations[0]
+    if (!dest) {
+      showToast('No destination set', 'error')
+      return
+    }
+    const msg: SavePredictionMessage = {
+      type: 'SAVE_PREDICTION',
+      payload: {
+        guess,
+        chapterTitle,
+        url: canonicalWatchUrl(),
+        title: document.title,
+        destinationId: dest.id,
+        destinationName: dest.name,
+        videoTime,
+      },
+    }
+    // Silent on success — the video resuming IS the feedback; a toast would
+    // pile a second event onto the moment. Failures do surface.
+    chrome.runtime.sendMessage(msg, (res: SavePredictionResponse) => {
+      if (!res?.success) showToast(res?.error ?? 'Could not save the prediction', 'error')
+    })
+  })
+}
+
+function removePredict() {
+  if (predictPoll) { clearInterval(predictPoll); predictPoll = null }
+  if (predictRoot) { predictRoot.unmount(); predictRoot = null }
+  document.getElementById(PREDICT_HOST_ID)?.remove()
+  predictSeen = new Set()
+  predictLastPromptAt = 0
+  predictLastTitle = ''
+  predictLastTime = 0
+}
+
+function predictTick() {
+  const video = document.querySelector('video')
+  if (!video) return
+  const title = currentChapterTitle()
+  const t = video.currentTime
+  const prevTitle = predictLastTitle
+  const prevTime = predictLastTime
+  predictLastTitle = title
+  predictLastTime = t
+
+  if (!title || title === prevTitle) return
+  if (!prevTitle) return                                   // first read of this video
+  if (Math.abs(t - prevTime) > PREDICT_SEEK_JUMP_S) return // seek, not playback
+  if (!predictApiRef.current?.isArmed()) return
+  if (video.paused) return
+  if (predictSeen.has(title)) return
+  if (Date.now() - predictLastPromptAt < PREDICT_COOLDOWN_MS) return
+
+  predictSeen.add(title)
+  predictLastPromptAt = Date.now()
+  video.pause()
+  predictApiRef.current.showPrompt(title, Math.floor(t))
+}
+
+// Mount the pill on chaptered watch pages; the player (and its chapter title
+// element) renders well after document_idle, so retry briefly before deciding
+// this video has no chapters.
+let predictMountAttempts = 0
+function mountPredict() {
+  removePredict()
+  predictMountAttempts = 0
+  const tryMount = () => {
+    if (!isWatchPage()) return
+    if (document.getElementById(PREDICT_HOST_ID)) return
+    if (!currentChapterTitle()) {
+      if (++predictMountAttempts < 12) setTimeout(tryMount, 1000)
+      return
+    }
+    const host = document.createElement('div')
+    host.id = PREDICT_HOST_ID
+    // One below the toast's z-index so save feedback still paints on top.
+    Object.assign(host.style, {
+      position: 'fixed', bottom: '0', right: '0', width: '0', height: '0',
+      overflow: 'visible', zIndex: '2147483646', pointerEvents: 'none',
+    })
+    document.body.appendChild(host)
+    const shadow = host.attachShadow({ mode: 'open' })
+    const container = document.createElement('div')
+    shadow.appendChild(container)
+    predictRoot = ReactDOM.createRoot(container)
+    predictRoot.render(<Predict apiRef={predictApiRef} onSave={savePrediction} />)
+    // Trackers update every tick (so arming mid-video has fresh state); the
+    // prompt itself only fires while armed.
+    predictPoll = setInterval(predictTick, 1000)
+  }
+  tryMount()
+}
+
 // ── Event listeners ───────────────────────────────────────────────────────────
 
 // Single \n = visual line wrap (large heading, narrow container) → join with space.
@@ -434,6 +580,15 @@ document.addEventListener('mouseup', onMouseUp)
 document.addEventListener('mousedown', onMouseDown)
 // Capture phase so we can act before the page's own key handlers/scrolling.
 document.addEventListener('keydown', onGlobalKeyDown, true)
+
+// Predict-First: mount the pill on chaptered watch pages, and re-evaluate on
+// YouTube's SPA navigation (yt-navigate-finish — nothing else in this file
+// needs nav awareness; getVideoClipContext re-reads location per event).
+// Top frame only: the pill/prompt are page-level UI, never per-iframe.
+if (window === window.top) {
+  mountPredict()
+  window.addEventListener('yt-navigate-finish', () => mountPredict())
+}
 
 }
 

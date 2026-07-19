@@ -41,6 +41,8 @@ import type {
   TeachBackMessage,
   TeachBackResult,
   TeachBackResponse,
+  SavePredictionMessage,
+  SavePredictionResponse,
   OpenStudyMessage,
   OpenStudyResponse,
   UpdateBibliographyMessage,
@@ -1847,6 +1849,39 @@ chrome.runtime.onMessage.addListener(
         sendResponse({ success: true, summary })
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Request failed' })
+      }
+    })()
+
+    return true
+  }
+)
+
+// Predict-First: a chapter-boundary guess, saved to HISTORY ONLY — predictions
+// are the student's scratch thinking, not source material, so the Doc stays
+// clips-only. The templated retrievalQuestion flows the guess into the study
+// page, where the reveal (the guess + the timestamped source link) invites
+// comparing the prediction against what the video actually said.
+chrome.runtime.onMessage.addListener(
+  (message: SavePredictionMessage, _sender, sendResponse: (r: SavePredictionResponse) => void) => {
+    if (message.type !== 'SAVE_PREDICTION') return false
+
+    ;(async () => {
+      try {
+        const { guess, chapterTitle, url, title, destinationId, destinationName, videoTime } = message.payload
+        await addToArchive({
+          text: guess.slice(0, 1000),
+          sourceTitle: title,
+          sourceUrl: url,
+          destinationName,
+          destinationId,
+          savedAt: Date.now(),
+          predicted: true,
+          retrievalQuestion: `You made a prediction about “${chapterTitle}” — what did the video actually say?`,
+          ...(videoTime !== undefined ? { videoTime } : {}),
+        })
+        sendResponse({ success: true })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Could not save the prediction' })
       }
     })()
 
