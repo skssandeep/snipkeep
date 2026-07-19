@@ -285,6 +285,63 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 .exam-verdict-missed      { color: var(--text-3); }
 .exam-verdict-conflicting { color: var(--warn); }
 .exam-skipped { font-size: 13px; font-style: italic; color: var(--text-3); }
+
+/* Format choice: two equal cards, tradeoff stated on each. */
+.exam-format-cards { display: flex; gap: 12px; flex-wrap: wrap; }
+.exam-format-card {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  background: var(--card);
+  border: 1.5px solid var(--card-edge);
+  border-radius: 12px;
+  padding: 18px 20px;
+  font-family: inherit;
+  transition: border-color 0.12s, background 0.12s;
+}
+.exam-format-card:hover { border-color: var(--accent); background: var(--surface); }
+.exam-format-name { font-size: 15px; font-weight: 700; color: var(--text); }
+.exam-format-sub { font-size: 13px; color: var(--text-3); line-height: 1.5; }
+
+/* MCQ options: A-D rows, picked = accent ring + tint. */
+.exam-options { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.exam-option {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  text-align: left;
+  background: var(--card);
+  border: 1.5px solid var(--card-edge);
+  border-radius: 10px;
+  padding: 13px 16px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  transition: border-color 0.12s, background 0.12s;
+}
+.exam-option:hover { border-color: var(--border-active); }
+.exam-option.picked { border-color: var(--accent); background: var(--accent-dim); }
+.exam-option-letter {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-3);
+  border: 1.5px solid var(--border-active);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.exam-option.picked .exam-option-letter { border-color: var(--accent); color: var(--accent); }
+.exam-skip-hint { font-size: 12px; color: var(--text-3); align-self: center; }
+.exam-correct { font-size: 13px; color: var(--text-2); }
+.exam-correct::before { content: '→ '; color: var(--accent); }
 .study-pick-card {
   display: flex;
   align-items: baseline;

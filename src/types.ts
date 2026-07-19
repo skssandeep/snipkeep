@@ -316,14 +316,25 @@ export interface SummarizeTopicResponse {
 // grades. Nothing is stored; every sitting forges fresh.
 export type ExamKind = 'recall' | 'application' | 'why'
 
+export type ExamFormat = 'written' | 'mcq'
+
 export interface ForgeExamMessage {
   type: 'FORGE_EXAM'
-  payload: { destinationId: string; destinationName: string }
+  // mcq: each question carries 4 options + the correct index (drawn from the
+  // source clip; distractors plausible but wrong) — checking is then local
+  // and instant, no CHECK_EXAM call. written: options absent.
+  payload: { destinationId: string; destinationName: string; format: ExamFormat }
 }
 
 export interface ForgeExamResponse {
   success: boolean
-  questions?: { question: string; kind: ExamKind; sourceSavedAt: number }[]
+  questions?: {
+    question: string
+    kind: ExamKind
+    sourceSavedAt: number
+    options?: string[]
+    correctIndex?: number
+  }[]
   error?: string
 }
 

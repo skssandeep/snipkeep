@@ -47,6 +47,7 @@ import type {
   ClassifyRolesMessage,
   ClassifyRolesResponse,
   ExamKind,
+  ExamFormat,
   ExamVerdict,
   ForgeExamMessage,
   ForgeExamResponse,
@@ -1873,7 +1874,7 @@ chrome.runtime.onMessage.addListener(
 // testing works best when the formats vary). Nothing is ever stored.
 const EXAM_KINDS: ExamKind[] = ['recall', 'application', 'why']
 
-async function forgeExam(destinationId: string, destinationName: string) {
+async function forgeExam(destinationId: string, destinationName: string, format: ExamFormat) {
   const stored = await chrome.storage.local.get(['clips'])
   const clips = (stored.clips as HistoryEntry[]) ?? []
   const pool = clips
@@ -1881,14 +1882,22 @@ async function forgeExam(destinationId: string, destinationName: string) {
     .slice(0, 30)
   if (pool.length < 3) throw new Error('Not enough material yet — save a few more clips to this doc first.')
 
+  const mcqPart =
+    format === 'mcq'
+      ? ' Each question also carries "options": exactly 4 short answer choices (under 90 chars ' +
+        'each) and "correctIndex": the 0-based index of the right one. The correct option comes ' +
+        'from the source note; the 3 distractors must be plausible but clearly wrong per the ' +
+        'notes — near-misses, not jokes. Shuffle the correct position across questions.'
+      : ''
   const system =
     'You write a short practice exam for a student, using ONLY their saved notes. Reply with ' +
     'STRICT JSON, no code fences, exactly: {"questions": [{"question": string, "kind": string, ' +
-    '"poolIndex": number}]}. Write up to 8 questions, mixing kinds: "recall" (retrieve what a ' +
+    '"poolIndex": number' + (format === 'mcq' ? ', "options": string[], "correctIndex": number' : '') + '}]}. ' +
+    'Write up to 8 questions, mixing kinds: "recall" (retrieve what a ' +
     'note says), "application" (apply the note\'s idea to a new concrete situation), "why" ' +
     '(reasons/mechanisms behind the note\'s content). Each question must be answerable from its ' +
     'single source note (0-based poolIndex), under 200 characters, and must NOT contain or hint ' +
-    'the answer. Never invent content absent from the notes.'
+    'the answer. Never invent content absent from the notes.' + mcqPart
   const user = `Topic: ${destinationName}\n\nNotes:\n` + pool.map((c, i) => `${i}. ${c.text.slice(0, 300)}`).join('\n')
   const raw = await callAI(system, user)
 
@@ -1906,13 +1915,26 @@ async function forgeExam(destinationId: string, destinationName: string) {
     .filter(q =>
       typeof q?.question === 'string' && q.question.trim() &&
       typeof q?.kind === 'string' && (EXAM_KINDS as string[]).includes(q.kind) &&
-      typeof q?.poolIndex === 'number' && q.poolIndex >= 0 && q.poolIndex < pool.length
+      typeof q?.poolIndex === 'number' && q.poolIndex >= 0 && q.poolIndex < pool.length &&
+      (format !== 'mcq' ||
+        (Array.isArray((q as { options?: unknown }).options) &&
+          ((q as { options: unknown[] }).options.length === 4) &&
+          (q as { options: unknown[] }).options.every(o => typeof o === 'string' && (o as string).trim()) &&
+          typeof (q as { correctIndex?: unknown }).correctIndex === 'number' &&
+          ((q as { correctIndex: number }).correctIndex >= 0) &&
+          ((q as { correctIndex: number }).correctIndex < 4)))
     )
     .slice(0, 8)
     .map(q => ({
       question: (q.question as string).trim().slice(0, 250),
       kind: q.kind as ExamKind,
       sourceSavedAt: pool[q.poolIndex as number].savedAt,
+      ...(format === 'mcq'
+        ? {
+            options: ((q as { options: string[] }).options).map(o => o.trim().slice(0, 120)),
+            correctIndex: (q as { correctIndex: number }).correctIndex,
+          }
+        : {}),
     }))
   if (questions.length < 3) throw new Error("The AI couldn't build a full exam — try again")
   return questions
@@ -1924,7 +1946,7 @@ chrome.runtime.onMessage.addListener(
 
     ;(async () => {
       try {
-        const questions = await forgeExam(message.payload.destinationId, message.payload.destinationName)
+        const questions = await forgeExam(message.payload.destinationId, message.payload.destinationName, message.payload.format)
         sendResponse({ success: true, questions })
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Could not build the exam' })
