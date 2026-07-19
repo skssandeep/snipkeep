@@ -12,6 +12,7 @@ import type {
   TeachBackResult,
 } from '../types'
 import { openDrawerFromPage } from './drawer'
+import { Outline } from './Outline'
 
 // One study record per clip (keyed by String(savedAt)), now carrying the
 // spacing schedule. `interval`/`due` are absent on v1 entries (written before
@@ -125,7 +126,7 @@ export function Study() {
   const [phase, setPhase] = useState<Phase>('question')
   const [attempt, setAttempt] = useState('')
   const [gotCount, setGotCount] = useState(0)
-  const [mode, setMode] = useState<'study' | 'browse' | 'teach'>('study')
+  const [mode, setMode] = useState<'study' | 'browse' | 'teach' | 'outline'>('study')
 
   // ── Teach-It-Back (Feynman mode) ──
   // Recognition itself runs in the voice tab (same pipeline as margin notes,
@@ -159,13 +160,24 @@ export function Study() {
 
   useEffect(() => {
     const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area !== 'local' || !('aiConfig' in changes)) return
-      setAiState(prev =>
-        changes.aiConfig.newValue ? (prev === 'no' ? 'justConnected' : 'yes') : 'no'
-      )
+      if (area !== 'local') return
+      if ('aiConfig' in changes) {
+        setAiState(prev =>
+          changes.aiConfig.newValue ? (prev === 'no' ? 'justConnected' : 'yes') : 'no'
+        )
+      }
+      // Roles from CLASSIFY_ROLES (and questions from the backfill) land as
+      // clips patches — refresh the card data live. The SESSION stays frozen
+      // (its own state); only the source lists update.
+      if ('clips' in changes) {
+        const all = (changes.clips.newValue as HistoryEntry[]) ?? []
+        setClips(all.filter(c => !docFilter || docFilter === 'all' || c.destinationId === docFilter))
+      }
     }
     chrome.storage.onChanged.addListener(onChanged)
     return () => chrome.storage.onChanged.removeListener(onChanged)
+    // docFilter comes from the URL — stable for this page's lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -487,6 +499,14 @@ export function Study() {
                 Teach
               </button>
             )}
+            {docFilter !== 'all' && clips.length > 0 && (
+              <button
+                className={`study-mode${mode === 'outline' ? ' on' : ''}`}
+                onClick={() => setMode('outline')}
+              >
+                Outline
+              </button>
+            )}
           </nav>
         )}
         {/* On the review, one way back to the docs home. */}
@@ -551,6 +571,10 @@ export function Study() {
             </button>
           </main>
         )
+      ) : mode === 'outline' && docFilter ? (
+        <main className="study-main outline">
+          <Outline clips={clips} destinationId={docFilter} aiConnected={aiState === 'yes'} />
+        </main>
       ) : mode === 'teach' ? (
         <main className="study-main center">
           {teachPhase === 'idle' && (

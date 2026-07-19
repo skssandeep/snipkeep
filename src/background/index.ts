@@ -43,6 +43,11 @@ import type {
   TeachBackResponse,
   SavePredictionMessage,
   SavePredictionResponse,
+  ClipRole,
+  ClassifyRolesMessage,
+  ClassifyRolesResponse,
+  ExportOutlineMessage,
+  ExportOutlineResponse,
   OpenStudyMessage,
   OpenStudyResponse,
   UpdateBibliographyMessage,
@@ -1849,6 +1854,209 @@ chrome.runtime.onMessage.addListener(
         sendResponse({ success: true, summary })
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Request failed' })
+      }
+    })()
+
+    return true
+  }
+)
+
+// Argument Skeleton: batch-classify clips' rhetorical roles — claim /
+// evidence / counterpoint / definition / procedure. The PACER rule again:
+// the AI labels what KIND of piece each clip is; the student does all the
+// arranging. Roles are cached on the entries; failures leave them unlabeled
+// (cards still work, just without chips).
+const CLIP_ROLES: ClipRole[] = ['claim', 'evidence', 'counterpoint', 'definition', 'procedure']
+
+async function classifyRoles(savedAts: number[]) {
+  const stored = await chrome.storage.local.get(['clips'])
+  const clips = (stored.clips as HistoryEntry[]) ?? []
+  const wanted = new Set(savedAts)
+  const targets = clips
+    .filter(c => wanted.has(c.savedAt) && c.kind !== 'image' && !c.role)
+    .slice(0, 40)
+  if (targets.length === 0) return
+
+  const system =
+    'You classify a student\'s saved research clips by rhetorical role. Reply with STRICT JSON ' +
+    'only, no code fences, exactly: {"roles": [{"index": number, "role": string}]}. For every ' +
+    'numbered clip, role is exactly one of: "claim" (an arguable position), "evidence" (data, ' +
+    'results, examples, quotes supporting something), "counterpoint" (a challenge or opposing ' +
+    'view), "definition" (explains what a term/concept means), "procedure" (steps, how-to). ' +
+    'Classify only — never summarize or comment.'
+  const user = targets.map((c, i) => `${i}. ${c.text.slice(0, 300)}`).join('\n')
+  const raw = await callAI(system, user)
+
+  const jsonText = raw.replace(/```(?:json)?/g, '').trim()
+  const start = jsonText.indexOf('{')
+  const end = jsonText.lastIndexOf('}')
+  if (start === -1 || end <= start) return
+  let parsed: { roles?: { index?: unknown; role?: unknown }[] }
+  try {
+    parsed = JSON.parse(jsonText.slice(start, end + 1))
+  } catch {
+    return
+  }
+  const roleFor = new Map<number, ClipRole>()
+  for (const r of parsed.roles ?? []) {
+    if (
+      typeof r?.index === 'number' && r.index >= 0 && r.index < targets.length &&
+      typeof r?.role === 'string' && (CLIP_ROLES as string[]).includes(r.role)
+    ) {
+      roleFor.set(targets[r.index].savedAt, r.role as ClipRole)
+    }
+  }
+  if (roleFor.size === 0) return
+
+  const fresh = await chrome.storage.local.get(['clips'])
+  const freshClips = (fresh.clips as HistoryEntry[]) ?? []
+  let changed = false
+  for (let i = 0; i < freshClips.length; i++) {
+    const role = roleFor.get(freshClips[i].savedAt)
+    if (role && !freshClips[i].role) {
+      freshClips[i] = { ...freshClips[i], role }
+      changed = true
+    }
+  }
+  if (changed) await chrome.storage.local.set({ clips: freshClips })
+}
+
+chrome.runtime.onMessage.addListener(
+  (message: ClassifyRolesMessage, _sender, sendResponse: (r: ClassifyRolesResponse) => void) => {
+    if (message.type !== 'CLASSIFY_ROLES') return false
+
+    ;(async () => {
+      try {
+        await classifyRoles(message.payload.savedAts)
+        sendResponse({ success: true })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Classification failed' })
+      }
+    })()
+
+    return true
+  }
+)
+
+// Argument Skeleton export: append the student-built outline to the Doc as a
+// dated block — bold claim paragraphs with their evidence as indented
+// bullets, each bullet carrying a linked source domain where linkable.
+// Append-only, like every Doc write in this codebase.
+async function exportOutline(
+  destinationId: string,
+  points: { claimSavedAt: number | null; childSavedAts: number[] }[]
+) {
+  const stored = await chrome.storage.local.get(['clips'])
+  const clips = (stored.clips as HistoryEntry[]) ?? []
+  const byId = new Map(clips.map(c => [c.savedAt, c]))
+
+  const token = await getAuthToken()
+  const docRes = await fetch(`${DOCS_API}/${destinationId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!docRes.ok) throw new Error(`Docs API GET ${docRes.status}: ${await docRes.text()}`)
+  const doc = await docRes.json()
+  const bodyContent = doc.body.content
+  const insertionPoint: number = bodyContent[bodyContent.length - 1].endIndex - 1
+
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const headingLine = `Outline — ${dateStr}\n`
+
+  // Assemble the full text first, tracking ranges for styling.
+  let text = headingLine
+  const claimRanges: { start: number; end: number }[] = []
+  const bulletRanges: { start: number; end: number }[] = []
+  const linkRanges: { start: number; end: number; url: string }[] = []
+
+  for (const point of points) {
+    const claim = point.claimSavedAt !== null ? byId.get(point.claimSavedAt) : undefined
+    const claimText = (claim?.text ?? 'Point').slice(0, 300)
+    const cs = text.length
+    text += `${claimText}\n`
+    claimRanges.push({ start: cs, end: cs + claimText.length })
+    for (const childId of point.childSavedAts) {
+      const child = byId.get(childId)
+      if (!child) continue
+      const childText = child.text.slice(0, 300)
+      const { domain, linkable } = captionSource(child.sourceUrl)
+      const suffix = ` — ${domain}`
+      const bs = text.length
+      text += `${childText}${suffix}\n`
+      bulletRanges.push({ start: bs, end: bs + childText.length + suffix.length + 1 })
+      if (linkable) {
+        linkRanges.push({
+          start: bs + childText.length + 3,  // after " — "
+          end: bs + childText.length + suffix.length,
+          url: child.sourceUrl,
+        })
+      }
+    }
+  }
+
+  const requests: object[] = [
+    { insertText: { endOfSegmentLocation: { segmentId: '' }, text } },
+    {
+      updateParagraphStyle: {
+        range: { startIndex: insertionPoint, endIndex: insertionPoint + headingLine.length },
+        paragraphStyle: {
+          namedStyleType: 'HEADING_2',
+          spaceAbove: { magnitude: insertionPoint <= 1 ? 0 : BLOCK_GAP_PT, unit: 'PT' },
+          spaceBelow: { magnitude: HEADING_BELOW_PT, unit: 'PT' },
+        },
+        fields: 'namedStyleType,spaceAbove,spaceBelow',
+      },
+    },
+  ]
+  for (const r of claimRanges) {
+    requests.push({
+      updateTextStyle: {
+        range: { startIndex: insertionPoint + r.start, endIndex: insertionPoint + r.end },
+        textStyle: { bold: true },
+        fields: 'bold',
+      },
+    })
+  }
+  for (const r of bulletRanges) {
+    requests.push({
+      createParagraphBullets: {
+        range: { startIndex: insertionPoint + r.start, endIndex: insertionPoint + r.end },
+        bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE',
+      },
+    })
+  }
+  for (const r of linkRanges) {
+    requests.push({
+      updateTextStyle: {
+        range: { startIndex: insertionPoint + r.start, endIndex: insertionPoint + r.end },
+        textStyle: {
+          link: { url: r.url },
+          foregroundColor: { color: { rgbColor: LINK_FG } },
+          underline: false,
+          fontSize: { magnitude: 9, unit: 'PT' },
+        },
+        fields: 'link,foregroundColor,underline,fontSize',
+      },
+    })
+  }
+
+  const batchRes = await fetch(`${DOCS_API}/${destinationId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests }),
+  })
+  if (!batchRes.ok) throw new Error(`Docs API batchUpdate ${batchRes.status}: ${await batchRes.text()}`)
+}
+
+chrome.runtime.onMessage.addListener(
+  (message: ExportOutlineMessage, _sender, sendResponse: (r: ExportOutlineResponse) => void) => {
+    if (message.type !== 'EXPORT_OUTLINE') return false
+
+    ;(async () => {
+      try {
+        await withRetry(() => exportOutline(message.payload.destinationId, message.payload.points))
+        sendResponse({ success: true })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Export failed' })
       }
     })()
 

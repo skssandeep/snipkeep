@@ -51,7 +51,13 @@ export interface HistoryEntry {
   // chapter boundary, not page content — history-only (never written to the
   // Doc), marked so the History card can label it.
   predicted?: boolean
+  // Argument Skeleton: the clip's rhetorical role, AI-classified once and
+  // cached (the AI labels what KIND of piece this is — it never arranges).
+  role?: ClipRole
 }
+
+export type ClipRole = 'claim' | 'evidence' | 'counterpoint' | 'definition' | 'procedure'
+
 
 // A hyperlink found inside the selected text — character range into the clip's
 // normalized text plus its destination URL, so the Doc keeps it clickable.
@@ -300,6 +306,34 @@ export interface SummarizeTopicMessage {
 export interface SummarizeTopicResponse {
   success: boolean
   summary?: string
+  error?: string
+}
+
+// Argument Skeleton: batch-classify clips' rhetorical roles. Results are
+// patched into storage.local.clips (role field); callers pick them up via
+// their existing storage listeners rather than the response.
+export interface ClassifyRolesMessage {
+  type: 'CLASSIFY_ROLES'
+  payload: { savedAts: number[] }
+}
+
+export interface ClassifyRolesResponse {
+  success: boolean
+  error?: string
+}
+
+// Argument Skeleton: append the student-built outline to the Doc — bold claim
+// lines with their evidence as indented bullets. SnipKeep never writes prose.
+export interface ExportOutlineMessage {
+  type: 'EXPORT_OUTLINE'
+  payload: {
+    destinationId: string
+    points: { claimSavedAt: number | null; childSavedAts: number[] }[]
+  }
+}
+
+export interface ExportOutlineResponse {
+  success: boolean
   error?: string
 }
 

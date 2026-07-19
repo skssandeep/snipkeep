@@ -98,6 +98,22 @@ The background tracks `voiceSession: {originTabId, originFrameId, voiceTabId}` i
 
 **Gotcha — the deferred save can race the silence auto-stop, since both can be triggered by the exact same moment.** Pressing Enter mid-speech and the silence-timer's own auto-stop are both reacting to "the user just stopped talking," so they can land within milliseconds of each other. If the background has already cleared `voiceSession` (auto-stop's `'ended'` already processed) before the Toolbar's `isRecording` state catches up, `handleSaveRequest` reads a stale `true`, sends a second `STOP_VOICE_NOTE` that's now a no-op (nothing left to stop), and there's no second `'ended'` event coming to ever resolve `saveAfterStopRef` — the save would wait forever. Fixed with a 1.2s safety-timeout alongside the deferred-save flag: if nothing has cleared it by then, save anyway with whatever's currently in `note`. Not an attempt to perfectly synchronize two independently-timed async triggers — the real state only ever exists behind message-passing, never synchronously — just a guarantee the save always eventually happens regardless of how the race actually settles.
 
+### Study tab (`src/study/`) — the retrieval-first learning surface
+
+A full-page extension tab (`chrome-extension://…/src/study/index.html`), bundled like the voice tab via `vite.config.ts` `additionalInputs`, opened through `OPEN_STUDY` (background `chrome.tabs.create` — content scripts can't navigate to extension URLs; the drawer's 💡 header button and doc/history "Study" menu items are the entry points; `openStudy()` in `Popup.tsx` navigates in place when the drawer is already ON the study page). It reads `chrome.storage` directly — zero backend, the no-server thesis intact. `study.css` COPIES the popup tokens (same hardcode-drift gotcha as Toolbar.tsx).
+
+**Routes (URL = source of truth; browser back retraces):** no params → docs-first home (picker + a warm-up banner showing the due count; caught-up state is dismissible per-day via `studyWarmupDismissed`); `?today` → the Five-Minute Review queue; `?doc=<id>` / `?doc=all` → deliberate sessions. **Modes on a `?doc` page:** Study (question sessions), Browse (plain library, deliberately plainer — given a choice learners default to comfortable rereading), Teach (Teach-It-Back), Outline (Argument Skeleton).
+
+**The retrieval-first feature set** (mechanics in `docs/FEATURES.md`, rationale in `docs/SnipKeep-10-Features-Research.pdf`; ground rules everywhere: AI asks/classifies but never digests, features invisible without an AI key, no shame mechanics):
+- **Retrieval Flip**: every text clip saved with a key gets one AI-drafted question (fire-and-forget in `handleSave`); History shows question-first with the clip as the reveal; a resumable startup **backfill** (`runRetrievalBackfill`, `retrievalBackfillDone` flag) covers pre-feature clips.
+- **Five-Minute Review**: SM-2-lite ladder (1/3/7/14/30/60 days) in `studyLog`; got advances, not-yet resets; Today caps at 5, deliberate sessions ignore dueness on purpose but still feed the schedule.
+- **Teach-It-Back**: explain a doc out loud (voice tab in `?mode=teach` longForm tuning — 5s pause / 5min cap); `TEACH_BACK` classifies covered / missing-as-questions / conflicting under a strict-JSON, defensively-parsed contract.
+- **Predict-First**: opt-in per-video pill on chaptered YouTube watch pages; pauses at chapter boundaries alternating recall/predict prompts (seek-guarded, every-chapter incl. video end); guesses save history-only via `SAVE_PREDICTION` (first Doc-less save path).
+- **Argument Skeleton**: Outline mode — clips as role-chips (`CLASSIFY_ROLES`, cached on `entry.role`), native-DnD argument tree persisted per doc in `outlines`, exported append-only to the Doc via `EXPORT_OUTLINE`.
+- **Removed**: the Confusion Flag (built + reverted same day, 2026-07-19) — see the FEATURES.md tombstone before re-proposing anything similar.
+
+**Shadow-DOM key-trapping gotcha (real bug, fixed twice):** key events from inputs inside a shadow root reach the page with `e.target` retargeted to the HOST div, so host pages (YouTube) treat typing as hotkeys (C = captions, K = pause). Any injected surface with a text input must stop key propagation (down/up/press) at its boundary after its own handlers run — see `trapKeys` in Toolbar.tsx and Predict.tsx. The drawer also mounts ON the study page (`src/study/drawer.tsx` re-registers TOGGLE_DRAWER — tabs.sendMessage reaches extension frames too) with an `initialView` prop for deep-linking to the AI screen.
+
 ### Message flow
 
 ```
@@ -113,6 +129,7 @@ AI actions   → content → ASK_FOLLOWUP / SUMMARIZE_TOPIC → background → u
 Study page   → content → OPEN_STUDY → background → chrome.tabs.create → study tab (src/study/, full-page extension tab reading chrome.storage directly; bundled via vite additionalInputs like the voice tab)
 Teach-back   → study tab → START_VOICE_NOTE {longForm:true} → voice tab opens with ?mode=teach (5s pause window, 5min cap vs the note default 1.8s/90s) → transcript relays back as usual → study tab → TEACH_BACK → background → user's own AI (classification only: covered / missing-as-questions / conflicting, strict-JSON contract parsed defensively)
 Prediction   → content → SAVE_PREDICTION → background → addToArchive only (history-only, never the Doc; templated retrievalQuestion flows it into the study page)
+Outline      → study tab → CLASSIFY_ROLES → background → user's AI (role labels cached on entries) · EXPORT_OUTLINE → background → Docs API (append-only outline block)
 Drawer auth  → content → GET_USER_PROFILE / GET_DOC_TITLE / SIGN_IN / SIGN_OUT → background (chrome.identity)
 Voice note   → content → START_VOICE_NOTE → background → chrome.tabs.create → voice tab (src/voice/)
              → voice tab → VOICE_RECOGNITION_EVENT → background → VOICE_NOTE_UPDATE (explicit frameId) → content
@@ -141,6 +158,7 @@ All message types are in `src/types.ts`.
 | `local` | `reflectionNudgeDismissed` | Reflection Nudge dismissal state. (`triageDismissedDay` may linger from the removed Soft Triage/Someday feature — no longer read.) |
 | `local` | `studyLog` | `Record<savedAt, {at, result, interval, due}>` — per-clip spacing schedule (Five-Minute Review). v1 entries lack `interval`/`due`; `dueOf()` in Study.tsx migrates them lazily at read, next grade rewrites in full shape |
 | `local` | `studyWarmupDismissed` | date string (`toDateString()`) the study home's "caught up" banner was dismissed on — hides it for that day, returns next day when questions are due |
+| `local` | `outlines` | `Record<destId, {points: {claim: savedAt\|null, children: savedAt[]}[]}>` — Argument Skeleton trees, persisted per doc on every drag |
 | `local` | `retrievalBackfillDone` | one-time flag: pre-feature clips have had retrieval questions drafted (set only after a pass with ≥1 success, so a dead key retries later) |
 
 `HistoryEntry` fields beyond the basics: `note?`, `namedRangeId?` (Doc bookmark), `cited?`, `videoTime?` (lecture-timestamp clipping, seconds). (A `someday?` field may linger on stored entries from the removed Soft Triage feature — no longer read.) Legacy `docId` (string, sync) is migrated to `docs: [{ id, name, active }]` on read in both background and content script.
