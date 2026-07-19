@@ -8,7 +8,14 @@ import React, { useEffect, useRef, useState } from 'react'
 
 export interface PredictApi {
   isArmed: () => boolean
-  showPrompt: (chapterTitle: string, videoTime: number) => void
+  showPrompt: (p: PredictPrompt) => void
+}
+
+export interface PredictPrompt {
+  kind: 'predict' | 'recall'
+  chapterTitle: string   // the chapter the question is ABOUT
+  question: string
+  videoTime: number
 }
 
 const STYLES = `
@@ -155,12 +162,12 @@ const STYLES = `
 interface Props {
   apiRef: React.MutableRefObject<PredictApi | null>
   // Resolves the default destination + canonical page facts at save time.
-  onSave: (guess: string, chapterTitle: string, videoTime: number) => void
+  onSave: (guess: string, prompt: PredictPrompt) => void
 }
 
 export function Predict({ apiRef, onSave }: Props) {
   const [armed, setArmed] = useState(false)
-  const [prompt, setPrompt] = useState<{ chapterTitle: string; videoTime: number } | null>(null)
+  const [prompt, setPrompt] = useState<PredictPrompt | null>(null)
   const [guess, setGuess] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const armedRef = useRef(false)
@@ -169,9 +176,9 @@ export function Predict({ apiRef, onSave }: Props) {
   useEffect(() => {
     apiRef.current = {
       isArmed: () => armedRef.current,
-      showPrompt: (chapterTitle, videoTime) => {
+      showPrompt: (p) => {
         setGuess('')
-        setPrompt({ chapterTitle, videoTime })
+        setPrompt(p)
       },
     }
     return () => { apiRef.current = null }
@@ -182,10 +189,13 @@ export function Predict({ apiRef, onSave }: Props) {
   function resume(save: boolean) {
     if (!prompt) return
     const trimmed = guess.trim()
-    if (save && trimmed) onSave(trimmed, prompt.chapterTitle, prompt.videoTime)
+    if (save && trimmed) onSave(trimmed, prompt)
     setPrompt(null)
     setGuess('')
-    document.querySelector('video')?.play().catch(() => {})
+    // Don't restart a finished video — the end-of-video recall prompt fires
+    // after 'ended', where play() would loop it back around.
+    const video = document.querySelector('video')
+    if (video && !video.ended) video.play().catch(() => {})
   }
 
   // Shadow-DOM retargeting bug this guards against: key events from the guess
@@ -208,12 +218,10 @@ export function Predict({ apiRef, onSave }: Props) {
         {prompt && (
           <div className="card" role="dialog" aria-label="Prediction prompt" {...trapKeys}>
             <div className="card-eyebrow">
-              <span className="card-eyebrow-label">☀ Predict</span>
+              <span className="card-eyebrow-label">{prompt.kind === 'recall' ? '↺ Recall' : '☀ Predict'}</span>
               <span className="card-eyebrow-chapter">{prompt.chapterTitle}</span>
             </div>
-            <div className="card-q">
-              Before continuing — what do you think this chapter will cover?
-            </div>
+            <div className="card-q">{prompt.question}</div>
             <textarea
               ref={inputRef}
               className="card-input"

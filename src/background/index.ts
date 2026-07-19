@@ -1867,7 +1867,14 @@ chrome.runtime.onMessage.addListener(
 
     ;(async () => {
       try {
-        const { guess, chapterTitle, url, title, destinationId, destinationName, videoTime } = message.payload
+        const { guess, chapterTitle, kind, url, title, destinationId, destinationName, videoTime } = message.payload
+        // predict → later study compares the guess against reality; recall →
+        // the recall question itself IS the retrieval item (the entry's text
+        // is the student's own summary, the natural answer to check against).
+        const retrievalQuestion =
+          kind === 'recall'
+            ? `What was the main idea of “${chapterTitle}”, in your own words?`
+            : `You made a prediction about “${chapterTitle}” — what did the video actually say?`
         await addToArchive({
           text: guess.slice(0, 1000),
           sourceTitle: title,
@@ -1876,7 +1883,7 @@ chrome.runtime.onMessage.addListener(
           destinationId,
           savedAt: Date.now(),
           predicted: true,
-          retrievalQuestion: `You made a prediction about “${chapterTitle}” — what did the video actually say?`,
+          retrievalQuestion,
           ...(videoTime !== undefined ? { videoTime } : {}),
         })
         sendResponse({ success: true })

@@ -312,6 +312,12 @@ export interface SavePredictionMessage {
   payload: {
     guess: string
     chapterTitle: string
+    // Boundaries alternate between two high-utility question kinds:
+    // 'predict' = a guess about the chapter that's STARTING (prediction
+    // effect); 'recall' = the main idea of the chapter that just ENDED, in
+    // the student's own words (retrieval practice). The background derives
+    // the stored retrievalQuestion from this.
+    kind: 'predict' | 'recall'
     url: string
     title: string
     destinationId: string

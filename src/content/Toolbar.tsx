@@ -580,11 +580,24 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
     handleSave(dest)
   }
 
+  // Shadow-DOM retargeting guard (same bug the Predict card had): keystrokes
+  // typed in the note field bubble to the document with e.target retargeted
+  // to the shadow HOST div, so pages like YouTube don't recognize "user is
+  // typing" and fire their own hotkeys (C = captions, K = pause, digits =
+  // seek). Trap key events at the toolbar boundary after our own handlers
+  // run. The page-level nav handler (onGlobalKeyDown) is capture-phase and
+  // already ignores in-toolbar events, so it's unaffected.
+  const trapKeys = {
+    onKeyDown: (e: React.KeyboardEvent) => e.stopPropagation(),
+    onKeyUp: (e: React.KeyboardEvent) => e.stopPropagation(),
+    onKeyPress: (e: React.KeyboardEvent) => e.stopPropagation(),
+  }
+
   if (state !== 'idle') {
     return (
       <>
         <style>{STYLES}</style>
-        <div className="wrap">
+        <div className="wrap" {...trapKeys}>
           <div className="toolbar feedback">
             {state === 'saving' && <span className="status saving">Saving…</span>}
             {state === 'saved'  && <span className="status saved"><MdCheck size={14} /> Saved</span>}
@@ -603,7 +616,7 @@ export function Toolbar({ destinations, defaultDestId, apiRef, onSave, onDismiss
   return (
     <>
       <style>{STYLES}</style>
-      <div className="wrap">
+      <div className="wrap" {...trapKeys}>
         <div className="toolbar idle" role="toolbar" aria-label="SnipKeep">
           <button
             className={`btn-save${navActive && highlight === 0 ? ' kbd-focus' : ''}`}

@@ -2,7 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Toolbar } from './Toolbar'
 import { Drawer } from './Drawer'
-import { Predict, type PredictApi } from './Predict'
+import { Predict, type PredictApi, type PredictPrompt } from './Predict'
 import { ensureFontLoaded } from '../lib/fonts'
 import type {
   Destination,
@@ -28,11 +28,12 @@ const PREDICT_HOST_ID = 'snipkeep-predict-host'
 const DEBOUNCE_MS = 250
 const TOOLBAR_HEIGHT = 44
 const GAP = 8
-// Predict-First rate limits: never two prompts within this window, and a
-// title change alongside a time jump bigger than this is a SEEK, not natural
-// playback crossing a boundary. 5s covers up to ~4× playback speed between
-// 1s poll ticks — lecture watchers at 2× must not read as seeking.
-const PREDICT_COOLDOWN_MS = 2 * 60 * 1000
+// Predict-First guards: the cooldown is anti-jitter only (chapter titles can
+// flicker during ad transitions), NOT a rate limit — the user asked for a
+// prompt at EVERY chapter boundary. A title change alongside a time jump
+// bigger than the seek threshold is a SEEK, not natural playback; 5s covers
+// up to ~4× playback speed between 1s poll ticks.
+const PREDICT_COOLDOWN_MS = 20 * 1000
 const PREDICT_SEEK_JUMP_S = 5
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -255,6 +256,9 @@ let predictSeen = new Set<string>()
 let predictLastPromptAt = 0
 let predictLastTitle = ''
 let predictLastTime = 0
+// Boundaries alternate between the two high-utility question kinds (see the
+// SavePredictionMessage comment in types.ts).
+let predictPromptCount = 0
 
 function isWatchPage(): boolean {
   try {
@@ -282,7 +286,7 @@ function currentChapterTitle(): string {
   return document.querySelector('.ytp-chapter-title-content')?.textContent?.trim() ?? ''
 }
 
-function savePrediction(guess: string, chapterTitle: string, videoTime: number) {
+function savePrediction(guess: string, prompt: PredictPrompt) {
   loadDestinations().then(({ destinations, defaultDestId }) => {
     const dest = destinations.find(d => d.id === defaultDestId) ?? destinations[0]
     if (!dest) {
@@ -293,12 +297,13 @@ function savePrediction(guess: string, chapterTitle: string, videoTime: number) 
       type: 'SAVE_PREDICTION',
       payload: {
         guess,
-        chapterTitle,
+        chapterTitle: prompt.chapterTitle,
+        kind: prompt.kind,
         url: canonicalWatchUrl(),
         title: document.title,
         destinationId: dest.id,
         destinationName: dest.name,
-        videoTime,
+        videoTime: prompt.videoTime,
       },
     }
     // Silent on success — the video resuming IS the feedback; a toast would
@@ -317,6 +322,33 @@ function removePredict() {
   predictLastPromptAt = 0
   predictLastTitle = ''
   predictLastTime = 0
+  predictPromptCount = 0
+}
+
+// The two question kinds, both aimed at real learning work: 'recall' makes
+// the student produce the just-finished chapter's main idea (retrieval
+// practice — the top-rated technique); 'predict' makes them generate an
+// expectation for the next one (the prediction effect). Alternating covers
+// both ends of every boundary.
+function buildPrompt(prevTitle: string, newTitle: string, videoTime: number): PredictPrompt {
+  const useRecall = predictPromptCount % 2 === 1 && !!prevTitle
+  predictPromptCount++
+  if (useRecall) {
+    return {
+      kind: 'recall',
+      chapterTitle: prevTitle,
+      question: `Before moving on — what was the main idea of “${prevTitle}”, in your own words?`,
+      videoTime,
+    }
+  }
+  return {
+    kind: 'predict',
+    chapterTitle: newTitle,
+    question: prevTitle
+      ? `What do you think “${newTitle}” will cover — and how might it build on “${prevTitle}”?`
+      : `What do you think “${newTitle}” will cover? Take a guess.`,
+    videoTime,
+  }
 }
 
 function predictTick() {
@@ -329,6 +361,20 @@ function predictTick() {
   predictLastTitle = title
   predictLastTime = t
 
+  // The final chapter has no next boundary — its "end" is the video ending.
+  // Fire one last recall prompt there (the video is already stopped, so
+  // nothing needs pausing; resume() knows not to restart an ended video).
+  if (video.ended && title && !predictSeen.has('__ended') && predictApiRef.current?.isArmed()) {
+    predictSeen.add('__ended')
+    predictApiRef.current.showPrompt({
+      kind: 'recall',
+      chapterTitle: title,
+      question: `That's the end — what was the main idea of “${title}”, in your own words?`,
+      videoTime: Math.floor(t),
+    })
+    return
+  }
+
   if (!title || title === prevTitle) return
   if (!prevTitle) return                                   // first read of this video
   if (Math.abs(t - prevTime) > PREDICT_SEEK_JUMP_S) return // seek, not playback
@@ -340,7 +386,7 @@ function predictTick() {
   predictSeen.add(title)
   predictLastPromptAt = Date.now()
   video.pause()
-  predictApiRef.current.showPrompt(title, Math.floor(t))
+  predictApiRef.current.showPrompt(buildPrompt(prevTitle, title, Math.floor(t)))
 }
 
 // Mount the pill on chaptered watch pages; the player (and its chapter title
