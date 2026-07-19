@@ -110,12 +110,15 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
     { key: 'unlabeled', title: 'Unlabeled' },
   ]
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // Every role bar always renders (even at 0) — each is a drop target for
+  // re-labeling, and a target that only exists sometimes can't be trusted.
+  // Only Unlabeled hides when empty (it's a state, not a category).
   const trayGroups = TRAY_GROUPS
     .map(g => ({
       ...g,
       cards: tray.filter(c => (g.key === 'unlabeled' ? !c.role : c.role === g.key)),
     }))
-    .filter(g => g.cards.length > 0)
+    .filter(g => g.key !== 'unlabeled' || g.cards.length > 0)
 
   // Remove a card from wherever it currently sits.
   function without(data: OutlineData, savedAt: number): OutlineData {
@@ -127,8 +130,34 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
     }
   }
 
+  // Re-label a clip's role by drag (the student's will beats the AI's label).
+  // Direct storage patch — same fresh-read recipe as everywhere else; the
+  // parent's clips listener delivers the update back into the props.
+  function relabel(savedAt: number, role: ClipRole | null) {
+    chrome.storage.local.get(['clips']).then(stored => {
+      const all = (stored.clips as HistoryEntry[]) ?? []
+      const idx = all.findIndex(c => c.savedAt === savedAt)
+      if (idx === -1) return
+      if (role) all[idx] = { ...all[idx], role }
+      else {
+        const { role: _r, ...rest } = all[idx]
+        all[idx] = rest
+      }
+      chrome.storage.local.set({ clips: all })
+    })
+  }
+
   function dropOn(zone: string) {
     if (dragging === null) return
+    // Dropping on a role bar re-labels the piece and shelves it there.
+    if (zone.startsWith('role-')) {
+      const key = zone.slice(5) as ClipRole | 'unlabeled'
+      relabel(dragging, key === 'unlabeled' ? null : key)
+      persist(without(outline, dragging))
+      setDragging(null)
+      setHotZone(null)
+      return
+    }
     let next = without(outline, dragging)
     if (zone.startsWith('claim-')) {
       const i = Number(zone.slice(6))
@@ -226,9 +255,13 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
           )}
           <div className="ol-tray-list">
             {trayGroups.map(g => (
-              <div key={g.key} className="ol-group">
+              <div
+                key={g.key}
+                className={`ol-group${hotZone === `role-${g.key}` ? ' drop-hot' : ''}`}
+                {...zoneProps(`role-${g.key}`)}
+              >
                 <button
-                  className="ol-group-bar"
+                  className={`ol-group-bar ol-bar-${g.key}`}
                   onClick={() =>
                     setCollapsed(prev => {
                       const next = new Set(prev)
