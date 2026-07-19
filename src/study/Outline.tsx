@@ -101,12 +101,15 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
   // The tray grouped PACER-style: one bar per role so the student can grab
   // from the kind of piece they're looking for. Fixed order mirrors how an
   // argument gets built; unlabeled cards get their own group at the end.
+  // Left→right follows PACER: Procedures (P), Counters as the other-angle
+  // pieces (≈A), Claims as the conceptual assertions (C), Evidence (E), and
+  // Definitions as the reference material (R).
   const TRAY_GROUPS: { key: ClipRole | 'unlabeled'; title: string }[] = [
+    { key: 'procedure', title: 'Procedures' },
+    { key: 'counterpoint', title: 'Counters' },
     { key: 'claim', title: 'Claims' },
     { key: 'evidence', title: 'Evidence' },
-    { key: 'counterpoint', title: 'Counters' },
     { key: 'definition', title: 'Definitions' },
-    { key: 'procedure', title: 'Procedures' },
     { key: 'unlabeled', title: 'Unlabeled' },
   ]
   // Every role bar always renders (even at 0) — each is a drop target for
@@ -194,7 +197,7 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
     },
   })
 
-  function card(entry: HistoryEntry, compact = false) {
+  function card(entry: HistoryEntry, compact = false, chip = true) {
     return (
       <div
         key={entry.savedAt}
@@ -207,7 +210,7 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
         }}
         onDragEnd={() => { setDragging(null); setHotZone(null) }}
       >
-        {entry.role && <span className={`ol-role ol-role-${entry.role}`}>{ROLE_LABEL[entry.role]}</span>}
+        {chip && entry.role && <span className={`ol-role ol-role-${entry.role}`}>{ROLE_LABEL[entry.role]}</span>}
         <span className="ol-card-text">
           {entry.text.slice(0, 110)}{entry.text.length > 110 ? '…' : ''}
         </span>
@@ -267,7 +270,7 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
                 <span className="ol-group-count">{g.cards.length}</span>
               </div>
               <div className="ol-col-cards">
-                {g.cards.map(c => card(c))}
+                {g.cards.map(c => card(c, false, false))}
                 {g.cards.length === 0 && <p className="ol-col-empty">Drop here to re-label</p>}
               </div>
             </div>

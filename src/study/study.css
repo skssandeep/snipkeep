@@ -426,17 +426,31 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
   background: var(--card-2);
   border-left: 3px solid var(--border-active);
 }
-.ol-bar-claim        { border-left-color: var(--accent); background: var(--accent-dim); }
-.ol-bar-claim .ol-group-title { color: var(--accent); }
+/* Categorical column colors — a dataviz-style exception to the one-accent
+   rule (like --danger/--warn, these are semantic, not decorative), each
+   chosen for its association with the column's job. Labels always carry the
+   meaning; color reinforces. Titles ≥4.5:1 on their tinted headers.
+     Procedures  → blue   (method, calm execution)
+     Counters    → orange (challenge, productive tension — shares --warn)
+     Claims      → yellow (the accent: the spotlight ideas)
+     Evidence    → green  (verification, "checks out")
+     Definitions → teal   (stable reference, cool storage) */
+.ol-bar-procedure    { border-left-color: #6FA8E8; background: rgba(111, 168, 232, 0.08); }
+.ol-bar-procedure .ol-group-title { color: #6FA8E8; }
 .ol-bar-counterpoint { border-left-color: var(--warn); background: rgba(231, 138, 69, 0.08); }
 .ol-bar-counterpoint .ol-group-title { color: var(--warn); }
-.ol-bar-evidence     { border-left-color: var(--text-2); }
+.ol-bar-claim        { border-left-color: var(--accent); background: var(--accent-dim); }
+.ol-bar-claim .ol-group-title { color: var(--accent); }
+.ol-bar-evidence     { border-left-color: #7CC98F; background: rgba(124, 201, 143, 0.08); }
+.ol-bar-evidence .ol-group-title { color: #7CC98F; }
+.ol-bar-definition   { border-left-color: #64C7C0; background: rgba(100, 199, 192, 0.08); }
+.ol-bar-definition .ol-group-title { color: #64C7C0; }
 .ol-group-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.ol-dot-claim        { background: var(--accent); }
+.ol-dot-procedure    { background: #6FA8E8; }
 .ol-dot-counterpoint { background: var(--warn); }
-.ol-dot-evidence     { background: var(--text-2); }
-.ol-dot-definition,
-.ol-dot-procedure    { background: none; border: 1.5px solid var(--border-active); }
+.ol-dot-claim        { background: var(--accent); }
+.ol-dot-evidence     { background: #7CC98F; }
+.ol-dot-definition   { background: #64C7C0; }
 .ol-dot-unlabeled    { background: var(--border-active); }
 .ol-group-title {
   font-size: 11px;
