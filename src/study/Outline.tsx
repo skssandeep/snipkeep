@@ -98,6 +98,25 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
 
   const tray = textClips.filter(c => !placed.has(c.savedAt))
 
+  // The tray grouped PACER-style: one bar per role so the student can grab
+  // from the kind of piece they're looking for. Fixed order mirrors how an
+  // argument gets built; unlabeled cards get their own group at the end.
+  const TRAY_GROUPS: { key: ClipRole | 'unlabeled'; title: string }[] = [
+    { key: 'claim', title: 'Claims' },
+    { key: 'evidence', title: 'Evidence' },
+    { key: 'counterpoint', title: 'Counters' },
+    { key: 'definition', title: 'Definitions' },
+    { key: 'procedure', title: 'Procedures' },
+    { key: 'unlabeled', title: 'Unlabeled' },
+  ]
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const trayGroups = TRAY_GROUPS
+    .map(g => ({
+      ...g,
+      cards: tray.filter(c => (g.key === 'unlabeled' ? !c.role : c.role === g.key)),
+    }))
+    .filter(g => g.cards.length > 0)
+
   // Remove a card from wherever it currently sits.
   function without(data: OutlineData, savedAt: number): OutlineData {
     return {
@@ -206,7 +225,30 @@ export function Outline({ clips, destinationId, aiConnected }: Props) {
             <p className="ol-hint">Connect an AI key (drawer → ✨) and the pieces get role labels.</p>
           )}
           <div className="ol-tray-list">
-            {tray.map(c => card(c))}
+            {trayGroups.map(g => (
+              <div key={g.key} className="ol-group">
+                <button
+                  className="ol-group-bar"
+                  onClick={() =>
+                    setCollapsed(prev => {
+                      const next = new Set(prev)
+                      if (next.has(g.key)) next.delete(g.key)
+                      else next.add(g.key)
+                      return next
+                    })
+                  }
+                  aria-expanded={!collapsed.has(g.key)}
+                >
+                  <span className={`ol-group-dot ol-dot-${g.key}`} aria-hidden="true" />
+                  <span className="ol-group-title">{g.title}</span>
+                  <span className="ol-group-count">{g.cards.length}</span>
+                  <span className="ol-group-chevron" aria-hidden="true">{collapsed.has(g.key) ? '▸' : '▾'}</span>
+                </button>
+                {!collapsed.has(g.key) && (
+                  <div className="ol-group-cards">{g.cards.map(c => card(c))}</div>
+                )}
+              </div>
+            ))}
             {tray.length === 0 && <p className="ol-hint">Everything's placed.</p>}
           </div>
         </aside>
