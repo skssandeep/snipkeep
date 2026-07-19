@@ -4,7 +4,13 @@ export interface DocDestination {
   active: boolean  // false = stored but hidden from toolbar
   dueDate?: string // optional ISO date (YYYY-MM-DD) — Deadline-Aware Citations
   done?: boolean   // Assignment/Project Mode — finished, tucked into "Completed"
+  // Study Pact: the student's real weekly study slots ("Tue/Thu evenings").
+  // Slots and per-slot load are always COMPUTED from now forward (lib/pact.ts)
+  // — nothing else is stored, so a missed slot silently redistributes.
+  pact?: { days: number[]; time: PactTime }
 }
+
+export type PactTime = 'morning' | 'lunch' | 'evening' | 'night'
 
 export interface NotionConfig {
   token: string

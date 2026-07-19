@@ -12,6 +12,7 @@ import type {
   TeachBackResult,
 } from '../types'
 import { openDrawerFromPage } from './drawer'
+import { upcomingSlots, nextSlotLabel, buildPactIcs } from '../lib/pact'
 import { Outline } from './Outline'
 import { Exam } from './Exam'
 
@@ -406,6 +407,42 @@ export function Study() {
               ⚒ Forge a practice exam
             </button>
           )}
+          {/* Study Pact: the next slot with its live share of the load —
+              due questions ÷ remaining slots, so a missed slot silently
+              redistributes. Plus the .ics snapshot (the in-app line is the
+              live truth; a downloaded calendar can't self-update). */}
+          {doc.pact && doc.dueDate && (() => {
+            const label = nextSlotLabel(doc.pact, doc.dueDate)
+            if (!label) return null
+            const slots = upcomingSlots(doc.pact, doc.dueDate)
+            const due = clips.filter(
+              c => c.destinationId === doc.id && c.retrievalQuestion &&
+                dueOf(log[String(c.savedAt)]) <= Date.now()
+            ).length
+            const perSlot = slots.length > 0 ? Math.max(1, Math.ceil(due / slots.length)) : 0
+            return (
+              <div className="study-pact-row">
+                <button className="study-pact-next" onClick={() => goToDoc(doc.id)}>
+                  📅 Next: {label}{due > 0 ? ` · ~${perSlot} question${perSlot !== 1 ? 's' : ''} (~${Math.max(1, Math.round(perSlot * 1.5))} min)` : ''}
+                </button>
+                <button
+                  className="study-pact-ics"
+                  onClick={() => {
+                    const ics = buildPactIcs(doc.name, slots)
+                    const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }))
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `snipkeep-${doc.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-plan.ics`
+                    a.click()
+                    URL.revokeObjectURL(url)
+                  }}
+                  title="Download the remaining slots as calendar events (a snapshot — this line stays the live plan)"
+                >
+                  Add to calendar
+                </button>
+              </div>
+            )
+          })()}
         </div>
       ))}
       {pickerDocs.filter(x => x.questionCount > 0).length > 1 && (

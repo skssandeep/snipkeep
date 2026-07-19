@@ -23,6 +23,7 @@ import {
 } from 'react-icons/md'
 import type {
   DocDestination,
+  PactTime,
   DocStat,
   DocStats,
   HistoryEntry,
@@ -49,6 +50,7 @@ import type {
 } from '../types'
 import { Bookmark } from 'lucide-react'
 import { timedVideoUrl } from '../lib/video'
+import { type Pact, PACT_DAY_LETTER, PACT_TIME_LABEL, nextSlotLabel } from '../lib/pact'
 
 type Tab = 'docs' | 'completed' | 'history'
 
@@ -600,15 +602,18 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
   // the destination; it never touches the Doc itself. The
   // calendar commits immediately on click, so there's no separate draft/save
   // step — just "open the picker" and "apply what was picked."
-  function selectDeadline(id: string, date: string) {
-    const updated = docs.map(d => d.id === id ? { ...d, dueDate: date } : d)
+  function selectDeadline(id: string, date: string, pact?: Pact) {
+    // pact undefined = Skip: the date updates, an existing pact survives.
+    const updated = docs.map(d =>
+      d.id === id ? { ...d, dueDate: date, ...(pact ? { pact } : {}) } : d
+    )
     setDocs(updated)
     chrome.storage.sync.set({ docs: updated })
     setEditingDeadlineFor(null)
   }
 
   function clearDeadline(id: string) {
-    const updated = docs.map(d => d.id === id ? { ...d, dueDate: undefined } : d)
+    const updated = docs.map(d => d.id === id ? { ...d, dueDate: undefined, pact: undefined } : d)
     setDocs(updated)
     chrome.storage.sync.set({ docs: updated })
     setEditingDeadlineFor(null)
@@ -811,7 +816,8 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
                       {isEditingDeadline ? (
                         <DeadlineCalendar
                           value={doc.dueDate ?? ''}
-                          onSelect={(date) => selectDeadline(doc.id, date)}
+                          existingPact={doc.pact}
+                          onSelect={(date, pact) => selectDeadline(doc.id, date, pact)}
                           onClear={() => clearDeadline(doc.id)}
                           onClose={() => setEditingDeadlineFor(null)}
                         />
@@ -837,6 +843,14 @@ function DocsTab({ onJumpToHistory }: { onJumpToHistory: (docName: string) => vo
                       )}
                     </div>
                   )}
+
+                  {/* Study Pact: the next planned slot, quiet, under the
+                      deadline pill. Computed live — a missed slot just isn't
+                      shown; the next one is. */}
+                  {doc.pact && doc.dueDate && !isEditingDeadline && (() => {
+                    const label = nextSlotLabel(doc.pact, doc.dueDate)
+                    return label ? <div className="pact-next">📅 Next: {label}</div> : null
+                  })()}
 
                   {summaryOpenFor === doc.id && (
                     <div className="ai-summary-box">
@@ -1406,18 +1420,28 @@ function FilterMenu({
 // click, same pattern as the avatar and destination-menu dropdowns elsewhere.
 function DeadlineCalendar({
   value,
+  existingPact,
   onSelect,
   onClear,
   onClose,
 }: {
   value: string
-  onSelect: (date: string) => void
+  existingPact?: Pact
+  // Study Pact: pact rides along with the date when the student makes a plan;
+  // undefined = Skip (an existing pact is preserved by the caller).
+  onSelect: (date: string, pact?: Pact) => void
   onClear: () => void
   onClose: () => void
 }) {
   const initial = value ? new Date(`${value}T00:00:00`) : new Date()
   const [viewYear, setViewYear] = useState(initial.getFullYear())
   const [viewMonth, setViewMonth] = useState(initial.getMonth())
+  // After the date click, one optional step: "When do you actually study?"
+  // (implementation intentions ≈ double follow-through). Skip = old behavior.
+  const [step, setStep] = useState<'date' | 'pact'>('date')
+  const [pickedDate, setPickedDate] = useState('')
+  const [pactDays, setPactDays] = useState<number[]>(existingPact?.days ?? [])
+  const [pactTime, setPactTime] = useState<PactTime>(existingPact?.time ?? 'evening')
   const popRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -1443,6 +1467,47 @@ function DeadlineCalendar({
   const cells = getMonthGrid(viewYear, viewMonth)
   const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
+  if (step === 'pact') {
+    return (
+      <div className="cal-popup" ref={popRef}>
+        <p className="pact-q">When do you actually study?</p>
+        <div className="pact-days">
+          {PACT_DAY_LETTER.map((letter, day) => (
+            <button
+              key={day}
+              className={`pact-day${pactDays.includes(day) ? ' on' : ''}`}
+              aria-pressed={pactDays.includes(day)}
+              onClick={() =>
+                setPactDays(prev => (prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]))
+              }
+            >
+              {letter}
+            </button>
+          ))}
+        </div>
+        <select
+          className="pact-time"
+          value={pactTime}
+          onChange={e => setPactTime(e.target.value as PactTime)}
+        >
+          {(Object.keys(PACT_TIME_LABEL) as PactTime[]).map(t => (
+            <option key={t} value={t}>{PACT_TIME_LABEL[t]}</option>
+          ))}
+        </select>
+        <div className="pact-actions">
+          <button className="cal-clear" onClick={() => onSelect(pickedDate)}>Skip</button>
+          <button
+            className="pact-commit"
+            disabled={pactDays.length === 0}
+            onClick={() => onSelect(pickedDate, { days: [...pactDays].sort(), time: pactTime })}
+          >
+            Make my plan
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="cal-popup" ref={popRef}>
       <div className="cal-header">
@@ -1462,7 +1527,7 @@ function DeadlineCalendar({
               key={i}
               className={`cal-cell${iso === value ? ' selected' : ''}${iso === todayIso ? ' today' : ''}`}
               disabled={iso < todayIso}
-              onClick={() => onSelect(iso)}
+              onClick={() => { setPickedDate(iso); setStep('pact') }}
             >
               {d.getDate()}
             </button>

@@ -132,6 +132,7 @@ Prediction   → content → SAVE_PREDICTION → background → addToArchive onl
 Outline      → study tab → CLASSIFY_ROLES → background → user's AI (role labels cached on entries) · EXPORT_OUTLINE → background → Docs API (append-only outline block)
 Exam Forge   → study tab → FORGE_EXAM → background → user's AI (ephemeral exam, questions tied to source clips by savedAt) · CHECK_EXAM → verdicts only (covered/missed/conflicting — classification, never grades; nothing stored)
 Knowledge Heat → study home section, pure presentation (collected clips vs latest-'got' recalls per doc from studyLog; no AI, no storage, no messages)
+Study Pact   → pure client-side, no messages (pact {days, time} on DocDestination in sync docs; slots always computed from now forward in src/lib/pact.ts — missed slots redistribute by math; .ics download from the study page is a snapshot)
 Drawer auth  → content → GET_USER_PROFILE / GET_DOC_TITLE / SIGN_IN / SIGN_OUT → background (chrome.identity)
 Voice note   → content → START_VOICE_NOTE → background → chrome.tabs.create → voice tab (src/voice/)
              → voice tab → VOICE_RECOGNITION_EVENT → background → VOICE_NOTE_UPDATE (explicit frameId) → content
@@ -143,7 +144,7 @@ All message types are in `src/types.ts`.
 
 | Store | Key | Value |
 |---|---|---|
-| `sync` | `docs` | `DocDestination[]` — `{ id, name, active, dueDate?, done? }` |
+| `sync` | `docs` | `DocDestination[]` — `{ id, name, active, dueDate?, done?, pact? }` (pact = Study Pact weekly slots `{days, time}`) |
 | `sync` | `defaultDestId` | last used destination ID |
 | `sync` | `isSignedIn` / `userEmail` / `userName` | auth state + cached email/display name for the avatar dropdown (`userName` may be empty for a token that predates the `userinfo.profile` scope, until next sign-in) |
 | `sync` | `notionConfig` | Notion token/page (hidden at MVP) |

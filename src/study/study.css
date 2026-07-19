@@ -285,6 +285,37 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 }
 .study-forge-row:hover { color: var(--accent); }
 
+/* Study Pact: the next planned slot + the .ics snapshot button. */
+.study-pact-row { display: flex; align-items: center; gap: 10px; margin-left: 12px; }
+.study-pact-next {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: 7px;
+  transition: color 0.12s;
+  text-align: left;
+}
+.study-pact-next:hover { color: var(--text); }
+.study-pact-ics {
+  background: none;
+  border: 1px solid var(--border-active);
+  border-radius: 7px;
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+.study-pact-ics:hover { color: var(--text); border-color: var(--text-3); }
+
 /* ── Exam Forge ── */
 .exam-error { font-size: 15px; color: #FF8A8A; line-height: 1.6; }
 .exam-answer { min-height: 130px; }

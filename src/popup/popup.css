@@ -621,6 +621,53 @@ a { color: inherit; text-decoration: none; }
 }
 .cal-clear:hover { text-decoration: underline; }
 
+/* ── Study Pact step (inside the calendar popover) + the card's Next line ── */
+.pact-q { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+.pact-days { display: flex; gap: 5px; margin-bottom: 10px; }
+.pact-day {
+  flex: 1;
+  height: 30px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-3);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+}
+.pact-day:hover { border-color: var(--border-active); color: var(--text-2); }
+.pact-day.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.pact-time {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 7px 10px;
+  margin-bottom: 12px;
+  outline: none;
+}
+.pact-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pact-commit {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 7px;
+  padding: 7px 14px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.pact-commit:hover { background: var(--accent-hover); }
+.pact-commit:disabled { background: var(--card-2); color: var(--text-3); cursor: default; }
+.pact-next { font-size: 12px; color: var(--text-3); margin-top: var(--space-2); }
+
 .deadline-status {
   display: flex;
   align-items: center;
