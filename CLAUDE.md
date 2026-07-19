@@ -130,6 +130,7 @@ Study page   → content → OPEN_STUDY → background → chrome.tabs.create �
 Teach-back   → study tab → START_VOICE_NOTE {longForm:true} → voice tab opens with ?mode=teach (5s pause window, 5min cap vs the note default 1.8s/90s) → transcript relays back as usual → study tab → TEACH_BACK → background → user's own AI (classification only: covered / missing-as-questions / conflicting, strict-JSON contract parsed defensively)
 Prediction   → content → SAVE_PREDICTION → background → addToArchive only (history-only, never the Doc; templated retrievalQuestion flows it into the study page)
 Outline      → study tab → CLASSIFY_ROLES → background → user's AI (role labels cached on entries) · EXPORT_OUTLINE → background → Docs API (append-only outline block)
+Exam Forge   → study tab → FORGE_EXAM → background → user's AI (ephemeral exam, questions tied to source clips by savedAt) · CHECK_EXAM → verdicts only (covered/missed/conflicting — classification, never grades; nothing stored)
 Drawer auth  → content → GET_USER_PROFILE / GET_DOC_TITLE / SIGN_IN / SIGN_OUT → background (chrome.identity)
 Voice note   → content → START_VOICE_NOTE → background → chrome.tabs.create → voice tab (src/voice/)
              → voice tab → VOICE_RECOGNITION_EVENT → background → VOICE_NOTE_UPDATE (explicit frameId) → content

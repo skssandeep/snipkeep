@@ -309,6 +309,37 @@ export interface SummarizeTopicResponse {
   error?: string
 }
 
+// Exam Forge: an ephemeral practice test generated ONLY from one doc's
+// clips. Two calls: FORGE_EXAM builds up to 8 mixed questions (each tied to
+// its source clip by savedAt, so checking never depends on call ordering);
+// CHECK_EXAM returns verdicts only — covered / missed / conflicting — never
+// grades. Nothing is stored; every sitting forges fresh.
+export type ExamKind = 'recall' | 'application' | 'why'
+
+export interface ForgeExamMessage {
+  type: 'FORGE_EXAM'
+  payload: { destinationId: string; destinationName: string }
+}
+
+export interface ForgeExamResponse {
+  success: boolean
+  questions?: { question: string; kind: ExamKind; sourceSavedAt: number }[]
+  error?: string
+}
+
+export interface CheckExamMessage {
+  type: 'CHECK_EXAM'
+  payload: { items: { question: string; answer: string; sourceSavedAt: number }[] }
+}
+
+export type ExamVerdict = 'covered' | 'missed' | 'conflicting'
+
+export interface CheckExamResponse {
+  success: boolean
+  verdicts?: ExamVerdict[]
+  error?: string
+}
+
 // Argument Skeleton: batch-classify clips' rhetorical roles. Results are
 // patched into storage.local.clips (role field); callers pick them up via
 // their existing storage listeners rather than the response.

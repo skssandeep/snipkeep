@@ -241,6 +241,50 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 }
 .study-warmup-close:hover { color: var(--text); background: rgba(255,255,255,0.06); }
 .study-pick-list { display: flex; flex-direction: column; gap: 10px; }
+.study-pick-group { display: flex; flex-direction: column; gap: 4px; }
+/* Exam Forge entry — appears only when a doc has a deadline + material + key. */
+.study-forge-row {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  margin-left: 12px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: 7px;
+  transition: color 0.12s;
+}
+.study-forge-row:hover { color: var(--accent); }
+
+/* ── Exam Forge ── */
+.exam-error { font-size: 15px; color: #FF8A8A; line-height: 1.6; }
+.exam-answer { min-height: 130px; }
+.exam-kind {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border: 1px solid var(--border-active);
+  border-radius: 4px;
+  padding: 2px 7px;
+  vertical-align: middle;
+}
+.exam-report { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.exam-item { gap: 8px; }
+.exam-item-head { display: flex; align-items: center; gap: 8px; }
+.exam-item-head .exam-kind { margin-left: auto; }
+/* Verdict tags: glyph + label always together — color never the sole carrier. */
+.exam-verdict { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; }
+.exam-verdict-covered     { color: var(--accent); }
+.exam-verdict-missed      { color: var(--text-3); }
+.exam-verdict-conflicting { color: var(--warn); }
+.exam-skipped { font-size: 13px; font-style: italic; color: var(--text-3); }
 .study-pick-card {
   display: flex;
   align-items: baseline;

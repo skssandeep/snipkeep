@@ -13,6 +13,7 @@ import type {
 } from '../types'
 import { openDrawerFromPage } from './drawer'
 import { Outline } from './Outline'
+import { Exam } from './Exam'
 
 // One study record per clip (keyed by String(savedAt)), now carrying the
 // spacing schedule. `interval`/`due` are absent on v1 entries (written before
@@ -107,9 +108,10 @@ export function Study() {
   // deliberate session across everything; ?doc=<id> → one doc. URL is the
   // source of truth so the browser back button always retraces the path.
   const params = new URLSearchParams(window.location.search)
-  const docFilter = params.get('doc')
-  const today = !docFilter && params.has('today')
-  const isHome = !docFilter && !today
+  const examFor = params.get('exam')
+  const docFilter = examFor ? null : params.get('doc')
+  const today = !examFor && !docFilter && params.has('today')
+  const isHome = !examFor && !docFilter && !today
 
   const [clips, setClips] = useState<HistoryEntry[]>([])
   const [docs, setDocs] = useState<DocDestination[]>([])
@@ -188,8 +190,9 @@ export function Study() {
       setAiState(local.aiConfig ? 'yes' : 'no')
       setWarmupDismissed(local.studyWarmupDismissed === new Date().toDateString())
       const allDocs = (sync.docs as DocDestination[]) ?? []
+      const scopeId = examFor ?? docFilter
       const scoped = ((local.clips as HistoryEntry[]) ?? []).filter(
-        c => !docFilter || docFilter === 'all' || c.destinationId === docFilter
+        c => !scopeId || scopeId === 'all' || c.destinationId === scopeId
       )
       const storedLog = (local.studyLog as StudyLog) ?? {}
       const questionClips = scoped.filter(c => c.retrievalQuestion)
@@ -212,12 +215,13 @@ export function Study() {
       }
       setLoaded(true)
     })
-  }, [docFilter])
+  }, [docFilter, examFor])
 
   const docName = useMemo(() => {
-    if (!docFilter || docFilter === 'all') return 'All docs'
-    return docs.find(d => d.id === docFilter)?.name ?? 'This doc'
-  }, [docFilter, docs])
+    const id = examFor ?? docFilter
+    if (!id || id === 'all') return 'All docs'
+    return docs.find(d => d.id === id)?.name ?? 'This doc'
+  }, [docFilter, examFor, docs])
 
   // Text clips only, in state order (newest first) — the background trims to
   // the first 40, and the AI's clipIndex refers into this same array, so the
@@ -310,6 +314,7 @@ export function Study() {
           doc: d,
           clipCount: docClips.length,
           questionCount: docClips.filter(c => c.retrievalQuestion).length,
+          textCount: docClips.filter(c => c.kind !== 'image').length,
         }
       })
       .filter(x => x.clipCount > 0)
@@ -361,15 +366,28 @@ export function Study() {
   // The doc list (the home's primary content).
   const pickerRows = pickerDocs.length > 0 && (
     <div className="study-pick-list">
-      {pickerDocs.map(({ doc, clipCount, questionCount }) => (
-        <button key={doc.id} className="study-pick-card" onClick={() => goToDoc(doc.id)}>
-          <span className="study-pick-name">{doc.name}</span>
-          <span className="study-pick-count">
-            {questionCount > 0
-              ? `${questionCount} question${questionCount !== 1 ? 's' : ''} ready`
-              : `${clipCount} clip${clipCount !== 1 ? 's' : ''} · no questions yet`}
-          </span>
-        </button>
+      {pickerDocs.map(({ doc, clipCount, questionCount, textCount }) => (
+        <div key={doc.id} className="study-pick-group">
+          <button className="study-pick-card" onClick={() => goToDoc(doc.id)}>
+            <span className="study-pick-name">{doc.name}</span>
+            <span className="study-pick-count">
+              {questionCount > 0
+                ? `${questionCount} question${questionCount !== 1 ? 's' : ''} ready`
+                : `${clipCount} clip${clipCount !== 1 ? 's' : ''} · no questions yet`}
+            </span>
+          </button>
+          {/* Exam Forge: appears exactly when exam prep is real — a deadline
+              exists, there's enough material, and a key can build it. A
+              SIBLING of the card button, never nested. */}
+          {doc.dueDate && textCount >= 3 && aiState === 'yes' && (
+            <button
+              className="study-forge-row"
+              onClick={() => { window.location.search = `?exam=${encodeURIComponent(doc.id)}` }}
+            >
+              ⚒ Forge a practice exam
+            </button>
+          )}
+        </div>
       ))}
       {pickerDocs.filter(x => x.questionCount > 0).length > 1 && (
         <button className="study-pick-card all" onClick={() => goToDoc('all')}>
@@ -474,7 +492,14 @@ export function Study() {
           <span className="study-logo" aria-hidden="true"><Bookmark size={15} strokeWidth={2.5} /></span>
           Snip<b>Keep</b>
         </a>
-        {docFilter && <span className="study-doc-name">{docName}</span>}
+        {(docFilter || examFor) && <span className="study-doc-name">{docName}</span>}
+        {examFor && (
+          <nav className="study-modes">
+            <button className="study-mode" onClick={() => { window.location.search = '' }}>
+              ← Docs
+            </button>
+          </nav>
+        )}
         {docFilter && (
           <nav className="study-modes">
             <button
@@ -571,6 +596,8 @@ export function Study() {
             </button>
           </main>
         )
+      ) : examFor ? (
+        <Exam clips={clips} destinationId={examFor} destinationName={docName} />
       ) : mode === 'outline' && docFilter ? (
         <main className="study-main outline">
           <Outline clips={clips} destinationId={docFilter} aiConnected={aiState === 'yes'} />

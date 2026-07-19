@@ -46,6 +46,12 @@ import type {
   ClipRole,
   ClassifyRolesMessage,
   ClassifyRolesResponse,
+  ExamKind,
+  ExamVerdict,
+  ForgeExamMessage,
+  ForgeExamResponse,
+  CheckExamMessage,
+  CheckExamResponse,
   ExportOutlineMessage,
   ExportOutlineResponse,
   OpenStudyMessage,
@@ -1854,6 +1860,129 @@ chrome.runtime.onMessage.addListener(
         sendResponse({ success: true, summary })
       } catch (err) {
         sendResponse({ success: false, error: err instanceof Error ? err.message : 'Request failed' })
+      }
+    })()
+
+    return true
+  }
+)
+
+// Exam Forge: generate an ephemeral practice test from ONE doc's clips.
+// Questions must be answerable from their source clip and never contain the
+// answer; kinds are mixed on purpose (recall / application / why — practice
+// testing works best when the formats vary). Nothing is ever stored.
+const EXAM_KINDS: ExamKind[] = ['recall', 'application', 'why']
+
+async function forgeExam(destinationId: string, destinationName: string) {
+  const stored = await chrome.storage.local.get(['clips'])
+  const clips = (stored.clips as HistoryEntry[]) ?? []
+  const pool = clips
+    .filter(c => c.destinationId === destinationId && c.kind !== 'image' && c.text.trim().length >= 40)
+    .slice(0, 30)
+  if (pool.length < 3) throw new Error('Not enough material yet — save a few more clips to this doc first.')
+
+  const system =
+    'You write a short practice exam for a student, using ONLY their saved notes. Reply with ' +
+    'STRICT JSON, no code fences, exactly: {"questions": [{"question": string, "kind": string, ' +
+    '"poolIndex": number}]}. Write up to 8 questions, mixing kinds: "recall" (retrieve what a ' +
+    'note says), "application" (apply the note\'s idea to a new concrete situation), "why" ' +
+    '(reasons/mechanisms behind the note\'s content). Each question must be answerable from its ' +
+    'single source note (0-based poolIndex), under 200 characters, and must NOT contain or hint ' +
+    'the answer. Never invent content absent from the notes.'
+  const user = `Topic: ${destinationName}\n\nNotes:\n` + pool.map((c, i) => `${i}. ${c.text.slice(0, 300)}`).join('\n')
+  const raw = await callAI(system, user)
+
+  const jsonText = raw.replace(/```(?:json)?/g, '').trim()
+  const start = jsonText.indexOf('{')
+  const end = jsonText.lastIndexOf('}')
+  if (start === -1 || end <= start) throw new Error("The AI's reply couldn't be read — try again")
+  let parsed: { questions?: { question?: unknown; kind?: unknown; poolIndex?: unknown }[] }
+  try {
+    parsed = JSON.parse(jsonText.slice(start, end + 1))
+  } catch {
+    throw new Error("The AI's reply couldn't be read — try again")
+  }
+  const questions = (parsed.questions ?? [])
+    .filter(q =>
+      typeof q?.question === 'string' && q.question.trim() &&
+      typeof q?.kind === 'string' && (EXAM_KINDS as string[]).includes(q.kind) &&
+      typeof q?.poolIndex === 'number' && q.poolIndex >= 0 && q.poolIndex < pool.length
+    )
+    .slice(0, 8)
+    .map(q => ({
+      question: (q.question as string).trim().slice(0, 250),
+      kind: q.kind as ExamKind,
+      sourceSavedAt: pool[q.poolIndex as number].savedAt,
+    }))
+  if (questions.length < 3) throw new Error("The AI couldn't build a full exam — try again")
+  return questions
+}
+
+chrome.runtime.onMessage.addListener(
+  (message: ForgeExamMessage, _sender, sendResponse: (r: ForgeExamResponse) => void) => {
+    if (message.type !== 'FORGE_EXAM') return false
+
+    ;(async () => {
+      try {
+        const questions = await forgeExam(message.payload.destinationId, message.payload.destinationName)
+        sendResponse({ success: true, questions })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Could not build the exam' })
+      }
+    })()
+
+    return true
+  }
+)
+
+// The check: verdicts only, aligned by index — covered / missed /
+// conflicting. Any unparseable verdict falls back to 'missed' — the honest
+// default (prompts a revisit, never false confidence). Grading never happens.
+async function checkExam(items: { question: string; answer: string; sourceSavedAt: number }[]): Promise<ExamVerdict[]> {
+  const stored = await chrome.storage.local.get(['clips'])
+  const clips = (stored.clips as HistoryEntry[]) ?? []
+  const byId = new Map(clips.map(c => [c.savedAt, c]))
+
+  const system =
+    'You compare a student\'s exam answers against the source notes each question came from. ' +
+    'Reply with STRICT JSON, no code fences, exactly: {"verdicts": string[]} — one verdict per ' +
+    'numbered item, in order, each exactly one of: "covered" (the answer captures the note\'s ' +
+    'relevant content), "missed" (the note\'s relevant content is absent from the answer), ' +
+    '"conflicting" (the answer contradicts the note). Judge coverage generously on wording, ' +
+    'strictly on substance. Never explain.'
+  const user = items
+    .map((it, i) => {
+      const clip = byId.get(it.sourceSavedAt)
+      return `${i}.\nQuestion: ${it.question}\nSource note: ${(clip?.text ?? '').slice(0, 300)}\nStudent answer: ${it.answer.slice(0, 500)}`
+    })
+    .join('\n\n')
+  const raw = await callAI(system, user)
+
+  const jsonText = raw.replace(/```(?:json)?/g, '').trim()
+  const start = jsonText.indexOf('{')
+  const end = jsonText.lastIndexOf('}')
+  let verdicts: unknown[] = []
+  if (start !== -1 && end > start) {
+    try {
+      verdicts = (JSON.parse(jsonText.slice(start, end + 1)) as { verdicts?: unknown[] }).verdicts ?? []
+    } catch { /* fall through to missed-fill */ }
+  }
+  return items.map((_, i) => {
+    const v = verdicts[i]
+    return v === 'covered' || v === 'conflicting' ? v : 'missed'
+  })
+}
+
+chrome.runtime.onMessage.addListener(
+  (message: CheckExamMessage, _sender, sendResponse: (r: CheckExamResponse) => void) => {
+    if (message.type !== 'CHECK_EXAM') return false
+
+    ;(async () => {
+      try {
+        const verdicts = await checkExam(message.payload.items)
+        sendResponse({ success: true, verdicts })
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Could not check the exam' })
       }
     })()
 
