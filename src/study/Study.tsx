@@ -320,6 +320,25 @@ export function Study() {
       .filter(x => x.clipCount > 0)
   }, [docFilter, docs, clips])
 
+  // Knowledge Heat: collected vs recalled per doc — the honesty dashboard.
+  // "Recalled" = clips whose latest self-grade is 'got' (the studyLog holds
+  // latest-only, which is the honest read: what you can produce NOW). Pure
+  // presentation — no AI, no storage, computed from data already loaded.
+  const heatRows = useMemo(() => {
+    if (!isHome) return []
+    return docs
+      .filter(d => !d.done)
+      .map(d => {
+        const docClips = clips.filter(c => c.destinationId === d.id)
+        return {
+          doc: d,
+          collected: docClips.length,
+          recalled: docClips.filter(c => log[String(c.savedAt)]?.result === 'got').length,
+        }
+      })
+      .filter(x => x.collected > 0)
+  }, [isHome, docs, clips, log])
+
   const current = session[index]
   const done = loaded && (index >= session.length) && session.length > 0
 
@@ -557,6 +576,37 @@ export function Study() {
               <h1 className="study-pick-title">What are you studying?</h1>
               {pickerRows}
             </>
+          )}
+          {heatRows.length > 0 && (
+            <section className="heat">
+              <h2 className="ol-zone-title">How solid is it?</h2>
+              {heatRows.map(({ doc, collected, recalled }) => {
+                const gap = collected >= 10 && recalled / collected < 0.2
+                return (
+                  <button key={doc.id} className="heat-row" onClick={() => goToDoc(doc.id)}>
+                    <span className="heat-name">{doc.name}</span>
+                    <span className="heat-bars" aria-hidden="true">
+                      <span className="heat-bar heat-bar-collected" style={{ width: '100%' }} />
+                      <span
+                        className="heat-bar heat-bar-recalled"
+                        style={{ width: `${collected ? Math.max((recalled / collected) * 100, recalled > 0 ? 3 : 0) : 0}%` }}
+                      />
+                    </span>
+                    <span className="heat-legend">
+                      {collected} collected · {recalled} recalled
+                    </span>
+                    {/* Information, never accusation — and silence when the
+                        ratio is healthy. */}
+                    {gap && (
+                      <span className="heat-gap">
+                        You've saved {collected} clips here and recalled {recalled} — this topic may
+                        feel more known than it is.
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </section>
           )}
           {connectHint}
         </main>

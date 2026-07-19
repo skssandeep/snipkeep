@@ -193,6 +193,32 @@ button:focus-visible, textarea:focus-visible, a:focus-visible {
 /* "N questions come back tomorrow" — information, never pressure. */
 .study-next-due { font-size: 15px; color: var(--text-3); }
 
+/* ── Knowledge Heat: collected vs recalled per doc, two bars on one scale —
+   the visual gap IS the message. No percentages, no red, no streaks;
+   healthy ratios earn silence. Rows click through to the doc's session. ── */
+.heat { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; width: 100%; }
+.heat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 100%;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-family: inherit;
+  transition: border-color 0.12s;
+}
+.heat-row:hover { border-color: var(--border-active); }
+.heat-name { font-size: 14px; font-weight: 700; color: var(--text); }
+.heat-bars { display: flex; flex-direction: column; gap: 4px; }
+.heat-bar { display: block; height: 7px; border-radius: 4px; }
+.heat-bar-collected { background: var(--card-2); }
+.heat-bar-recalled  { background: var(--accent); min-width: 0; }
+.heat-legend { font-size: 12px; color: var(--text-3); }
+.heat-gap { font-size: 13px; color: var(--text-2); line-height: 1.5; }
+
 /* ── Warm-up banner: the daily review, reframed as an optional light round at
    the top of the docs home. Accent-tinted and clickable when questions are
    due; a muted, calm "caught up" line otherwise. Never a takeover. ── */
